@@ -108,6 +108,7 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 # Backend API Configuration
 BACKEND_API_URL=http://localhost:3333
 BACKEND_API_TOKEN=your_backend_api_token_here
+BACKEND_AVATAR_FLOW_ID=53
 ```
 
 ## Application Flow
@@ -124,7 +125,7 @@ BACKEND_API_TOKEN=your_backend_api_token_here
    - Button turns red and scales up when voice is detected
    - After 1.5 seconds of silence, automatically stops and sends audio
    - Audio sent to `/api/stt` route → 11Labs STT (server-side) → transcribed text displayed
-   - Text sent to `/api/chat` route → backend API (POST `/flows/53/run`) with chat history
+   - Text sent to `/api/chat` route → backend API (POST `/flows/{BACKEND_AVATAR_FLOW_ID}/run`) with chat history
    - Backend returns response text + audio
    - AI response displayed and audio auto-played
    - **Mic automatically restarts** after audio finishes playing (for continuous conversation)
@@ -155,7 +156,7 @@ The voice recorder uses Web Audio API to detect when the user is speaking:
 
 ## Backend API Integration
 
-The app uses a server-side API route (`/api/chat`) that proxies requests to the backend. The route uses modular flow functions in `lib/flows/avatar.ts` to call `POST http://localhost:3333/flows/53/run`.
+The app uses a server-side API route (`/api/chat`) that proxies requests to the backend. The route uses modular flow functions in `lib/flows/avatar.ts` to call `POST http://localhost:3333/flows/{BACKEND_AVATAR_FLOW_ID}/run`.
 
 ### Avatar Flow (`runAvatarFlow`)
 The flow accepts these parameters:

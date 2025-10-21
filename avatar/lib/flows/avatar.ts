@@ -2,6 +2,7 @@ import type { BackendRequest, JobCreationResponse, ChatHistory } from "../types"
 
 const BACKEND_URL = process.env.BACKEND_API_URL || "http://localhost:3333";
 const BACKEND_TOKEN = process.env.BACKEND_API_TOKEN || "";
+const BACKEND_AVATAR_FLOW_ID = process.env.BACKEND_AVATAR_FLOW_ID || "53";
 
 interface AvatarFlowParams {
   userMessage: string;
@@ -34,7 +35,7 @@ function buildAvatarRequest(params: AvatarFlowParams): BackendRequest {
 }
 
 async function callAvatarAPI(request: BackendRequest): Promise<JobCreationResponse> {
-  const response = await fetch(`${BACKEND_URL}/flows/83/run`, {
+  const response = await fetch(`${BACKEND_URL}/flows/${BACKEND_AVATAR_FLOW_ID}/run`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

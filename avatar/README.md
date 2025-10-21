@@ -56,6 +56,7 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 # Backend API Configuration
 BACKEND_API_URL=http://localhost:3333
 BACKEND_API_TOKEN=your_backend_api_token_here
+BACKEND_AVATAR_FLOW_ID=53
 ```
 
 3. **Run the development server:**
