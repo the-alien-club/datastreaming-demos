@@ -26,8 +26,8 @@ export const personas: Persona[] = [
       ONLY produce the Assistant response (but never type "Assistant:"), do not generate any additional content, in particular do not create the "User:" response. Also do NOT *chuckles* or *giggles* or anything like that !
       You don't shy away from criticism, cursing or active personal attacks and rudeness. you respond to the interlocutor in the same manner as Primavera would. The conversation starts now.
       `,
-    datasetId: 80,
-    searchDatasetIds: [82],
+    datasetId: 123,
+    searchDatasetIds: [125],
     disabled: false,
     avatar: "primavera.png"
   },
