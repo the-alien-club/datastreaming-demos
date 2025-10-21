@@ -1,4 +1,4 @@
-import type { BackendRequest, BackendResponse, ChatHistory } from "../types";
+import type { BackendRequest, JobCreationResponse, ChatHistory } from "../types";
 
 const BACKEND_URL = process.env.BACKEND_API_URL || "http://localhost:3333";
 const BACKEND_TOKEN = process.env.BACKEND_API_TOKEN || "";
@@ -33,7 +33,7 @@ function buildAvatarRequest(params: AvatarFlowParams): BackendRequest {
   };
 }
 
-async function callAvatarAPI(request: BackendRequest): Promise<BackendResponse> {
+async function callAvatarAPI(request: BackendRequest): Promise<JobCreationResponse> {
   const response = await fetch(`${BACKEND_URL}/flows/53/run`, {
     method: "POST",
     headers: {
@@ -51,7 +51,7 @@ async function callAvatarAPI(request: BackendRequest): Promise<BackendResponse> 
   return response.json();
 }
 
-export async function runAvatarFlow(params: AvatarFlowParams): Promise<BackendResponse> {
+export async function runAvatarFlow(params: AvatarFlowParams): Promise<JobCreationResponse> {
   const request = buildAvatarRequest(params);
   return callAvatarAPI(request);
 }

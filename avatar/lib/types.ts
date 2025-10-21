@@ -50,3 +50,16 @@ export interface BackendResponse {
     audio?: string; // base64 or URL
   };
 }
+
+export interface JobCreationResponse {
+  success: boolean;
+  data: {
+    id: number;
+    slug: string;
+    status: string;
+    queueName: string;
+    flowId: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
