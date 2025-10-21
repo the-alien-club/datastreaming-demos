@@ -34,7 +34,7 @@ function buildAvatarRequest(params: AvatarFlowParams): BackendRequest {
 }
 
 async function callAvatarAPI(request: BackendRequest): Promise<JobCreationResponse> {
-  const response = await fetch(`${BACKEND_URL}/flows/53/run`, {
+  const response = await fetch(`${BACKEND_URL}/flows/83/run`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
