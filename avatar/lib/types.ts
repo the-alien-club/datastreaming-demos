@@ -32,7 +32,7 @@ export interface ChatHistory {
 export interface BackendRequest {
   input: {
     search_k: number;
-    llm_model: "gpt-3.5-turbo" | "gpt-4" | "gpt-4o" | "gpt-4o-mini";
+    llm_model: "gemini-2.5-flash";
     dataset_id: number;
     max_tokens: number;
     temperature: number;
