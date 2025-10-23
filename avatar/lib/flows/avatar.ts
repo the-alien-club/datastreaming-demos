@@ -9,7 +9,7 @@ interface AvatarFlowParams {
   chatHistory: ChatHistory[];
   personaContext: string;
   datasetId: number;
-  llmModel?: "gemini-2.5-flash";
+  llmModel?: "gemini-2.5-flash" | "gemini-2.5-pro" | "gemini-2.5-flash-lite" | "gemini-2.0-flash";
   voiceModel?: "eleven_turbo_v2_5" | "eleven_multilingual_v2" | "eleven_flash_v2_5";
   searchDatasetIds?: number[] | null;
   searchK?: number;
@@ -23,7 +23,7 @@ function buildAvatarRequest(params: AvatarFlowParams): BackendRequest {
       search_k: params.searchK ?? 5,
       llm_model: params.llmModel ?? "gemini-2.5-flash",
       dataset_id: params.datasetId,
-      max_tokens: params.maxTokens ?? 300,
+      max_tokens: params.maxTokens ?? 2048,
       temperature: params.temperature ?? 0.7,
       voice_model: params.voiceModel ?? "eleven_turbo_v2_5",
       chat_history: params.chatHistory,
