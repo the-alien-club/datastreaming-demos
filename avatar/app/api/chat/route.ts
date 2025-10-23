@@ -80,9 +80,29 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { userMessage, chatHistory, personaContext, datasetId, searchDatasetIds } = body;
+    const {
+      userMessage,
+      chatHistory,
+      personaContext,
+      datasetId,
+      searchDatasetIds,
+      llmModel,
+      voiceModel,
+      maxTokens,
+      temperature,
+      searchK,
+    } = body;
 
-    console.log("[Chat API] Request params:", { userMessage, datasetId, searchDatasetIds, personaContext });
+    console.log("[Chat API] Request params:", {
+      userMessage,
+      datasetId,
+      searchDatasetIds,
+      llmModel,
+      voiceModel,
+      maxTokens,
+      temperature,
+      searchK,
+    });
 
     if (!userMessage || !personaContext || !datasetId) {
       return NextResponse.json(
@@ -105,9 +125,20 @@ export async function POST(request: NextRequest) {
       personaContext,
       datasetId,
       searchDatasetIds: searchDatasetIds || null,
+      llmModel: llmModel || "gemini-2.5-flash",
+      voiceModel: voiceModel || "eleven_turbo_v2_5",
+      maxTokens: maxTokens || 300,
+      temperature: temperature !== undefined ? temperature : 0.7,
+      searchK: searchK || 5,
     });
 
-    console.log("[Chat API] Sending to backend - datasetId:", datasetId, "searchDatasetIds:", searchDatasetIds);
+    console.log("[Chat API] Sending to backend with settings:", {
+      llmModel: llmModel || "gemini-2.5-flash",
+      voiceModel: voiceModel || "eleven_turbo_v2_5",
+      maxTokens: maxTokens || 300,
+      temperature: temperature !== undefined ? temperature : 0.7,
+      searchK: searchK || 5,
+    });
 
     console.log("Job created:", jobResponse);
 

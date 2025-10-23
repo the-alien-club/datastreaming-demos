@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { MessageList } from "./message-list";
 import { VoiceRecorder, type VoiceRecorderHandle } from "./voice-recorder";
 import { ConversationSidebar } from "./conversation-sidebar";
+import { SettingsDialog, type AvatarSettings } from "./settings-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2, Pause, Play, Home } from "lucide-react";
+import { Trash2, Pause, Play, Home } from "lucide-react";
 import Link from "next/link";
 import type { Message, Persona, ChatHistory, Conversation } from "@/lib/types";
 import {
@@ -28,6 +30,19 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoRestart, setAutoRestart] = useState(true);
+
+  // Default settings from persona
+  const defaultSettings: AvatarSettings = {
+    systemPrompt: persona.context,
+    llmModel: "gemini-2.5-flash",
+    voiceModel: "eleven_turbo_v2_5",
+    maxTokens: 2048,
+    temperature: 0.7,
+    searchK: 20,
+  };
+
+  const [settings, setSettings] = useState<AvatarSettings>(defaultSettings);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const voiceRecorderRef = useRef<VoiceRecorderHandle>(null);
   const router = useRouter();
@@ -88,9 +103,14 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
         body: JSON.stringify({
           userMessage: text,
           chatHistory,
-          personaContext: persona.context,
+          personaContext: settings.systemPrompt,
           datasetId: persona.datasetId,
           searchDatasetIds: persona.searchDatasetIds,
+          llmModel: settings.llmModel,
+          voiceModel: settings.voiceModel,
+          maxTokens: settings.maxTokens,
+          temperature: settings.temperature,
+          searchK: settings.searchK,
         }),
       });
 
@@ -223,7 +243,7 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
           </div>
         </div>
 
-        {/* Right: Conversation, Pause, Clear Buttons */}
+        {/* Right: Conversation, Settings, Pause, Clear Buttons */}
         <div className="flex items-center gap-2">
           <ConversationSidebar
             conversations={conversations}
@@ -231,6 +251,11 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
             onSelectConversation={handleSelectConversation}
             onNewConversation={handleNewConversation}
             onDeleteConversation={handleDeleteConversation}
+          />
+          <SettingsDialog
+            settings={settings}
+            onSave={setSettings}
+            defaultSettings={defaultSettings}
           />
           <Button
             variant="outline"
@@ -264,8 +289,9 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
         </div>
       </div>
 
-      {/* Voice Recorder */}
-      <div className="flex-shrink-0 border-b p-8 flex justify-center bg-gradient-to-b from-muted/20 to-transparent">
+      {/* Voice Recorder - Hidden when loading or speaking */}
+      <div className={`flex-shrink-0 border-b p-8 flex justify-center bg-gradient-to-b from-muted/20 to-transparent transition-all duration-300 ${isLoading || isSpeaking ? 'hidden' : ''
+        }`}>
         <VoiceRecorder
           ref={voiceRecorderRef}
           onTranscript={handleTranscript}
@@ -273,19 +299,49 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
         />
       </div>
 
-      {/* Thinking Animation */}
-      {isLoading && (
-        <div className="flex-shrink-0 py-8 px-6 flex flex-col items-center gap-4 border-b bg-gradient-to-b from-primary/5 to-transparent animate-in fade-in duration-500">
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]"></div>
-            <div className="h-3 w-3 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]"></div>
-            <div className="h-3 w-3 rounded-full bg-primary animate-bounce"></div>
+      {/* Persona Avatar Section - Hidden when NOT thinking or speaking */}
+      <div className={`flex-shrink-0 border-b py-12 px-6 flex flex-col items-center gap-6 bg-gradient-to-b from-primary/5 to-transparent transition-all duration-300 ${!(isLoading || isSpeaking) ? 'hidden' : ''
+        }`}>
+        {/* Large Persona Avatar */}
+        <Avatar className="h-32 w-32 border-4 border-primary/20 shadow-2xl">
+          {persona.avatar && (
+            <AvatarImage src={`/${persona.avatar}`} alt={persona.name} />
+          )}
+          <AvatarFallback className="text-4xl font-bold bg-gradient-to-br from-primary/20 to-primary/5">
+            {persona.name.split(" ").map(n => n[0]).join("").toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+
+        {/* Thinking Animation */}
+        {isLoading && (
+          <>
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-3 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="h-3 w-3 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]"></div>
+              <div className="h-3 w-3 rounded-full bg-primary animate-bounce"></div>
+            </div>
+            <p className="text-base text-muted-foreground animate-pulse font-medium">
+              {persona.name} is thinking...
+            </p>
+          </>
+        )}
+
+        {/* Speaking Animation */}
+        {isSpeaking && (
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex items-center gap-1">
+              <div className="h-8 w-1 rounded-full bg-primary/80 animate-pulse [animation-duration:0.6s]" style={{ animationDelay: '0s' }}></div>
+              <div className="h-12 w-1 rounded-full bg-primary animate-pulse [animation-duration:0.5s]" style={{ animationDelay: '0.1s' }}></div>
+              <div className="h-6 w-1 rounded-full bg-primary/80 animate-pulse [animation-duration:0.7s]" style={{ animationDelay: '0.2s' }}></div>
+              <div className="h-10 w-1 rounded-full bg-primary animate-pulse [animation-duration:0.6s]" style={{ animationDelay: '0.3s' }}></div>
+              <div className="h-8 w-1 rounded-full bg-primary/80 animate-pulse [animation-duration:0.5s]" style={{ animationDelay: '0.4s' }}></div>
+            </div>
+            <p className="text-base text-muted-foreground font-medium">
+              {persona.name} is speaking...
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground animate-pulse font-medium">
-            {persona.name} is thinking...
-          </p>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Messages - flex-1 with min-h-0 to enable scrolling */}
       <div className="flex-1 min-h-0 bg-gradient-to-b from-transparent to-muted/10">
