@@ -13,39 +13,39 @@ export const maxDuration = 900; // 15 minutes to allow long-running agent sessio
 // Agent types
 type AgentType = 'data-discovery' | 'citation-impact' | 'network-analysis' | 'trends-analysis' | 'visualization';
 
-async function* createPromptIterator(messages: any[]): AsyncGenerator<any> {
-  // Use consistent session_id for the entire conversation to maintain context
+async function* createPromptIterator(messages: any[]): AsyncGenerator<SDKUserMessage> {
+  // When resuming, only send the latest user message
+  // The SDK will automatically load conversation history
   const sessionId = crypto.randomUUID();
 
-  for (const msg of messages) {
-    if (msg.role === 'user') {
-      yield {
-        type: 'user',
-        message: {
-          role: 'user',
-          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        },
-        parent_tool_use_id: null,
-        session_id: sessionId
-      } as SDKUserMessage;
-    } else if (msg.role === 'assistant') {
-      // Include assistant messages to maintain conversation context
-      // This is critical for multi-turn conversations!
-      yield {
-        type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        },
-        session_id: sessionId
-      };
-    }
+  // Find the latest user message (skip thinking placeholders)
+  const userMessages = messages.filter(
+    msg => msg.role === 'user' && msg.content && msg.content !== 'thinking'
+  );
+
+  if (userMessages.length === 0) {
+    return;
   }
+
+  // Only yield the latest user message
+  const latestUserMessage = userMessages[userMessages.length - 1];
+
+  yield {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: typeof latestUserMessage.content === 'string'
+        ? latestUserMessage.content
+        : JSON.stringify(latestUserMessage.content)
+    },
+    parent_tool_use_id: null,
+    session_id: sessionId
+  } as SDKUserMessage;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, model } = await req.json();
+    const { messages, model, previousJobId } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(
@@ -58,12 +58,28 @@ export async function POST(req: NextRequest) {
     const jobId = crypto.randomUUID();
     jobStore.create(jobId);
 
+    // Check if we should resume a previous session
+    let resumeSessionId: string | null = null;
+    if (previousJobId) {
+      resumeSessionId = jobStore.getSessionId(previousJobId);
+      if (resumeSessionId) {
+        console.log(`[${jobId}] Resuming session: ${resumeSessionId} from job ${previousJobId}`);
+      }
+    }
+
     console.log(`[${jobId}] Research query started`);
+    console.log(`[${jobId}] Total messages received: ${messages.length}`);
+    console.log(`[${jobId}] Message breakdown:`, messages.map((m, i) => ({
+      index: i,
+      role: m.role,
+      type: m.messageType,
+      contentPreview: m.content?.substring(0, 50) || 'empty'
+    })));
 
     // Start processing in background (don't await!)
     // Default to Sonnet for orchestrator - it handles large contexts and complex
     // multi-agent coordination better than Haiku, avoiding long response delays
-    processQuery(jobId, messages, model || 'claude-sonnet-4-5-20250929');
+    processQuery(jobId, messages, model || 'claude-sonnet-4-5-20250929', resumeSessionId);
 
     // Return immediately
     return new Response(
@@ -82,7 +98,7 @@ export async function POST(req: NextRequest) {
 }
 
 // Background processor
-async function processQuery(jobId: string, messages: any[], model: string) {
+async function processQuery(jobId: string, messages: any[], model: string, resumeSessionId: string | null = null) {
   try {
     jobStore.setStatus(jobId, 'running');
 
@@ -92,11 +108,10 @@ async function processQuery(jobId: string, messages: any[], model: string) {
     // Agent instance tracking map: agentId -> { type, instanceId }
     const activeAgents = new Map<string, { type: AgentType; instanceId: string }>();
 
-    const result = query({
-      prompt: createPromptIterator(messages),
-      options: {
-        model,
-        systemPrompt: ORCHESTRATOR_PROMPT,
+    // Build query options
+    const queryOptions: any = {
+      model,
+      systemPrompt: ORCHESTRATOR_PROMPT,
         mcpServers: {
           openaire: {
             command: 'node',
@@ -112,7 +127,7 @@ async function processQuery(jobId: string, messages: any[], model: string) {
         agents: RESEARCH_SUBAGENTS,
         hooks: {
           'SubagentStart': [{
-            hooks: [async (input) => {
+            hooks: [async (input: any) => {
               const startInput = input as any;
               const agentType = startInput.agent_type as AgentType;
               const agentId = startInput.agent_id;
@@ -129,7 +144,7 @@ async function processQuery(jobId: string, messages: any[], model: string) {
             }]
           }],
           'SubagentStop': [{
-            hooks: [async (input) => {
+            hooks: [async (input: any) => {
               const stopInput = input as any;
               const agentId = stopInput.agent_id;
 
@@ -186,7 +201,17 @@ async function processQuery(jobId: string, messages: any[], model: string) {
           'mcp__viz-tools__merge_citation_networks'
         ],
         permissionMode: 'acceptEdits'
-      }
+    };
+
+    // Add resume option if we have a session to continue
+    if (resumeSessionId) {
+      queryOptions.resume = resumeSessionId;
+      console.log(`[${jobId}] Using resume option with session: ${resumeSessionId}`);
+    }
+
+    const result = query({
+      prompt: createPromptIterator(messages),
+      options: queryOptions
     });
 
     const startTime = Date.now();
@@ -225,6 +250,15 @@ async function processQuery(jobId: string, messages: any[], model: string) {
       console.log(`\n${'-'.repeat(80)}`);
       console.log(`[${jobId}] 📨 Message #${messageCount} | Type: ${message.type} | Elapsed: ${(elapsed / 1000).toFixed(2)}s`);
       console.log(`${'-'.repeat(80)}`);
+
+      // Capture session ID from system init message
+      if (message.type === 'system' && (message as any).subtype === 'init') {
+        const sessionId = (message as any).session_id;
+        if (sessionId) {
+          jobStore.setSessionId(jobId, sessionId);
+          console.log(`[${jobId}] 📌 Captured session ID: ${sessionId}`);
+        }
+      }
 
       if (message.type === 'assistant') {
         console.log(`[${jobId}] 🤖 ASSISTANT MESSAGE`);

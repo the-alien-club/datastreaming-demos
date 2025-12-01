@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { withBasePath } from "@/lib/basePath";
 
 // Add this interface to define the props structure
 interface TopNavBarProps {
@@ -37,7 +38,7 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ features = {} }) => {
     <div className="flex items-center justify-between p-4">
       <div className="font-bold text-xl flex gap-2 items-center">
         <Image
-          src={theme === "dark" ? "/wordmark-dark.svg" : "/wordmark.svg"}
+          src={theme === "dark" ? withBasePath("/wordmark-dark.svg") : withBasePath("/wordmark.svg")}
           alt="Company Wordmark"
           width={250}
           height={40}

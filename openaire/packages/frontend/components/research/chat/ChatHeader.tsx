@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown } from "lucide-react";
 import { AVAILABLE_MODELS } from "@/constants/models";
+import { withBasePath } from "@/lib/basePath";
 
 interface ChatHeaderProps {
   selectedModel: string;
@@ -29,7 +30,7 @@ export function ChatHeader({
         {hasMessages && (
           <>
             <Avatar className="w-8 h-8 border">
-              <AvatarImage src="/ant-logo.svg" alt="OpenAIRE Assistant" className="brightness-0 invert" />
+              <AvatarImage src={withBasePath("/ant-logo.svg")} alt="OpenAIRE Assistant" className="brightness-0 invert" />
               <AvatarFallback>OA</AvatarFallback>
             </Avatar>
             <div>

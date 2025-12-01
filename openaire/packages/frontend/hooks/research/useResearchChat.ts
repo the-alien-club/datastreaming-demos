@@ -82,8 +82,13 @@ export function useResearchChat() {
 
       try {
         // Start the research job
-        const jobId = await startResearchJob([...messages, userMessage], selectedModel);
-        console.log(`🚀 Job started: ${jobId}`);
+        // Pass the current job ID as previousJobId to resume the session
+        const jobId = await startResearchJob(
+          [...messages, userMessage],
+          selectedModel,
+          currentJobId || undefined
+        );
+        console.log(`🚀 Job started: ${jobId}${currentJobId ? ` (resuming from ${currentJobId})` : ''}`);
         setCurrentJobId(jobId);
       } catch (error) {
         console.error("Submit Error:", error);
@@ -105,7 +110,7 @@ export function useResearchChat() {
         });
       }
     },
-    [input, isLoading, messages, selectedModel]
+    [input, isLoading, messages, selectedModel, currentJobId]
   );
 
   const handleKeyDown = useCallback(

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import ReactMarkdown from "react-markdown";
+import { withBasePath } from "@/lib/basePath";
 
 interface ThinkingBlockProps {
   progressMessages: string[];
@@ -34,7 +35,7 @@ export function ThinkingBlock({ progressMessages }: ThinkingBlockProps) {
   return (
     <div className="flex items-start gap-2">
       <Avatar className="w-8 h-8 border">
-        <AvatarImage src="/ant-logo.svg" alt="OpenAIRE Assistant" />
+        <AvatarImage src={withBasePath("/ant-logo.svg")} alt="OpenAIRE Assistant" />
         <AvatarFallback>OA</AvatarFallback>
       </Avatar>
       <div className="flex flex-col max-w-[75%]">
