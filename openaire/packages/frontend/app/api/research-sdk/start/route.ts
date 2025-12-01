@@ -13,7 +13,10 @@ export const maxDuration = 900; // 15 minutes to allow long-running agent sessio
 // Agent types
 type AgentType = 'data-discovery' | 'citation-impact' | 'network-analysis' | 'trends-analysis' | 'visualization';
 
-async function* createPromptIterator(messages: any[]): AsyncGenerator<SDKUserMessage> {
+async function* createPromptIterator(messages: any[]): AsyncGenerator<any> {
+  // Use consistent session_id for the entire conversation to maintain context
+  const sessionId = crypto.randomUUID();
+
   for (const msg of messages) {
     if (msg.role === 'user') {
       yield {
@@ -23,8 +26,19 @@ async function* createPromptIterator(messages: any[]): AsyncGenerator<SDKUserMes
           content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         },
         parent_tool_use_id: null,
-        session_id: crypto.randomUUID()
+        session_id: sessionId
       } as SDKUserMessage;
+    } else if (msg.role === 'assistant') {
+      // Include assistant messages to maintain conversation context
+      // This is critical for multi-turn conversations!
+      yield {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+        },
+        session_id: sessionId
+      };
     }
   }
 }

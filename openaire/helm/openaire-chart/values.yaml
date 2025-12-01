@@ -19,12 +19,11 @@ ingress:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: 'true'
     nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
   hosts:
     - host: demo.datastreaming.ai
       paths:
-        - path: /openaire(/|$)(.*)
-          pathType: ImplementationSpecific
+        - path: /openaire
+          pathType: Prefix
   tls:
     - secretName: openaire-tls
       hosts:
