@@ -1,0 +1,25 @@
+{
+  "name": "@openaire/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for OpenAIRE Research Intelligence",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "tsx test-all-tools.ts",
+    "test:verbose": "DEBUG=* tsx test-all-tools.ts",
+    "lint": "echo \"Linting coming soon\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "zod": "^3.22.4",
+    "date-fns": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
+}

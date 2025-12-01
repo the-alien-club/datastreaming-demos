@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "openaire-research": {
+      "command": "node",
+      "args": [
+        "/home/xqua/Documents/Work/Alien/AIRM/datastreaming-demos/openaire/packages/mcp/dist/index.js"
+      ],
+      "env": {
+        "LOG_LEVEL": "info"
+      }
+    }
+  }
+}
