@@ -7,7 +7,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - LOG_LEVEL=info
     stdin_open: true
