@@ -3,6 +3,7 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Search, Network, BookOpen, ArrowRight } from "lucide-react";
 import { WELCOME_TEXT, AGENT_FEATURES, EXAMPLE_QUERIES } from "@/constants/research-prompts";
+import { withBasePath } from "@/lib/basePath";
 
 interface EmptyStateProps {
   onQuerySelect?: (query: string) => void;
@@ -12,7 +13,7 @@ export function EmptyState({ onQuerySelect }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in-up max-w-[600px] mx-auto">
       <Avatar className="w-12 h-12 mb-4 border">
-        <AvatarImage src="/ant-logo.svg" alt="OpenAIRE Assistant" className="brightness-0 invert" />
+        <AvatarImage src={withBasePath("/ant-logo.svg")} alt="OpenAIRE Assistant" className="brightness-0 invert" />
       </Avatar>
       <div className="flex items-center gap-2 mb-2">
         <h2 className="text-2xl font-semibold">{WELCOME_TEXT.title}</h2>

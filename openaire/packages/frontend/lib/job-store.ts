@@ -44,6 +44,7 @@ export interface ToolCall {
 export interface JobProgress {
   jobId: string;
   status: 'pending' | 'running' | 'complete' | 'error';
+  sessionId?: string; // SDK session ID for conversation continuity
   messages: Array<{
     type: 'progress' | 'papers' | 'complete';
     content?: string;
@@ -139,6 +140,19 @@ class JobStore {
       job.error = error;
       job.updatedAt = Date.now();
     }
+  }
+
+  setSessionId(jobId: string, sessionId: string): void {
+    const job = this.jobs.get(jobId);
+    if (job) {
+      job.sessionId = sessionId;
+      job.updatedAt = Date.now();
+    }
+  }
+
+  getSessionId(jobId: string): string | null {
+    const job = this.jobs.get(jobId);
+    return job?.sessionId || null;
   }
 
   // Agent instance management - NEW APPROACH

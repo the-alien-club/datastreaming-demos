@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { ResearchPaperCard } from "../papers/ResearchPaperCard";
 import type { MessageComponentProps } from "@/types/research";
+import { withBasePath } from "@/lib/basePath";
 
 export const MessageComponent: React.FC<MessageComponentProps> = ({
   message,
@@ -15,7 +16,7 @@ export const MessageComponent: React.FC<MessageComponentProps> = ({
     <div className="flex items-start gap-2">
       {message.role === "assistant" && (
         <Avatar className="w-8 h-8 border">
-          <AvatarImage src="/ant-logo.svg" alt="OpenAIRE Assistant" />
+          <AvatarImage src={withBasePath("/ant-logo.svg")} alt="OpenAIRE Assistant" />
           <AvatarFallback>OA</AvatarFallback>
         </Avatar>
       )}
