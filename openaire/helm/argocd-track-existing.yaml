@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openaire-demo
+  namespace: argocd
+spec:
+  project: default
+
+  # Track existing helm release (deployed manually)
+  source:
+    # Use a dummy git repo or leave empty - ArgoCD will just track the cluster state
+    repoURL: https://github.com/argoproj/argocd-example-apps.git
+    targetRevision: HEAD
+    path: .
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openaire
+
+  # Track only, no automatic sync
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true

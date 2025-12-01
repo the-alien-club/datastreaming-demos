@@ -1,0 +1,81 @@
+replicaCount: 1
+
+image:
+  repository:  rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire
+  pullPolicy: Always
+  tag: "0.1.1"
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: demo.datastreaming.ai
+      paths:
+        - path: /openaire(/|$)(.*)
+          pathType: ImplementationSpecific
+  tls:
+    - secretName: openaire-tls
+      hosts:
+        - demo.datastreaming.ai
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+env:
+  - name: NODE_ENV
+    value: production
+  - name: LOG_LEVEL
+    value: info
+
+# Secrets - configure via ArgoCD or kubectl
+envFrom:
+  - secretRef:
+      name: openaire-secrets
+
+livenessProbe:
+  httpGet:
+    path: /openaire
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /openaire
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

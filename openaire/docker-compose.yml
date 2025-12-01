@@ -1,0 +1,15 @@
+services:
+  openaire:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire:0.1.1
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=info
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
