@@ -1,58 +1,86 @@
-# Use Node.js LTS
-FROM node:20-alpine
-
-# Install build tools for native dependencies
+# Stage 1: Install dependencies
+FROM node:20-alpine AS deps
 RUN apk add --no-cache python3 make g++
 
-# Set working directory and create it with proper ownership
-RUN mkdir -p /app && chown -R node:node /app
-
-# Switch to non-root user BEFORE installing dependencies
-USER node
-
 WORKDIR /app
 
-# Copy root package.json
-COPY --chown=node:node package.json ./
+# Copy package files
+COPY package.json ./
+COPY packages/mcp/package.json ./packages/mcp/
+COPY packages/viz-mcp/package.json ./packages/viz-mcp/
+COPY packages/frontend/package.json ./packages/frontend/
 
-# Copy only package.json files first (for better layer caching)
-COPY --chown=node:node packages/mcp/package.json ./packages/mcp/
-COPY --chown=node:node packages/viz-mcp/package.json ./packages/viz-mcp/
-COPY --chown=node:node packages/frontend/package.json ./packages/frontend/
-
-# Install dependencies for MCP server
+# Install all dependencies
 WORKDIR /app/packages/mcp
 RUN npm install
 
-# Install dependencies for Viz MCP server
 WORKDIR /app/packages/viz-mcp
 RUN npm install
 
-# Install dependencies for frontend
 WORKDIR /app/packages/frontend
 RUN npm install
 
-# Now copy the actual source code (this layer only rebuilds when code changes)
+# Stage 2: Build
+FROM node:20-alpine AS builder
 WORKDIR /app
-COPY --chown=node:node packages/mcp/src ./packages/mcp/src
-COPY --chown=node:node packages/mcp/tsconfig.json ./packages/mcp/
-COPY --chown=node:node packages/viz-mcp/src ./packages/viz-mcp/src
-COPY --chown=node:node packages/viz-mcp/tsconfig.json ./packages/viz-mcp/
-COPY --chown=node:node packages/frontend ./packages/frontend
 
-# Build MCP server (needed for frontend dependency)
+# Copy dependencies from deps stage
+COPY --from=deps /app/packages/mcp/node_modules ./packages/mcp/node_modules
+COPY --from=deps /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
+COPY --from=deps /app/packages/frontend/node_modules ./packages/frontend/node_modules
+
+# Copy all source code first
+COPY packages/mcp/src ./packages/mcp/src
+COPY packages/mcp/tsconfig.json ./packages/mcp/
+COPY packages/mcp/package.json ./packages/mcp/
+
+COPY packages/viz-mcp/src ./packages/viz-mcp/src
+COPY packages/viz-mcp/tsconfig.json ./packages/viz-mcp/
+COPY packages/viz-mcp/package.json ./packages/viz-mcp/
+
+COPY packages/frontend ./packages/frontend
+
+# Build MCP servers
 WORKDIR /app/packages/mcp
 RUN npm run build
 
-# Build Viz MCP server
 WORKDIR /app/packages/viz-mcp
 RUN npm run build
 
-# Set working directory to frontend
+# Build Next.js
 WORKDIR /app/packages/frontend
+ENV NODE_ENV=production
+RUN npm run build
 
-# Expose Next.js dev port
+# Stage 3: Production runtime
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy built MCP servers
+COPY --from=builder --chown=nextjs:nodejs /app/packages/mcp/dist ./packages/mcp/dist
+COPY --from=builder --chown=nextjs:nodejs /app/packages/mcp/package.json ./packages/mcp/
+COPY --from=builder --chown=nextjs:nodejs /app/packages/mcp/node_modules ./packages/mcp/node_modules
+
+COPY --from=builder --chown=nextjs:nodejs /app/packages/viz-mcp/dist ./packages/viz-mcp/dist
+COPY --from=builder --chown=nextjs:nodejs /app/packages/viz-mcp/package.json ./packages/viz-mcp/
+COPY --from=builder --chown=nextjs:nodejs /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
+
+# Copy Next.js standalone build to maintain structure
+COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/standalone ./packages/frontend/
+# Copy static files and public
+COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/node_modules ./packages/frontend/node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/static ./packages/frontend/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/public ./packages/frontend/public
+
+USER nextjs
+
 EXPOSE 3000
 
-# Start Next.js in dev mode
-CMD ["npm", "run", "dev"]
+# server.js is in standalone output
+CMD ["node", "packages/frontend/server.js"]
