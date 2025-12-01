@@ -9,7 +9,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/your-org/your-repo.git  # UPDATE THIS
+    repoURL: https://github.com/the-alien-club/datastreaming-demos.git
     targetRevision: main
     path: openaire/helm/openaire-chart
     helm:
@@ -18,7 +18,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: openaire  # Change if you want a different namespace
+    namespace: openaire
 
   syncPolicy:
     automated:

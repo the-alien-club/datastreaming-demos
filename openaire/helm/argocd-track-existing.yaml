@@ -6,12 +6,13 @@ metadata:
 spec:
   project: default
 
-  # Track existing helm release (deployed manually)
   source:
-    # Use a dummy git repo or leave empty - ArgoCD will just track the cluster state
-    repoURL: https://github.com/argoproj/argocd-example-apps.git
-    targetRevision: HEAD
-    path: .
+    repoURL: https://github.com/the-alien-club/datastreaming-demos.git
+    targetRevision: main
+    path: openaire/helm/openaire-chart
+    helm:
+      valueFiles:
+        - values.yaml
 
   destination:
     server: https://kubernetes.default.svc
