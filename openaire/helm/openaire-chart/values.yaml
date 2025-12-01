@@ -51,7 +51,7 @@ envFrom:
 
 livenessProbe:
   httpGet:
-    path: /
+    path: /openaire
     port: 3000
   initialDelaySeconds: 30
   periodSeconds: 10
@@ -60,7 +60,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /
+    path: /openaire
     port: 3000
   initialDelaySeconds: 10
   periodSeconds: 5
