@@ -36,12 +36,20 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ features = {} }) => {
 
   return (
     <div className="flex items-center justify-between p-4">
-      <div className="font-bold text-xl flex gap-2 items-center">
+      <div className="font-bold text-xl flex gap-4 items-center">
         <Image
           src={theme === "dark" ? withBasePath("/wordmark-dark.svg") : withBasePath("/wordmark.svg")}
-          alt="Company Wordmark"
+          alt="DataStreaming Logo"
           width={250}
           height={40}
+        />
+        <div className="h-8 w-px bg-border" />
+        <Image
+          src={withBasePath("/openaire-logo.webp")}
+          alt="OpenAIRE Logo"
+          width={120}
+          height={40}
+          className="object-contain"
         />
       </div>
       <div className="flex items-center gap-2">
@@ -59,9 +67,6 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ features = {} }) => {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme("dark")}>
               Dark
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
-              System
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

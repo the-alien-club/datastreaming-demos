@@ -4,32 +4,43 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
   {
     variants: {
       variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
+        default: "bg-secondary text-secondary-foreground border-transparent",
+        secondary: "bg-secondary text-secondary-foreground border-transparent",
+        destructive: "bg-destructive/10 text-destructive border-transparent dark:bg-destructive/20",
+        muted: "bg-muted text-muted-foreground border-transparent",
+        outline: "bg-background text-foreground border",
+        primary: "bg-primary text-primary-foreground border-transparent",
+        success: "bg-green-100 text-green-800 border-transparent dark:bg-green-900/30 dark:text-green-400",
+        warning: "bg-amber-100 text-amber-800 border-transparent dark:bg-amber-900/30 dark:text-amber-400",
+      },
+      size: {
+        md: "text-xs px-2.5 py-1",
+        sm: "text-[10px] px-2 py-0.5",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "muted",
+      size: "md",
     },
   }
 )
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLSpanElement>,
+    VariantProps<typeof badgeVariants> {
+  startIcon?: React.ReactNode
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, size, startIcon, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span className={cn(badgeVariants({ variant, size }), className)} {...props}>
+      {startIcon && <span className="mr-1.5 inline-flex items-center">{startIcon}</span>}
+      {props.children}
+    </span>
   )
 }
 

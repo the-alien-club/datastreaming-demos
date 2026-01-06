@@ -72,7 +72,7 @@ Use this tool AFTER you have:
 
 Example use case: Show research output growth from 2015-2025`,
       {
-        data: z.array(z.record(z.any())).describe('Array of time series data points'),
+        data: z.array(z.record(z.string(), z.any())).describe('Array of time series data points'),
         title: z.string().describe('Chart title (e.g., "Publications Over Time")'),
         description: z.string().describe('Chart description'),
         xAxisKey: z.string().describe('Key name for X axis (e.g., "year", "month")'),
@@ -147,7 +147,7 @@ After merging, this tool automatically creates a visualization.`,
           nodes: z.array(z.any()).describe('Array of nodes'),
           edges: z.array(z.any()).describe('Array of edges'),
           center: z.string().optional().describe('Center node ID'),
-          metadata: z.record(z.any()).optional().describe('Network metadata')
+          metadata: z.record(z.string(), z.any()).optional().describe('Network metadata')
         })).describe('Array of citation networks to merge'),
         title: z.string().optional().describe('Title for the merged network visualization'),
         description: z.string().optional().describe('Description for the merged network')

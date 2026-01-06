@@ -14,57 +14,115 @@ body {
 
 @layer base {
     :root {
+        /* Core Colors - Light Mode */
         --background: 0 0% 100%;
-        --foreground: 222.2 84% 4.9%;
+        --foreground: 120 1.9608% 10%;
         --card: 0 0% 100%;
-        --card-foreground: 222.2 84% 4.9%;
+        --card-foreground: 120 1.9608% 10%;
         --popover: 0 0% 100%;
-        --popover-foreground: 222.2 84% 4.9%;
-        --primary: 222.2 47.4% 11.2%;
-        --primary-foreground: 210 40% 98%;
-        --secondary: 210 40% 96.1%;
-        --secondary-foreground: 222.2 47.4% 11.2%;
-        --muted: 210 40% 96.1%;
-        --muted-foreground: 215.4 16.3% 46.9%;
-        --accent: 210 40% 96.1%;
-        --accent-foreground: 222.2 47.4% 11.2%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 91.4%;
-        --ring: 222.2 84% 4.9%;
-        --radius: 0.75rem;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
+        --popover-foreground: 120 1.9608% 10%;
+
+        /* UI Base Colors - Light Mode */
+        --primary: 0 0% 9.0196%;
+        --primary-foreground: 0 0% 98.0392%;
+        --secondary: 0 0% 96.0784%;
+        --secondary-foreground: 120 1.9608% 10%;
+        --muted: 0 0% 96.0784%;
+        --muted-foreground: 0 0% 45.0980%;
+        --accent: 0 0% 96.0784%;
+        --accent-foreground: 120 1.9608% 10%;
+
+        /* Border/Input - Light Mode */
+        --border: 0 0% 18.0392%;
+        --input: 0 0% 18.0392%;
+        --ring: 0 0% 18.0392%;
+
+        /* Status/Feedback Colors */
+        --info: 130 41% 67%;
+        --info-foreground: 0 0% 100%;
+        --warning: 28 88% 59%;
+        --warning-foreground: 0 0% 100%;
+        --destructive: 231.8841 100% 40.5882%;
+        --destructive-foreground: 0 0% 100%;
+
+        /* Chart Colors - Light Mode */
+        --chart-1: 91.9266 100% 78.6275%;
+        --chart-2: 97.3404 91.2621% 59.6078%;
+        --chart-3: 101.5842 86.3248% 54.1176%;
+        --chart-4: 103.75 78.6885% 47.8431%;
+        --chart-5: 106.4789 69.6078% 40%;
+
+        /* Dataset Colors (7-color palette) */
+        --dataset-1: 311 100% 84%;
+        --dataset-2: 237 88% 66%;
+        --dataset-3: 189 100% 66%;
+        --dataset-4: 130 41% 67%;
+        --dataset-5: 6 92% 67%;
+        --dataset-6: 34 100% 59%;
+        --dataset-7: 40 100% 67%;
+
+        /* Sidebar Colors - Light Mode */
+        --sidebar: 0 0% 98.0392%;
+        --sidebar-foreground: 120 1.9608% 10%;
+        --sidebar-primary: 120 1.9608% 10%;
+        --sidebar-primary-foreground: 0 0% 98.0392%;
+        --sidebar-accent: 0 0% 96.0784%;
+        --sidebar-accent-foreground: 120 1.9608% 10%;
+        --sidebar-border: 0 0% 89.8039%;
+        --sidebar-ring: 0 0% 63.1373%;
+
+        /* Border Radius */
+        --radius: 0.5rem;
     }
+
     .dark {
-        --background: 222.2 84% 4.9%;
-        --foreground: 210 40% 98%;
-        --card: 222.2 84% 4.9%;
-        --card-foreground: 210 40% 98%;
-        --popover: 222.2 84% 4.9%;
-        --popover-foreground: 210 40% 98%;
-        --primary: 210 40% 98%;
-        --primary-foreground: 222.2 47.4% 11.2%;
-        --secondary: 217.2 32.6% 17.5%;
-        --secondary-foreground: 210 40% 98%;
-        --muted: 217.2 32.6% 17.5%;
-        --muted-foreground: 215 20.2% 65.1%;
-        --accent: 217.2 32.6% 17.5%;
-        --accent-foreground: 210 40% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 217.2 32.6% 17.5%;
-        --input: 217.2 32.6% 17.5%;
-        --ring: 212.7 26.8% 83.9;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
+        /* Core Colors - Dark Mode */
+        --background: 0 0% 7%;
+        --foreground: 0 0% 100%;
+        --card: 0 0% 9%;
+        --card-foreground: 0 0% 100%;
+        --popover: 0 0% 9%;
+        --popover-foreground: 0 0% 100%;
+
+        /* UI Base Colors - Dark Mode (TEAL PRIMARY!) */
+        --primary: 183 39% 35%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 0 0% 25%;
+        --secondary-foreground: 0 0% 100%;
+        --muted: 0 0% 9.0196%;
+        --muted-foreground: 0 0% 54.1176%;
+        --accent: 0 0% 37.1%;
+        --accent-foreground: 0 0% 100%;
+
+        /* Border/Input - Dark Mode */
+        --border: 0 0% 18.0392%;
+        --input: 0 0% 18.0392%;
+        --ring: 0 0% 80%;
+
+        /* Status/Feedback Colors - Dark Mode */
+        --info: 130 41% 67%;
+        --info-foreground: 0 0% 100%;
+        --warning: 28 88% 59%;
+        --warning-foreground: 0 0% 100%;
+        --destructive: 6.3158 91.5663% 67.4510%;
+        --destructive-foreground: 5.4545 100% 97.8431%;
+
+        /* Chart Colors - Dark Mode */
+        --chart-1: 129.5652 41.3174% 67.2549%;
+        --chart-2: 31.2676 36.4103% 61.7647%;
+        --chart-3: 6.3158 91.5663% 67.4510%;
+        --chart-4: 27.541 87.5598% 59.0196%;
+        --chart-5: 40.3571 100% 67.0588%;
+
+        /* Sidebar Colors - Dark Mode (Dark Teal Accents) */
+        --sidebar: 0 0% 7.0588%;
+        --sidebar-foreground: 0 0% 100%;
+        --sidebar-primary: 184 38.4615% 15.2941%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 184 38.4615% 15.2941%;
+        --sidebar-accent-foreground: 183.5294 20% 83.3333%;
+        --sidebar-border: 0 0% 18.0392%;
+        --sidebar-ring: 0 0% 70.9804%;
     }
 }
 
