@@ -13,10 +13,10 @@ export const maxDuration = 900; // 15 minutes to allow long-running agent sessio
 // Agent types
 type AgentType = 'data-discovery' | 'citation-impact' | 'network-analysis' | 'trends-analysis' | 'visualization';
 
-async function* createPromptIterator(messages: any[]): AsyncGenerator<SDKUserMessage> {
+async function* createPromptIterator(messages: any[], resumeSessionId?: string | null): AsyncGenerator<SDKUserMessage> {
   // When resuming, only send the latest user message
   // The SDK will automatically load conversation history
-  const sessionId = crypto.randomUUID();
+  const sessionId = resumeSessionId || crypto.randomUUID();
 
   // Find the latest user message (skip thinking placeholders)
   const userMessages = messages.filter(
@@ -210,7 +210,7 @@ async function processQuery(jobId: string, messages: any[], model: string, resum
     }
 
     const result = query({
-      prompt: createPromptIterator(messages),
+      prompt: createPromptIterator(messages, resumeSessionId),
       options: queryOptions
     });
 
@@ -343,14 +343,26 @@ async function processQuery(jobId: string, messages: any[], model: string, resum
                   // Check if it looks like JSON before parsing
                   const text = textBlock.text.trim();
                   if (!text.startsWith('{') && !text.startsWith('[')) {
-                    // Plain text response (agent communication) - show it as progress!
+                    // Plain text response (agent communication)
                     console.log(`[${jobId}]       💬 Tool returned plain text (agent communication): "${text.substring(0, 100)}..."`);
 
-                    // Add this as a progress message with agent prefix for the UI
-                    jobStore.addMessage(jobId, {
-                      type: 'progress',
-                      content: `**[Agent Communication]** ${text}`
-                    });
+                    // Extract agent ID for internal tracking (don't display to user)
+                    const agentIdMatch = text.match(/agentId:\s*([a-f0-9]+)/);
+                    if (agentIdMatch) {
+                      const internalAgentId = agentIdMatch[1];
+                      console.log(`[${jobId}]       🔍 Internal agent ID: ${internalAgentId}`);
+                      // Store this ID for later retrieval if needed
+                      // But DON'T add it as a progress message - it's internal only
+                    } else {
+                      // Only add non-internal communication messages to progress
+                      // Skip messages containing internal IDs and SDK instructions
+                      if (!text.includes('This is an internal ID') && !text.includes('TaskOutput')) {
+                        jobStore.addMessage(jobId, {
+                          type: 'progress',
+                          content: `**[Agent Communication]** ${text}`
+                        });
+                      }
+                    }
 
                     continue;
                   }
