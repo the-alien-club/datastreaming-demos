@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository:  rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire
   pullPolicy: Always
-  tag: "0.1.6"
+  tag: "0.1.8"
 
 imagePullSecrets: []
 
