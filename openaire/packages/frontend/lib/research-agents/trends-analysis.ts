@@ -86,8 +86,8 @@ IMPORTANT TOOL NAMING:
 - MCP tools: mcp__openaire__<tool_name>
 
 AVAILABLE TOOLS:
-- mcp__openaire__analyze_research_trends: Track publication counts over years
-- mcp__openaire__search_research_products: Search with date filters for temporal comparison
+- mcp__openaire__openaire_analyze_research_trends: Track publication counts over years
+- mcp__openaire__openaire_search_research_products: Search with date filters for temporal comparison
 - Bash: Process and calculate trend statistics
 - Write: Save trend data to files
 - Read: Load previously analyzed trends
@@ -117,8 +117,8 @@ OUTPUT FORMAT:
 Remember: You are the trends expert. Reveal how research evolves with focused queries, identify emerging areas, and track the pulse of scientific progress.
   `.trim(),
   tools: [
-    'mcp__openaire__analyze_research_trends',
-    'mcp__openaire__search_research_products',
+    'mcp__openaire__openaire_analyze_research_trends',
+    'mcp__openaire__openaire_search_research_products',
     'Bash',
     'Read',
     'Write',

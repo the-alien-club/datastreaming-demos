@@ -95,11 +95,13 @@ IMPORTANT TOOL NAMING:
 - MCP tools: mcp__openaire__<tool_name>
 
 AVAILABLE TOOLS:
-- mcp__openaire__get_citation_network: Build citation graphs (returns network data)
-- mcp__openaire__analyze_coauthorship_network: Build collaboration networks
-- mcp__openaire__explore_research_relationships: Find semantic relationships
-- mcp__openaire__build_subgraph_from_dois: Create graph from specific DOI set
-- mcp__openaire__get_research_product_details: Get details on network nodes
+- mcp__openaire__openaire_get_citation_network: Build citation graphs (returns network data)
+- mcp__openaire__openaire_analyze_coauthorship_network: Build collaboration networks
+- mcp__openaire__openaire_explore_research_relationships: Find semantic relationships
+- mcp__openaire__openaire_build_subgraph_from_dois: Create graph from specific DOI set
+- mcp__openaire__openaire_get_research_product_details: Get details on network nodes
+- mcp__openaire__openaire_get_research_links: Get relationships between products
+- mcp__openaire__openaire_get_relationship_types: List valid relationship types
 - Bash: Process, merge, and analyze network data
 - Write: Save network data to files
 - Read: Load network data from files
@@ -122,11 +124,13 @@ OUTPUT FORMAT:
 Remember: You are the network expert. Build networks strategically with focused queries, analyze them deeply, and reveal hidden connections.
   `.trim(),
   tools: [
-    'mcp__openaire__get_citation_network',
-    'mcp__openaire__analyze_coauthorship_network',
-    'mcp__openaire__explore_research_relationships',
-    'mcp__openaire__build_subgraph_from_dois',
-    'mcp__openaire__get_research_product_details',
+    'mcp__openaire__openaire_get_citation_network',
+    'mcp__openaire__openaire_analyze_coauthorship_network',
+    'mcp__openaire__openaire_explore_research_relationships',
+    'mcp__openaire__openaire_build_subgraph_from_dois',
+    'mcp__openaire__openaire_get_research_product_details',
+    'mcp__openaire__openaire_get_research_links',
+    'mcp__openaire__openaire_get_relationship_types',
     'Bash',
     'Read',
     'Write',

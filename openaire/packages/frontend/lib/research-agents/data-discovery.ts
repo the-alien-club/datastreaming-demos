@@ -64,14 +64,16 @@ IMPORTANT TOOL NAMING:
 - MCP tools: mcp__openaire__<tool_name>
 
 AVAILABLE TOOLS:
-- mcp__openaire__search_research_products: Primary search for publications/datasets/software
-- mcp__openaire__get_research_product_details: Detailed info on specific product (by DOI or ID)
-- mcp__openaire__search_datasets: Specialized dataset search
-- mcp__openaire__search_organizations: Find research institutions
-- mcp__openaire__search_projects: Discover funded projects
-- mcp__openaire__get_author_profile: Get author publication history
-- mcp__openaire__search_data_sources: Find repositories and data sources
-- mcp__openaire__get_project_outputs: Get outputs from funded projects
+- mcp__openaire__openaire_search_research_products: Primary search for publications/datasets/software
+- mcp__openaire__openaire_get_research_product_details: Detailed info on specific product (by DOI or ID)
+- mcp__openaire__openaire_search_datasets: Specialized dataset search
+- mcp__openaire__openaire_search_organizations: Find research institutions
+- mcp__openaire__openaire_search_projects: Discover funded projects
+- mcp__openaire__openaire_get_author_profile: Get author publication history
+- mcp__openaire__openaire_search_data_sources: Find repositories and data sources
+- mcp__openaire__openaire_get_project_outputs: Get outputs from funded projects
+- mcp__openaire__openaire_discover_by_subject: Find related products via subject similarity
+- mcp__openaire__openaire_discover_by_coauthors: Find related products via author networks
 - Bash: Process and organize search results
 - Write: Save results to files
 - Read: Load previously saved data
@@ -97,14 +99,21 @@ When other agents will use your results (e.g., network-analysis needs to build c
 Remember: You are the discovery expert. Find entities efficiently with focused queries and organize them for downstream analysis.
   `.trim(),
   tools: [
-    'mcp__openaire__search_research_products',
-    'mcp__openaire__get_research_product_details',
-    'mcp__openaire__search_datasets',
-    'mcp__openaire__search_organizations',
-    'mcp__openaire__search_projects',
-    'mcp__openaire__get_author_profile',
-    'mcp__openaire__search_data_sources',
-    'mcp__openaire__get_project_outputs',
+    'mcp__openaire__openaire_search_research_products',
+    'mcp__openaire__openaire_get_research_product_details',
+    'mcp__openaire__openaire_search_datasets',
+    'mcp__openaire__openaire_search_organizations',
+    'mcp__openaire__openaire_get_organization',
+    'mcp__openaire__openaire_search_projects',
+    'mcp__openaire__openaire_get_project',
+    'mcp__openaire__openaire_get_author_profile',
+    'mcp__openaire__openaire_search_data_sources',
+    'mcp__openaire__openaire_get_data_source',
+    'mcp__openaire__openaire_get_project_outputs',
+    'mcp__openaire__openaire_discover_by_subject',
+    'mcp__openaire__openaire_discover_by_coauthors',
+    'mcp__openaire__openaire_search_persons',
+    'mcp__openaire__openaire_get_person',
     'Bash',
     'Read',
     'Write',

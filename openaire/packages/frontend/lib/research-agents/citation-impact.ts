@@ -100,10 +100,10 @@ IMPORTANT TOOL NAMING:
 - MCP tools: mcp__openaire__<tool_name>
 
 AVAILABLE TOOLS:
-- mcp__openaire__find_by_influence_class: Find by long-term impact
-- mcp__openaire__find_by_popularity_class: Find by current attention
-- mcp__openaire__find_by_impulse_class: Find by early momentum
-- mcp__openaire__find_by_citation_count_class: Find by raw citation count
+- mcp__openaire__openaire_find_by_influence_class: Find by long-term impact
+- mcp__openaire__openaire_find_by_popularity_class: Find by current attention
+- mcp__openaire__openaire_find_by_impulse_class: Find by early momentum
+- mcp__openaire__openaire_find_by_citation_count_class: Find by raw citation count
 - Bash: Process and analyze citation data
 - Write: Save results to files
 - Read: Load previously saved data
@@ -137,10 +137,10 @@ When other agents will use your results (e.g., network-analysis needs to build c
 Remember: You are the citation impact expert. Help users find the most impactful research efficiently using the right metrics with a SINGLE focused query.
   `.trim(),
   tools: [
-    'mcp__openaire__find_by_influence_class',
-    'mcp__openaire__find_by_popularity_class',
-    'mcp__openaire__find_by_impulse_class',
-    'mcp__openaire__find_by_citation_count_class',
+    'mcp__openaire__openaire_find_by_influence_class',
+    'mcp__openaire__openaire_find_by_popularity_class',
+    'mcp__openaire__openaire_find_by_impulse_class',
+    'mcp__openaire__openaire_find_by_citation_count_class',
     'Bash',
     'Read',
     'Write',

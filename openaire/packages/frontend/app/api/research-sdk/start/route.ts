@@ -102,7 +102,6 @@ async function processQuery(jobId: string, messages: any[], model: string, resum
   try {
     jobStore.setStatus(jobId, 'running');
 
-    const mcpServerPath = path.join(process.cwd(), '..', 'mcp', 'dist', 'index.js');
     const vizMcpServerPath = path.join(process.cwd(), '..', 'viz-mcp', 'dist', 'index.js');
 
     // Agent instance tracking map: agentId -> { type, instanceId }
@@ -114,9 +113,8 @@ async function processQuery(jobId: string, messages: any[], model: string, resum
       systemPrompt: ORCHESTRATOR_PROMPT,
         mcpServers: {
           openaire: {
-            command: 'node',
-            args: [mcpServerPath],
-            env: { ...process.env, LOG_LEVEL: 'info' }
+            type: 'http',
+            url: process.env.OPENAIRE_MCP_URL || 'https://nontrunked-kinsley-bedfast.ngrok-free.dev/mcp'
           },
           'viz-tools': {
             command: 'node',
@@ -168,26 +166,38 @@ async function processQuery(jobId: string, messages: any[], model: string, resum
           }]
         },
         allowedTools: [
-          // Original OpenAIRE tools
-          'mcp__openaire__search_research_products',
-          'mcp__openaire__get_research_product_details',
-          'mcp__openaire__get_citation_network',
-          // New OpenAIRE tools
-          'mcp__openaire__search_organizations',
-          'mcp__openaire__search_projects',
-          'mcp__openaire__get_author_profile',
-          'mcp__openaire__search_datasets',
-          'mcp__openaire__analyze_coauthorship_network',
-          'mcp__openaire__get_project_outputs',
-          // Citation class tools (4 tools for different indicators)
-          'mcp__openaire__find_by_influence_class',
-          'mcp__openaire__find_by_popularity_class',
-          'mcp__openaire__find_by_impulse_class',
-          'mcp__openaire__find_by_citation_count_class',
-          'mcp__openaire__explore_research_relationships',
-          'mcp__openaire__search_data_sources',
-          'mcp__openaire__analyze_research_trends',
-          'mcp__openaire__build_subgraph_from_dois',
+          // OpenAIRE Graph v2 tools
+          'mcp__openaire__openaire_search_research_products',
+          'mcp__openaire__openaire_get_research_product_details',
+          // OpenAIRE Graph v1 entity tools
+          'mcp__openaire__openaire_search_organizations',
+          'mcp__openaire__openaire_get_organization',
+          'mcp__openaire__openaire_search_projects',
+          'mcp__openaire__openaire_get_project',
+          'mcp__openaire__openaire_search_data_sources',
+          'mcp__openaire__openaire_get_data_source',
+          'mcp__openaire__openaire_search_persons',
+          'mcp__openaire__openaire_get_person',
+          'mcp__openaire__openaire_get_research_links',
+          'mcp__openaire__openaire_get_relationship_types',
+          // ScholeXplorer relationship tools
+          'mcp__openaire__openaire_explore_research_relationships',
+          // Bibliometric filter tools
+          'mcp__openaire__openaire_find_by_influence_class',
+          'mcp__openaire__openaire_find_by_popularity_class',
+          'mcp__openaire__openaire_find_by_impulse_class',
+          'mcp__openaire__openaire_find_by_citation_count_class',
+          'mcp__openaire__openaire_search_datasets',
+          // Composite/analytical tools
+          'mcp__openaire__openaire_get_author_profile',
+          'mcp__openaire__openaire_analyze_coauthorship_network',
+          'mcp__openaire__openaire_get_project_outputs',
+          'mcp__openaire__openaire_analyze_research_trends',
+          'mcp__openaire__openaire_discover_by_subject',
+          'mcp__openaire__openaire_discover_by_coauthors',
+          'mcp__openaire__openaire_get_citation_network',
+          'mcp__openaire__openaire_build_subgraph_from_dois',
+          'mcp__openaire__openaire_find_datasets_by_topic',
           // System tools
           'Bash',
           'Read',
