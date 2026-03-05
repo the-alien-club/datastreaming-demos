@@ -39,10 +39,9 @@ function ensureCleanupTimer() {
 
 /**
  * Generate an MCP config file with resolved paths.
- * When OPENAIRE_MCP_URL is set, adds an HTTP MCP server with the access token.
  * Returns the path to the temp config file.
  */
-function generateMcpConfig(accessToken?: string): string {
+function generateMcpConfig(): string {
   const vizMcpPath = path.join(process.cwd(), '..', 'viz-mcp', 'dist', 'index.js');
 
   const mcpServers: Record<string, any> = {
@@ -55,17 +54,11 @@ function generateMcpConfig(accessToken?: string): string {
   // Add remote OpenAIRE MCP server when URL is configured
   const openaireMcpUrl = process.env.OPENAIRE_MCP_URL;
   if (openaireMcpUrl) {
-    const serverConfig: Record<string, any> = {
+    mcpServers['openaire-local'] = {
       type: 'http',
       url: openaireMcpUrl,
     };
-    if (accessToken) {
-      serverConfig.headers = {
-        Authorization: `Bearer ${accessToken}`,
-      };
-    }
-    mcpServers['openaire-local'] = serverConfig;
-    console.log(`[claude-process] Remote MCP: ${openaireMcpUrl} (auth: ${accessToken ? 'yes' : 'no'})`);
+    console.log(`[claude-process] Remote MCP: ${openaireMcpUrl}`);
   }
 
   const config = { mcpServers };
@@ -83,7 +76,7 @@ function generateMcpConfig(accessToken?: string): string {
 /**
  * Get or create a persistent Claude Code process for a chat session.
  */
-export function getOrCreateProcess(chatSessionKey: string, model: string, accessToken?: string): ClaudeProcess {
+export function getOrCreateProcess(chatSessionKey: string, model: string): ClaudeProcess {
   const existing = processMap.get(chatSessionKey);
   if (existing && existing.alive) {
     existing.lastActivity = Date.now();
@@ -96,7 +89,7 @@ export function getOrCreateProcess(chatSessionKey: string, model: string, access
     processMap.delete(chatSessionKey);
   }
 
-  const mcpConfigPath = generateMcpConfig(accessToken);
+  const mcpConfigPath = generateMcpConfig();
   const pluginDir = process.env.PLUGIN_DIR;
 
   const args = [
