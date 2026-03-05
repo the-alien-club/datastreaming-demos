@@ -29,6 +29,7 @@ export interface Message {
   hasToolUse?: boolean;
   researchData?: ResearchProduct[];
   charts?: ChartData[];
+  timestamp?: number;
 }
 
 // Model types
@@ -52,12 +53,13 @@ export interface JobMessage {
   count?: number;
   researchData?: ResearchProduct[];
   charts?: ChartData[];
+  timestamp?: number;
 }
 
 export interface JobStatus {
   status: 'pending' | 'running' | 'complete' | 'error';
   messages: JobMessage[];
-  agents?: Record<string, any>;
+  toolActivity?: any[];
   toolCalls?: any[];
   metrics?: {
     papersFound: number;

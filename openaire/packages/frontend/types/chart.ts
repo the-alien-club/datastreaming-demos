@@ -39,7 +39,7 @@ export interface ChartConfig {
 }
 
 export interface ChartData {
-  chartType: "bar" | "multiBar" | "line" | "pie" | "area" | "stackedArea" | "network";
+  chartType: "bar" | "multiBar" | "line" | "pie" | "area" | "stackedArea" | "network" | "table";
   config: {
     title: string;
     description: string;
@@ -53,5 +53,6 @@ export interface ChartData {
   };
   data: Array<Record<string, any>>;
   chartConfig: ChartConfig;
-  networkData?: CitationNetwork;  // Add network-specific data
+  networkData?: CitationNetwork;
+  tableColumns?: Array<{ key: string; label: string; align?: 'left' | 'center' | 'right' }>;
 }

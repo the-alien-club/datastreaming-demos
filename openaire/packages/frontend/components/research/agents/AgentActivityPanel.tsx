@@ -1,10 +1,10 @@
 import React from "react";
-import { AgentPanel } from "@/components/AgentPanel";
+import { ToolActivityPanel } from "@/components/ToolActivityPanel";
 import { ToolTimeline } from "@/components/ToolTimeline";
-import type { AgentInstance, AgentType, ToolCall } from "@/lib/job-store";
+import type { ToolActivity, ToolCall } from "@/lib/job-store";
 
 interface AgentActivityPanelProps {
-  agentStatus: Record<AgentType, AgentInstance[]> | null;
+  toolActivity: ToolActivity[];
   toolCalls: ToolCall[];
   metrics: {
     papersFound: number;
@@ -15,16 +15,8 @@ interface AgentActivityPanelProps {
   onToggleTimeline: () => void;
 }
 
-const DEFAULT_AGENT_STATUS: Record<AgentType, AgentInstance[]> = {
-  "data-discovery": [],
-  "citation-impact": [],
-  "network-analysis": [],
-  "trends-analysis": [],
-  "visualization": []
-};
-
 export function AgentActivityPanel({
-  agentStatus,
+  toolActivity,
   toolCalls,
   metrics,
   showTimeline,
@@ -32,8 +24,8 @@ export function AgentActivityPanel({
 }: AgentActivityPanelProps) {
   return (
     <div className="mb-4">
-      <AgentPanel
-        agents={agentStatus || DEFAULT_AGENT_STATUS}
+      <ToolActivityPanel
+        toolActivity={toolActivity}
         metrics={metrics}
       />
       {toolCalls.length > 0 && (

@@ -1,47 +1,14 @@
-// Start a research query - returns jobId immediately, processes in background
+// Start a research query — spawns a real Claude Code CLI process.
+// Thin relay: user messages → claude -p stdin, stdout JSONL → job-store → poll → UI.
+
 import { NextRequest } from 'next/server';
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import { RESEARCH_SUBAGENTS, ORCHESTRATOR_PROMPT } from '@/lib/research-agents';
+import { getOrCreateProcess, writeUserMessage, destroyProcess } from '@/lib/claude-process';
+import { extractPapersFromToolResult, extractChartFromToolResult, extractTablesFromMarkdown, isCitationNetwork } from '@/lib/stream-parser';
 import { jobStore } from '@/lib/job-store';
-import path from 'path';
-import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk/sdk';
 import type { ChartData } from '@/types/chart';
 
 export const runtime = 'nodejs';
-export const maxDuration = 900; // 15 minutes to allow long-running agent sessions
-
-// Agent types
-type AgentType = 'data-discovery' | 'citation-impact' | 'network-analysis' | 'trends-analysis' | 'visualization';
-
-async function* createPromptIterator(messages: any[]): AsyncGenerator<SDKUserMessage> {
-  // When resuming, only send the latest user message
-  // The SDK will automatically load conversation history
-  const sessionId = crypto.randomUUID();
-
-  // Find the latest user message (skip thinking placeholders)
-  const userMessages = messages.filter(
-    msg => msg.role === 'user' && msg.content && msg.content !== 'thinking'
-  );
-
-  if (userMessages.length === 0) {
-    return;
-  }
-
-  // Only yield the latest user message
-  const latestUserMessage = userMessages[userMessages.length - 1];
-
-  yield {
-    type: 'user',
-    message: {
-      role: 'user',
-      content: typeof latestUserMessage.content === 'string'
-        ? latestUserMessage.content
-        : JSON.stringify(latestUserMessage.content)
-    },
-    parent_tool_use_id: null,
-    session_id: sessionId
-  } as SDKUserMessage;
-}
+export const maxDuration = 900;
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,39 +21,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create job
     const jobId = crypto.randomUUID();
     jobStore.create(jobId);
 
-    // Check if we should resume a previous session
-    let resumeSessionId: string | null = null;
-    if (previousJobId) {
-      resumeSessionId = jobStore.getSessionId(previousJobId);
-      if (resumeSessionId) {
-        console.log(`[${jobId}] Resuming session: ${resumeSessionId} from job ${previousJobId}`);
-      }
-    }
+    // Chat session key: reuse previous job's key for multi-turn conversation
+    const chatSessionKey = previousJobId || jobId;
 
-    console.log(`[${jobId}] Research query started`);
-    console.log(`[${jobId}] Total messages received: ${messages.length}`);
-    console.log(`[${jobId}] Message breakdown:`, messages.map((m, i) => ({
-      index: i,
-      role: m.role,
-      type: m.messageType,
-      contentPreview: m.content?.substring(0, 50) || 'empty'
-    })));
+    console.log(`[${jobId}] Research query started (${messages.length} messages, session: ${chatSessionKey})`);
 
-    // Start processing in background (don't await!)
-    // Default to Sonnet for orchestrator - it handles large contexts and complex
-    // multi-agent coordination better than Haiku, avoiding long response delays
-    processQuery(jobId, messages, model || 'claude-sonnet-4-5-20250929', resumeSessionId);
+    processQuery(jobId, chatSessionKey, messages, model || 'claude-opus-4-6');
 
-    // Return immediately
     return new Response(
       JSON.stringify({ jobId, status: 'started' }),
-      {
-        headers: { 'Content-Type': 'application/json' },
-      }
+      { headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Start endpoint error:', error);
@@ -97,605 +44,211 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Background processor
-async function processQuery(jobId: string, messages: any[], model: string, resumeSessionId: string | null = null) {
+async function processQuery(jobId: string, chatSessionKey: string, messages: any[], model: string) {
   try {
     jobStore.setStatus(jobId, 'running');
 
-    const vizMcpServerPath = path.join(process.cwd(), '..', 'viz-mcp', 'dist', 'index.js');
-
-    // Agent instance tracking map: agentId -> { type, instanceId }
-    const activeAgents = new Map<string, { type: AgentType; instanceId: string }>();
-
-    // Build query options
-    const queryOptions: any = {
-      model,
-      systemPrompt: ORCHESTRATOR_PROMPT,
-        mcpServers: {
-          openaire: {
-            type: 'http',
-            url: process.env.OPENAIRE_MCP_URL || 'https://nontrunked-kinsley-bedfast.ngrok-free.dev/mcp'
-          },
-          'viz-tools': {
-            command: 'node',
-            args: [vizMcpServerPath],
-            env: { ...process.env, LOG_LEVEL: 'info' }
-          }
-        },
-        agents: RESEARCH_SUBAGENTS,
-        hooks: {
-          'SubagentStart': [{
-            hooks: [async (input: any) => {
-              const startInput = input as any;
-              const agentType = startInput.agent_type as AgentType;
-              const agentId = startInput.agent_id;
-
-              console.log(`[${jobId}] 🚀 SUBAGENT START: ${agentType} (id: ${agentId})`);
-
-              // Create agent instance in job store
-              const instanceId = jobStore.startAgentInstance(jobId, agentType, `Starting ${agentType}...`);
-              activeAgents.set(agentId, { type: agentType, instanceId });
-
-              console.log(`[${jobId}]    Created instance: ${instanceId}`);
-
-              return { continue: true };
-            }]
-          }],
-          'SubagentStop': [{
-            hooks: [async (input: any) => {
-              const stopInput = input as any;
-              const agentId = stopInput.agent_id;
-
-              const agentInfo = activeAgents.get(agentId);
-              if (agentInfo) {
-                console.log(`[${jobId}] 🛑 SUBAGENT STOP: ${agentInfo.type} (id: ${agentId})`);
-
-                // Complete agent instance in job store
-                jobStore.updateAgentInstance(jobId, agentInfo.type, agentInfo.instanceId, {
-                  status: 'completed'
-                });
-
-                activeAgents.delete(agentId);
-                console.log(`[${jobId}]    Completed instance: ${agentInfo.instanceId}`);
-              } else {
-                console.warn(`[${jobId}] ⚠️  SubagentStop for unknown agent: ${agentId}`);
-              }
-
-              return { continue: true };
-            }]
-          }]
-        },
-        allowedTools: [
-          // OpenAIRE Graph v2 tools
-          'mcp__openaire__openaire_search_research_products',
-          'mcp__openaire__openaire_get_research_product_details',
-          // OpenAIRE Graph v1 entity tools
-          'mcp__openaire__openaire_search_organizations',
-          'mcp__openaire__openaire_get_organization',
-          'mcp__openaire__openaire_search_projects',
-          'mcp__openaire__openaire_get_project',
-          'mcp__openaire__openaire_search_data_sources',
-          'mcp__openaire__openaire_get_data_source',
-          'mcp__openaire__openaire_search_persons',
-          'mcp__openaire__openaire_get_person',
-          'mcp__openaire__openaire_get_research_links',
-          'mcp__openaire__openaire_get_relationship_types',
-          // ScholeXplorer relationship tools
-          'mcp__openaire__openaire_explore_research_relationships',
-          // Bibliometric filter tools
-          'mcp__openaire__openaire_find_by_influence_class',
-          'mcp__openaire__openaire_find_by_popularity_class',
-          'mcp__openaire__openaire_find_by_impulse_class',
-          'mcp__openaire__openaire_find_by_citation_count_class',
-          'mcp__openaire__openaire_search_datasets',
-          // Composite/analytical tools
-          'mcp__openaire__openaire_get_author_profile',
-          'mcp__openaire__openaire_analyze_coauthorship_network',
-          'mcp__openaire__openaire_get_project_outputs',
-          'mcp__openaire__openaire_analyze_research_trends',
-          'mcp__openaire__openaire_discover_by_subject',
-          'mcp__openaire__openaire_discover_by_coauthors',
-          'mcp__openaire__openaire_get_citation_network',
-          'mcp__openaire__openaire_build_subgraph_from_dois',
-          'mcp__openaire__openaire_find_datasets_by_topic',
-          // System tools
-          'Bash',
-          'Read',
-          'Write',
-          'Grep',
-          'Glob',
-          // Visualization tools
-          'mcp__viz-tools__create_citation_network_chart',
-          'mcp__viz-tools__create_timeline_chart',
-          'mcp__viz-tools__create_distribution_chart',
-          'mcp__viz-tools__merge_citation_networks'
-        ],
-        permissionMode: 'acceptEdits'
-    };
-
-    // Add resume option if we have a session to continue
-    if (resumeSessionId) {
-      queryOptions.resume = resumeSessionId;
-      console.log(`[${jobId}] Using resume option with session: ${resumeSessionId}`);
+    // Get or create persistent Claude process for this chat session
+    let proc;
+    try {
+      proc = getOrCreateProcess(chatSessionKey, model);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to spawn Claude process';
+      console.error(`[${jobId}] Process spawn error: ${msg}`);
+      jobStore.setError(jobId, msg);
+      return;
     }
 
-    const result = query({
-      prompt: createPromptIterator(messages),
-      options: queryOptions
-    });
+    // Extract latest user message
+    const userMessages = messages.filter(
+      (msg: any) => msg.role === 'user' && msg.content && msg.content !== 'thinking'
+    );
+    if (userMessages.length === 0) {
+      jobStore.setError(jobId, 'No user message found');
+      return;
+    }
+    const latestUserMessage = userMessages[userMessages.length - 1];
+    const userText = typeof latestUserMessage.content === 'string'
+      ? latestUserMessage.content
+      : JSON.stringify(latestUserMessage.content);
 
+    // Shared extraction state for this turn
+    const allPapers: any[] = [];
+    const charts: ChartData[] = [];
     const startTime = Date.now();
-    let allPapers: any[] = [];
-    let charts: ChartData[] = [];  // Store charts from visualization tools
-    let progressText: string[] = [];  // Store progress messages
-    let finalText = '';  // Store only the final response
-    let messageCount = 0;
-
-    // Track token usage from final result (SDK provides cumulative totals)
-    let finalUsage: any = null;
-
-    // Track tool use IDs to tool names mapping
     const toolUseMap = new Map<string, string>();
+    let finalText = '';
+    let turnComplete = false;
 
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`[${jobId}] 🚀 AGENT PROCESSING STARTED`);
-    console.log(`${'='.repeat(80)}`);
-    console.log(`Model: ${model}`);
-    console.log(`Initial messages: ${messages.length}`);
-    console.log(`Start time: ${new Date(startTime).toISOString()}\n`);
+    // Set up event handler for JSONL lines
+    const handler = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
 
-    for await (const message of result) {
-      messageCount++;
+      let obj: any;
+      try {
+        obj = JSON.parse(trimmed);
+      } catch {
+        return;
+      }
+
       const elapsed = Date.now() - startTime;
       jobStore.updateMetric(jobId, 'elapsedMs', elapsed);
 
-      // Check if approaching timeout (warn at 90% of maxDuration)
-      const maxDurationMs = maxDuration * 1000;
-      const timeoutWarningThreshold = maxDurationMs * 0.9;
-      if (elapsed > timeoutWarningThreshold) {
-        console.warn(`[${jobId}] ⚠️  APPROACHING TIMEOUT: ${(elapsed / 1000).toFixed(0)}s / ${maxDuration}s`);
-        console.warn(`[${jobId}]     Stream may close soon. Consider breaking this into smaller tasks.`);
-      }
-
-      console.log(`\n${'-'.repeat(80)}`);
-      console.log(`[${jobId}] 📨 Message #${messageCount} | Type: ${message.type} | Elapsed: ${(elapsed / 1000).toFixed(2)}s`);
-      console.log(`${'-'.repeat(80)}`);
-
-      // Capture session ID from system init message
-      if (message.type === 'system' && (message as any).subtype === 'init') {
-        const sessionId = (message as any).session_id;
+      // System init — capture session ID
+      if (obj.type === 'system' && obj.subtype === 'init') {
+        const sessionId = obj.session_id;
         if (sessionId) {
+          proc!.sessionId = sessionId;
           jobStore.setSessionId(jobId, sessionId);
-          console.log(`[${jobId}] 📌 Captured session ID: ${sessionId}`);
+          console.log(`[${jobId}] Session ID: ${sessionId}`);
         }
+        return;
       }
 
-      if (message.type === 'assistant') {
-        console.log(`[${jobId}] 🤖 ASSISTANT MESSAGE`);
-        const content = message.message.content;
+      // Assistant message — text chunks and tool_use blocks
+      if (obj.type === 'assistant') {
+        const content = obj.message?.content;
         let textChunk = '';
-        let toolUseCount = 0;
 
         if (typeof content === 'string') {
           textChunk = content;
         } else if (Array.isArray(content)) {
-          console.log(`[${jobId}]    Content blocks: ${content.length}`);
           for (const block of content) {
             if (block.type === 'text') {
               textChunk += block.text;
             } else if (block.type === 'tool_use') {
-              toolUseCount++;
-              // Store tool use ID -> name mapping
               toolUseMap.set(block.id, block.name);
-              console.log(`[${jobId}]    🔧 Tool use #${toolUseCount}: ${block.name}`);
-              console.log(`[${jobId}]       Input: ${JSON.stringify(block.input).substring(0, 150)}...`);
+              jobStore.addToolActivity(jobId, {
+                toolName: block.name,
+                toolUseId: block.id,
+                startedAt: Date.now(),
+                status: 'running',
+                input: block.input || undefined,
+              });
+              console.log(`[${jobId}] Tool: ${block.name}`);
             }
           }
         }
 
         if (textChunk) {
-          const preview = textChunk.substring(0, 300).replace(/\n/g, ' ');
-          console.log(`[${jobId}]    💭 Agent thinking: "${preview}${textChunk.length > 300 ? '...' : ''}"`);
-          console.log(`[${jobId}]    Text length: ${textChunk.length} chars`);
-
-          // Always show text as progress message in the UI
-          progressText.push(textChunk);
-          jobStore.addMessage(jobId, { type: 'progress', content: textChunk });
-          console.log(`[${jobId}]    📝 Saved as progress message`);
-
-          // If no tool uses, this might be the final synthesis message
-          // Keep track of it, and it will be used as the final text at the end
-          if (toolUseCount === 0) {
-            finalText = textChunk;  // Store as potential final text
-            console.log(`[${jobId}]    ✨ Potential final synthesis (no tool uses)`);
+          jobStore.addMessage(jobId, { type: 'progress', content: textChunk, timestamp: Date.now() });
+          // Track potential final synthesis (text without tool_use in same block)
+          const hasToolUse = Array.isArray(content) && content.some((b: any) => b.type === 'tool_use');
+          if (!hasToolUse) {
+            finalText = textChunk;
           }
         }
-
-        if (toolUseCount > 0) {
-          console.log(`[${jobId}]    📊 Tool uses in this message: ${toolUseCount}`);
-        }
+        return;
       }
 
-      if (message.type === 'user') {
-        console.log(`[${jobId}] 👤 USER MESSAGE (Tool Results)`);
-        const userContent = message.message.content;
-        let toolResultCount = 0;
-
+      // User message — tool results (auto-generated by Claude Code)
+      if (obj.type === 'user') {
+        const userContent = obj.message?.content;
         if (Array.isArray(userContent)) {
-          console.log(`[${jobId}]    Content blocks: ${userContent.length}`);
-
           for (const block of userContent) {
             if (block.type === 'tool_result') {
-              toolResultCount++;
-              const isError = 'is_error' in block && block.is_error;
+              const toolName = toolUseMap.get(block.tool_use_id) || 'unknown';
+              const isError = !!block.is_error;
 
-              console.log(`[${jobId}]    ✅ Tool result #${toolResultCount}${isError ? ' (ERROR)' : ''}`);
-
-              if (isError) {
-                console.log(`[${jobId}]       ❌ Tool Error (is_error=true):`);
-                const errorContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2);
-                console.log(`[${jobId}]          ${errorContent}`);
-                continue;
+              // Build output snippet (first ~200 chars of result content)
+              let outputSnippet = '';
+              const rawContent = block.content;
+              if (typeof rawContent === 'string') {
+                outputSnippet = rawContent.slice(0, 200);
+              } else if (Array.isArray(rawContent)) {
+                const textBlock = rawContent.find((b: any) => b.type === 'text');
+                if (textBlock?.text) outputSnippet = textBlock.text.slice(0, 200);
               }
 
-              let toolData;
-              if (typeof block.content === 'string') {
-                try {
-                  toolData = JSON.parse(block.content);
-                } catch {
-                  console.log(`[${jobId}]       ⚠️ Failed to parse tool result as JSON`);
-                  continue;
-                }
-              } else if (Array.isArray(block.content)) {
-                // MCP SDK format: [{"type": "text", "text": "{...}"}]
-                const textBlock = block.content.find((b: any) => b.type === 'text');
-                if (textBlock && textBlock.text) {
-                  // Check if it looks like JSON before parsing
-                  const text = textBlock.text.trim();
-                  if (!text.startsWith('{') && !text.startsWith('[')) {
-                    // Plain text response (agent communication) - show it as progress!
-                    console.log(`[${jobId}]       💬 Tool returned plain text (agent communication): "${text.substring(0, 100)}..."`);
+              // Complete tool activity with output snippet
+              jobStore.updateToolActivity(jobId, toolName, {
+                completedAt: Date.now(),
+                status: isError ? 'error' : 'completed',
+                outputSnippet: outputSnippet || undefined,
+              });
 
-                    // Add this as a progress message with agent prefix for the UI
-                    jobStore.addMessage(jobId, {
-                      type: 'progress',
-                      content: `**[Agent Communication]** ${text}`
-                    });
+              // Log tool call for timeline
+              jobStore.addToolCall(jobId, {
+                timestamp: Date.now(),
+                elapsed: Date.now() - startTime,
+                agent: 'claude',
+                tool: toolName,
+                input: { summary: 'Query executed' },
+                output: {
+                  success: !isError,
+                  summary: outputSnippet ? outputSnippet.slice(0, 100) : (isError ? 'Error' : 'Completed'),
+                },
+              });
 
-                    continue;
-                  }
-
-                  try {
-                    toolData = JSON.parse(text);
-                    console.log(`[${jobId}]       📦 Parsed MCP text block successfully`);
-                  } catch (e) {
-                    console.log(`[${jobId}]       ⚠️ Failed to parse MCP text block as JSON (skipping)`);
-                    console.log(`[${jobId}]          Error: ${e instanceof Error ? e.message : 'Unknown'}`);
-                    console.log(`[${jobId}]          Text: ${text.substring(0, 200)}`);
-                    continue;
-                  }
-                } else {
-                  console.log(`[${jobId}]       ⚠️ No text block found in array content`);
-                  continue;
-                }
-              } else {
-                toolData = block.content;
+              // Extract papers from tool result
+              const papers = extractPapersFromToolResult(block.content);
+              if (papers.length > 0) {
+                allPapers.push(...papers);
+                jobStore.updateMetric(jobId, 'papersFound', allPapers.length);
+                jobStore.addMessage(jobId, { type: 'papers', count: allPapers.length });
+                console.log(`[${jobId}] extractPapers: +${papers.length} (total: ${allPapers.length})`);
               }
 
-              // Check if this is a visualization tool result
-              // Viz tools return: { visualization: ChartData }
-              if (toolData && toolData.visualization) {
-                console.log(`[${jobId}]       📊 Visualization tool result detected:`, {
-                  chartType: toolData.visualization.chartType,
-                  hasNetwork: !!toolData.visualization.networkData
-                });
-                charts.push(toolData.visualization);
+              // Extract charts from tool result
+              const chart = extractChartFromToolResult(block.content);
+              if (chart) {
+                charts.push(chart);
                 jobStore.updateMetric(jobId, 'chartsCreated', charts.length);
-                continue;  // Skip further processing for viz results
+                console.log(`[${jobId}] extractCharts: +1 (total: ${charts.length}, type: ${chart.chartType})`);
               }
 
-              // Log tool call
-              if (toolData) {
-                let summary = 'Tool completed';
-                let count = 0;
-
-                if ('success' in toolData && toolData.success && toolData.data) {
-                  // Handle research products
-                  if (Array.isArray(toolData.data.results)) {
-                    count = toolData.data.results.length;
-                    summary = `${count} research products`;
-                    allPapers.push(...toolData.data.results);
-                    jobStore.updateMetric(jobId, 'papersFound', allPapers.length);
-                    console.log(`[${jobId}]       📚 Found ${count} research products (total: ${allPapers.length})`);
-                  }
-                  // Handle datasets
-                  else if (Array.isArray(toolData.data.datasets)) {
-                    count = toolData.data.datasets.length;
-                    summary = `${count} datasets`;
-                    allPapers.push(...toolData.data.datasets);
-                    jobStore.updateMetric(jobId, 'papersFound', allPapers.length);
-                    console.log(`[${jobId}]       📊 Found ${count} datasets (total: ${allPapers.length})`);
-                  }
-                  // Handle project outputs
-                  else if (Array.isArray(toolData.data.outputs)) {
-                    count = toolData.data.outputs.length;
-                    summary = `${count} project outputs`;
-                    allPapers.push(...toolData.data.outputs);
-                    jobStore.updateMetric(jobId, 'papersFound', allPapers.length);
-                    console.log(`[${jobId}]       📦 Found ${count} project outputs (total: ${allPapers.length})`);
-                  }
-                  // Handle author publications
-                  else if (Array.isArray(toolData.data.publications)) {
-                    count = toolData.data.publications.length;
-                    summary = `${count} publications`;
-                    allPapers.push(...toolData.data.publications);
-                    jobStore.updateMetric(jobId, 'papersFound', allPapers.length);
-                    console.log(`[${jobId}]       👤 Found ${count} author publications (total: ${allPapers.length})`);
-                  }
-                  // Handle highly cited papers
-                  else if (Array.isArray(toolData.data.papers)) {
-                    count = toolData.data.papers.length;
-                    summary = `${count} highly cited`;
-                    allPapers.push(...toolData.data.papers);
-                    jobStore.updateMetric(jobId, 'papersFound', allPapers.length);
-                    console.log(`[${jobId}]       ⭐ Found ${count} highly cited papers (total: ${allPapers.length})`);
-                  }
-                  // Handle organizations
-                  else if (Array.isArray(toolData.data.organizations)) {
-                    count = toolData.data.organizations.length;
-                    summary = `${count} organizations`;
-                    console.log(`[${jobId}]       🏛️  Found ${count} organizations`);
-                  }
-                  // Handle projects
-                  else if (Array.isArray(toolData.data.projects)) {
-                    count = toolData.data.projects.length;
-                    summary = `${count} projects`;
-                    console.log(`[${jobId}]       💰 Found ${count} funded projects`);
-                  }
-                  // Handle data sources
-                  else if (Array.isArray(toolData.data.dataSources)) {
-                    count = toolData.data.dataSources.length;
-                    summary = `${count} data sources`;
-                    console.log(`[${jobId}]       🗄️  Found ${count} data sources/repositories`);
-                  }
-                  // Handle relationships
-                  else if (Array.isArray(toolData.data.relationships)) {
-                    count = toolData.data.relationships.length;
-                    summary = `${count} relationships`;
-                    console.log(`[${jobId}]       🔗 Found ${count} semantic relationships`);
-                  }
-                  // Handle research trends
-                  else if (Array.isArray(toolData.data.trends)) {
-                    count = toolData.data.trends.length;
-                    summary = `Trends: ${count} years`;
-                    console.log(`[${jobId}]       📈 Analyzed ${count} years (${toolData.data.summary?.totalPapers || 0} papers)`);
-                  }
-                  // Handle networks (citation or co-authorship)
-                  else if (toolData.data.nodes) {
-                    count = toolData.data.nodes.length;
-                    const isCoauthorship = toolData.data.centerAuthor || toolData.data.metadata?.totalAuthors;
-                    summary = isCoauthorship ? `Co-authorship: ${count} authors` : `Network: ${count} nodes`;
-
-                    if (!isCoauthorship) {
-                      jobStore.updateMetric(jobId, 'citationNetworksBuilt', jobStore.get(jobId)!.metrics.citationNetworksBuilt + 1);
-                    }
-                    console.log(`[${jobId}]       🕸️  ${summary}, ${toolData.data.edges?.length || 0} edges`);
-                  }
-                  // Handle single entities
-                  else if (toolData.data.id) {
-                    summary = 'Single entity';
-                    const title = toolData.data.title || toolData.data.legalName || toolData.data.officialName || 'Unknown';
-                    console.log(`[${jobId}]       📄 Single entity: ${title.substring(0, 80)}...`);
-                  }
-                  else {
-                    console.log(`[${jobId}]       ℹ️  Tool result: ${JSON.stringify(toolData).substring(0, 150)}...`);
-                  }
-                } else if ('success' in toolData && !toolData.success) {
-                  console.log(`[${jobId}]       ⚠️ Tool reported failure`);
-                  console.log(`[${jobId}]          Error: ${JSON.stringify(toolData.error || toolData)}`);
-                } else {
-                  // Unexpected format
-                  console.log(`[${jobId}]       ⚠️ Unexpected tool data format (no 'success' field)`);
-                  console.log(`[${jobId}]          Raw data: ${JSON.stringify(toolData).substring(0, 300)}...`);
-                }
-
-                // Look up tool name from the tool_use_id
-                const toolName = toolUseMap.get((block as any).tool_use_id) || 'unknown';
-
-                jobStore.addToolCall(jobId, {
-                  timestamp: Date.now(),
-                  elapsed,
-                  agent: 'orchestrator', // All tools tracked under orchestrator
-                  tool: toolName,
-                  input: { summary: 'Query executed' },
-                  output: {
-                    success: toolData?.success || false,
-                    summary,
-                    count
-                  }
-                });
-
-                // Agent-specific progress is tracked via SubagentStart/Stop hooks
-              }
-
-              if (toolData && toolData.success && toolData.data) {
-                // Handle search results (papers)
-                if (Array.isArray(toolData.data.results)) {
-                  allPapers.push(...toolData.data.results);
-                  jobStore.addMessage(jobId, {
-                    type: 'papers',
-                    count: allPapers.length
-                  });
-                }
-                // Handle datasets array
-                else if (Array.isArray(toolData.data.datasets)) {
-                  allPapers.push(...toolData.data.datasets);
-                  jobStore.addMessage(jobId, {
-                    type: 'papers',
-                    count: allPapers.length
-                  });
-                }
-                // Handle project outputs
-                else if (Array.isArray(toolData.data.outputs)) {
-                  allPapers.push(...toolData.data.outputs);
-                  jobStore.addMessage(jobId, {
-                    type: 'papers',
-                    count: allPapers.length
-                  });
-                }
-                // Handle author profile publications
-                else if (Array.isArray(toolData.data.publications)) {
-                  allPapers.push(...toolData.data.publications);
-                  jobStore.addMessage(jobId, {
-                    type: 'papers',
-                    count: allPapers.length
-                  });
-                }
-                // Handle highly cited papers
-                else if (Array.isArray(toolData.data.papers)) {
-                  allPapers.push(...toolData.data.papers);
-                  jobStore.addMessage(jobId, {
-                    type: 'papers',
-                    count: allPapers.length
-                  });
-                }
-                // Handle single paper/product
-                else if (toolData.data.id && toolData.data.title) {
-                  allPapers.push(toolData.data);
-                  console.log(`[${jobId}]       📄 Added single paper`);
-                }
-                // Handle citation networks and co-authorship networks
-                else if (toolData.data.nodes && Array.isArray(toolData.data.edges)) {
-                  // Check if this is a co-authorship network vs citation network
-                  const isCoauthorship = toolData.data.centerAuthor || toolData.data.metadata?.totalAuthors;
-
-                  if (isCoauthorship) {
-                    // Co-authorship network - just log it
-                    console.log(`[${jobId}]       🤝 Co-authorship network: ${toolData.data.nodes.length} authors, ${toolData.data.edges.length} collaborations`);
-                  } else {
-                    // Citation network data - agent should use viz tools to create charts
-                    // Extract papers for the paper list only
-                    const networkPapers = toolData.data.nodes.map((node: any) => ({
-                      id: node.id,
-                      title: node.title,
-                      type: node.type || 'publication',
-                      publicationDate: `${node.year}-01-01`,
-                      citations: node.citations || 0,
-                      openAccess: node.openAccess,
-                      authors: []
-                    }));
-                    allPapers.push(...networkPapers);
-                    console.log(`[${jobId}]       🕸️  Added ${networkPapers.length} papers from citation network data`);
-                  }
-                }
-                // Handle research trends (from analyze_research_trends)
-                else if (Array.isArray(toolData.data.trends)) {
-                  console.log(`[${jobId}]       📈 Research trends: ${toolData.data.trends.length} years analyzed`);
-                  console.log(`[${jobId}]          Total papers: ${toolData.data.summary?.totalPapers || 0}`);
-                  console.log(`[${jobId}]          Peak year: ${toolData.data.summary?.peakYear} (${toolData.data.summary?.peakCount} papers)`);
-                }
-                // Handle organizations (from search_organizations)
-                else if (Array.isArray(toolData.data.organizations)) {
-                  console.log(`[${jobId}]       🏛️  Found ${toolData.data.organizations.length} organizations`);
-                }
-                // Handle projects (from search_projects)
-                else if (Array.isArray(toolData.data.projects)) {
-                  console.log(`[${jobId}]       💰 Found ${toolData.data.projects.length} projects`);
-                }
-                // Handle data sources (from search_data_sources)
-                else if (Array.isArray(toolData.data.dataSources)) {
-                  console.log(`[${jobId}]       🗄️  Found ${toolData.data.dataSources.length} data sources`);
-                }
-                // Handle research relationships (from explore_research_relationships)
-                else if (Array.isArray(toolData.data.relationships)) {
-                  console.log(`[${jobId}]       🔗 Found ${toolData.data.relationships.length} research relationships`);
-                  if (toolData.data.summary?.byType) {
-                    console.log(`[${jobId}]          Types: ${JSON.stringify(toolData.data.summary.byType)}`);
-                  }
+              // Track citation networks
+              if (isCitationNetwork(block.content)) {
+                const job = jobStore.get(jobId);
+                if (job) {
+                  jobStore.updateMetric(jobId, 'citationNetworksBuilt', job.metrics.citationNetworksBuilt + 1);
                 }
               }
             }
           }
         }
+        return;
       }
 
-      if (message.type === 'result') {
-        console.log(`[${jobId}] 🎯 FINAL RESULT RECEIVED`);
-
-        // Capture final usage (SDK provides cumulative totals in result message)
-        if ('usage' in message && message.usage) {
-          finalUsage = message.usage;
-        }
-
-        const endTime = Date.now();
-        const totalDuration = (endTime - startTime) / 1000;
+      // Result — marks end of turn
+      if (obj.type === 'result') {
+        const usage = obj.usage || null;
 
         const uniquePapers = Array.from(
-          new Map(allPapers.map(p => [p.id, p])).values()
+          new Map(allPapers.map((p: any) => [p.id, p])).values()
         );
 
-        // Charts are now created by agents using visualization tools
-        // No auto-generation - agents have full control
+        console.log(`[${jobId}] Complete: ${uniquePapers.length} papers, ${charts.length} charts, ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
-        const jobData = jobStore.get(jobId);
-
-        console.log(`\n${'='.repeat(80)}`);
-        console.log(`[${jobId}] 🏁 AGENT PROCESSING COMPLETE`);
-        console.log(`${'='.repeat(80)}`);
-        console.log(`⏱️  Total Duration: ${totalDuration.toFixed(2)}s`);
-        console.log(`📨 Total Messages: ${messageCount}`);
-        console.log(`🔧 Tool Calls: ${jobData?.metrics.toolCallCount || 0}`);
-        console.log(`📚 Papers Collected: ${allPapers.length} (${uniquePapers.length} unique)`);
-        console.log(`🕸️  Citation Networks: ${jobData?.metrics.citationNetworksBuilt || 0}`);
-        console.log(`📊 Charts Created by Agent: ${charts.length}`);
-        console.log(`💬 Response Length: ${finalText.length} chars`);
-
-        // Display token usage from final result
-        if (finalUsage) {
-          const inputTokens = (finalUsage.input_tokens || 0) + (finalUsage.cache_creation_input_tokens || 0) + (finalUsage.cache_read_input_tokens || 0);
-          const outputTokens = finalUsage.output_tokens || 0;
-
-          console.log(`\n📊 Token Usage:`);
-          console.log(`   Input tokens: ${inputTokens.toLocaleString()}`);
-          if (finalUsage.cache_creation_input_tokens || finalUsage.cache_read_input_tokens) {
-            console.log(`     - Base input: ${(finalUsage.input_tokens || 0).toLocaleString()}`);
-            if (finalUsage.cache_creation_input_tokens) {
-              console.log(`     - Cache creation: ${finalUsage.cache_creation_input_tokens.toLocaleString()}`);
-            }
-            if (finalUsage.cache_read_input_tokens) {
-              console.log(`     - Cache read: ${finalUsage.cache_read_input_tokens.toLocaleString()}`);
-            }
-          }
-          console.log(`   Output tokens: ${outputTokens.toLocaleString()}`);
-          console.log(`   Total tokens: ${(inputTokens + outputTokens).toLocaleString()}`);
-
-          if (finalUsage.total_cost_usd) {
-            console.log(`   Total cost: $${finalUsage.total_cost_usd.toFixed(6)}`);
-          }
-        } else {
-          console.log(`\n📊 Token Usage: Not available`);
+        if (usage) {
+          const input = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+          console.log(`[${jobId}] Tokens: ${input.toLocaleString()} in / ${(usage.output_tokens || 0).toLocaleString()} out`);
         }
 
-        console.log(`\n🎯 Agent Status Summary:`);
-        const agentStats = jobStore.getAgentStats(jobId);
-        console.log(`   Data Discovery: ${agentStats['data-discovery'].total} instances (✓${agentStats['data-discovery'].completed} ⏳${agentStats['data-discovery'].running} ⏸${agentStats['data-discovery'].starting})`);
-        console.log(`   Citation Impact: ${agentStats['citation-impact'].total} instances (✓${agentStats['citation-impact'].completed} ⏳${agentStats['citation-impact'].running} ⏸${agentStats['citation-impact'].starting})`);
-        console.log(`   Network Analysis: ${agentStats['network-analysis'].total} instances (✓${agentStats['network-analysis'].completed} ⏳${agentStats['network-analysis'].running} ⏸${agentStats['network-analysis'].starting})`);
-        console.log(`   Trends Analysis: ${agentStats['trends-analysis'].total} instances (✓${agentStats['trends-analysis'].completed} ⏳${agentStats['trends-analysis'].running} ⏸${agentStats['trends-analysis'].starting})`);
-        console.log(`   Visualization: ${agentStats['visualization'].total} instances (✓${agentStats['visualization'].completed} ⏳${agentStats['visualization'].running} ⏸${agentStats['visualization'].starting})`);
-        console.log(`${'='.repeat(80)}\n`);
-
-        // Complete all running/starting agent instances (cleanup)
-        const job = jobStore.get(jobId);
-        if (job) {
-          const agentTypes: AgentType[] = ['data-discovery', 'citation-impact', 'network-analysis', 'trends-analysis', 'visualization'];
-          agentTypes.forEach(agentType => {
-            job.agents[agentType].forEach(instance => {
-              if (instance.status === 'starting' || instance.status === 'running') {
-                jobStore.updateAgentInstance(jobId, agentType, instance.id, { status: 'completed' });
+        // Remove the last progress message if it matches finalText to avoid
+        // showing the same content in both the thinking block and the final message
+        // (must happen before table extraction modifies finalText)
+        if (finalText) {
+          const job = jobStore.get(jobId);
+          if (job) {
+            for (let i = job.messages.length - 1; i >= 0; i--) {
+              if (job.messages[i].type === 'progress' && job.messages[i].content === finalText) {
+                job.messages.splice(i, 1);
+                break;
               }
-            });
-          });
+            }
+          }
+        }
+
+        // Extract markdown tables from final text → viz panel charts
+        if (finalText) {
+          const { charts: tableCharts, cleanedText } = extractTablesFromMarkdown(finalText);
+          if (tableCharts.length > 0) {
+            charts.push(...tableCharts);
+            finalText = cleanedText;
+            console.log(`[${jobId}] Extracted ${tableCharts.length} table(s) from markdown → viz panel`);
+          }
         }
 
         jobStore.addMessage(jobId, {
@@ -703,45 +256,74 @@ async function processQuery(jobId: string, messages: any[], model: string, resum
           content: finalText || 'Research complete.',
           researchData: uniquePapers,
           charts,
-          usage: finalUsage || {
+          usage: usage || {
             input_tokens: 0,
             output_tokens: 0,
             cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0
-          }
+            cache_read_input_tokens: 0,
+          },
         });
 
         jobStore.setStatus(jobId, 'complete');
-        break;
+        turnComplete = true;
+
+        // Remove this handler — turn is done; process stays alive for next turn
+        proc!.readline.removeListener('line', handler);
+        return;
       }
+    };
+
+    proc.readline.on('line', handler);
+
+    // Handle process death mid-turn
+    const exitHandler = (code: number | null) => {
+      if (!turnComplete) {
+        console.error(`[${jobId}] Claude process died mid-turn (code=${code})`);
+        proc!.readline.removeListener('line', handler);
+        jobStore.setError(jobId, `Claude process exited unexpectedly (code=${code})`);
+        destroyProcess(chatSessionKey);
+      }
+    };
+    proc.process.once('exit', exitHandler);
+
+    // Write user message to Claude's stdin
+    try {
+      writeUserMessage(proc, userText);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to write to Claude process';
+      console.error(`[${jobId}] Write error: ${msg}`);
+      proc.readline.removeListener('line', handler);
+      proc.process.removeListener('exit', exitHandler);
+      jobStore.setError(jobId, msg);
+      destroyProcess(chatSessionKey);
+      return;
     }
+
+    // Clean up exit handler when turn completes
+    // (We use a polling approach since readline events are async)
+    const cleanupInterval = setInterval(() => {
+      if (turnComplete) {
+        proc!.process.removeListener('exit', exitHandler);
+        clearInterval(cleanupInterval);
+      }
+    }, 1000);
+
+    // Safety timeout — kill after 10 minutes of no result
+    setTimeout(() => {
+      if (!turnComplete) {
+        console.error(`[${jobId}] Turn timed out after 10 minutes`);
+        proc!.readline.removeListener('line', handler);
+        proc!.process.removeListener('exit', exitHandler);
+        clearInterval(cleanupInterval);
+        if (jobStore.get(jobId)?.status === 'running') {
+          jobStore.setError(jobId, 'Turn timed out after 10 minutes');
+        }
+      }
+    }, 10 * 60 * 1000);
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isStreamClosed = errorMessage.includes('Stream closed') || errorMessage.includes('stream');
-
-    console.error(`\n${'='.repeat(80)}`);
-    console.error(`[${jobId}] ❌ AGENT PROCESSING ERROR`);
-    console.error(`${'='.repeat(80)}`);
-    console.error(`Error: ${errorMessage}`);
-    console.error(`Stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
-
-    if (isStreamClosed) {
-      console.error(`\n⚠️  Stream closed error detected. This is likely due to:`);
-      console.error(`   1. Timeout exceeded (maxDuration = ${maxDuration}s)`);
-      console.error(`   2. Connection closed by client`);
-      console.error(`   3. Network interruption`);
-      console.error(`\nConsider:`);
-      console.error(`   - Breaking the task into smaller queries`);
-      console.error(`   - Increasing maxDuration in route.ts`);
-      console.error(`   - Using pagination for large result sets`);
-    }
-
-    console.error(`${'='.repeat(80)}\n`);
-
-    const userFriendlyError = isStreamClosed
-      ? `Operation timed out after ${Math.floor((Date.now() - Date.now()) / 1000)}s. The task may be too complex. Try breaking it into smaller queries.`
-      : errorMessage;
-
-    jobStore.setError(jobId, userFriendlyError);
+    console.error(`[${jobId}] Error: ${errorMessage}`);
+    jobStore.setError(jobId, errorMessage);
   }
 }

@@ -17,11 +17,11 @@ export function useResearchChat() {
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
   const {
-    agentStatus,
+    toolActivity,
     toolCalls,
     metrics,
     showTimeline,
-    setAgentStatus,
+    setToolActivity,
     setToolCalls,
     setMetrics,
     setShowTimeline,
@@ -31,7 +31,7 @@ export function useResearchChat() {
   useJobPolling({
     jobId: currentJobId,
     onMessagesUpdate: setMessages,
-    onAgentStatusUpdate: setAgentStatus,
+    onToolActivityUpdate: setToolActivity,
     onToolCallsUpdate: setToolCalls,
     onMetricsUpdate: setMetrics,
     onComplete: () => setIsLoading(false),
@@ -81,14 +81,12 @@ export function useResearchChat() {
       setIsLoading(true);
 
       try {
-        // Start the research job
-        // Pass the current job ID as previousJobId to resume the session
         const jobId = await startResearchJob(
           [...messages, userMessage],
           selectedModel,
           currentJobId || undefined
         );
-        console.log(`🚀 Job started: ${jobId}${currentJobId ? ` (resuming from ${currentJobId})` : ''}`);
+        console.log(`Job started: ${jobId}${currentJobId ? ` (resuming from ${currentJobId})` : ''}`);
         setCurrentJobId(jobId);
       } catch (error) {
         console.error("Submit Error:", error);
@@ -148,7 +146,7 @@ export function useResearchChat() {
     input,
     isLoading,
     selectedModel,
-    agentStatus,
+    toolActivity,
     toolCalls,
     metrics,
     showTimeline,

@@ -41,7 +41,7 @@ ai_docs
 README.md
 **/README.md
 DOCKER_DEPLOY.md
-**/*.md
+how-it-works/**/*.md
 quantum_computing_analysis
 
 # Helm charts (not needed in container)

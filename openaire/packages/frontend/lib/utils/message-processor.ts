@@ -12,7 +12,8 @@ export function removeThinkingMessages(messages: Message[]): Message[] {
  */
 export function insertProgressMessage(
   messages: Message[],
-  content: string
+  content: string,
+  timestamp?: number
 ): Message[] {
   const newMessages = [...messages];
   const thinkingIdx = newMessages.findIndex((m) => m.content === "thinking");
@@ -23,6 +24,7 @@ export function insertProgressMessage(
       role: "assistant",
       content: content,
       messageType: "progress",
+      timestamp,
     });
   }
 
@@ -53,7 +55,7 @@ export function processJobMessage(
 ): Message[] {
   switch (jobMessage.type) {
     case "progress":
-      return insertProgressMessage(messages, jobMessage.content || "");
+      return insertProgressMessage(messages, jobMessage.content || "", jobMessage.timestamp);
 
     case "papers":
       console.log(`📄 Papers: ${jobMessage.count}`);

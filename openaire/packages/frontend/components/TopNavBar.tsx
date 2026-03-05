@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, ChevronDown } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   DropdownMenu,
@@ -11,18 +11,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { withBasePath } from "@/lib/basePath";
+import { AVAILABLE_MODELS } from "@/constants/models";
 
-// Add this interface to define the props structure
-interface TopNavBarProps {
-  features?: {
-    showDomainSelector?: boolean;
-    showViewModeSelector?: boolean;
-    showPromptCaching?: boolean;
-  };
+/** Resolve the effective appearance for "system" theme */
+function resolvedIsDark(theme: string | undefined): boolean {
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  // system — check media query
+  if (typeof window !== "undefined") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  }
+  return false;
 }
 
-// Change this line to include the props type
-const TopNavBar: React.FC<TopNavBarProps> = ({ features = {} }) => {
+interface TopNavBarProps {
+  selectedModel?: string;
+  onModelChange?: (modelId: string) => void;
+}
+
+const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) => {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -38,33 +45,43 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ features = {} }) => {
     <div className="flex items-center justify-between p-4">
       <div className="font-bold text-xl flex gap-2 items-center">
         <Image
-          src={theme === "dark" ? withBasePath("/wordmark-dark.svg") : withBasePath("/wordmark.svg")}
+          src={withBasePath("/wordmark.svg")}
           alt="Company Wordmark"
-          width={250}
-          height={40}
+          width={150}
+          height={24}
+          className="invert dark:invert-0"
         />
       </div>
       <div className="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              <span className="sr-only">Toggle theme</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setTheme("light")}>
-              Light
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("dark")}>
-              Dark
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
-              System
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {selectedModel && onModelChange && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="h-8 text-sm">
+                {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name}
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {AVAILABLE_MODELS.map((model) => (
+                <DropdownMenuItem
+                  key={model.id}
+                  onSelect={() => onModelChange(model.id)}
+                >
+                  {model.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setTheme(resolvedIsDark(theme) ? "light" : "dark")}
+        >
+          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
       </div>
     </div>
   );

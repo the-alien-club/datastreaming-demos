@@ -9,8 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.55",
-    "@anthropic-ai/sdk": "^0.29.0",
     "@openaire/mcp-server": "file:../mcp",
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -32,6 +30,7 @@
     "react-force-graph-2d": "^1.29.0",
     "react-markdown": "^10.1.0",
     "recharts": "^2.13.0",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.5.3",
     "tailwindcss-animate": "^1.0.7"
   },

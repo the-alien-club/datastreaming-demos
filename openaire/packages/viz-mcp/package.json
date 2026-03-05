@@ -1,15 +1,23 @@
 {
   "name": "@openaire/viz-mcp-server",
-  "version": "0.1.0",
-  "description": "MCP server for visualization tools",
+  "version": "0.2.0",
+  "description": "Visualization MCP Server - provides chart creation tools (network, line, bar, pie) for research data visualization",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
     "lint": "echo \"Linting coming soon\""
   },
+  "keywords": [
+    "mcp",
+    "visualization",
+    "charts",
+    "citation-network",
+    "openaire"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.6.0",
     "zod": "^3.22.4"

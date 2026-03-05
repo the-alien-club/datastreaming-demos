@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AgentInstance, AgentType, ToolCall } from "@/lib/job-store";
+import type { ToolActivity, ToolCall } from "@/lib/job-store";
 
 interface Metrics {
   papersFound: number;
@@ -8,21 +8,21 @@ interface Metrics {
 }
 
 interface UseAgentStatusReturn {
-  agentStatus: Record<AgentType, AgentInstance[]> | null;
+  toolActivity: ToolActivity[];
   toolCalls: ToolCall[];
   metrics: Metrics;
   showTimeline: boolean;
-  setAgentStatus: (status: Record<AgentType, AgentInstance[]> | null) => void;
+  setToolActivity: (activity: ToolActivity[]) => void;
   setToolCalls: (calls: ToolCall[]) => void;
   setMetrics: (metrics: Metrics) => void;
   setShowTimeline: (show: boolean) => void;
 }
 
 /**
- * Hook to manage agent status, tool calls, and metrics
+ * Hook to manage tool activity, tool calls, and metrics
  */
 export function useAgentStatus(): UseAgentStatusReturn {
-  const [agentStatus, setAgentStatus] = useState<Record<AgentType, AgentInstance[]> | null>(null);
+  const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCall[]>([]);
   const [metrics, setMetrics] = useState<Metrics>({
     papersFound: 0,
@@ -32,11 +32,11 @@ export function useAgentStatus(): UseAgentStatusReturn {
   const [showTimeline, setShowTimeline] = useState(false);
 
   return {
-    agentStatus,
+    toolActivity,
     toolCalls,
     metrics,
     showTimeline,
-    setAgentStatus,
+    setToolActivity,
     setToolCalls,
     setMetrics,
     setShowTimeline,

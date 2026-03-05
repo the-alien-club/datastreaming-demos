@@ -30,7 +30,7 @@ export function ChatInput({
             onKeyDown={onKeyDown}
             placeholder={placeholder}
             disabled={disabled}
-            className="min-h-[44px] h-[44px] resize-none py-3 flex items-center pr-12"
+            className="min-h-[44px] h-[44px] resize-none py-3 flex items-center pr-12 scrollbar-none"
             rows={1}
           />
         </div>

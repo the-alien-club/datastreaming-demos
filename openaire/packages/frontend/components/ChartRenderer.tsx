@@ -389,6 +389,67 @@ function AreaChartComponent({
   );
 }
 
+function TableChartComponent({ data }: { data: ChartData }) {
+  const columns = data.tableColumns || [];
+  const rows = data.data || [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-xl">{data.config.title}</CardTitle>
+        <CardDescription>{data.config.description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr>
+                {columns.map((col) => (
+                  <th
+                    key={col.key}
+                    className={`px-3 py-2 text-left font-semibold border-b border-border bg-muted/50 whitespace-nowrap ${
+                      col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''
+                    }`}
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx} className="hover:bg-muted/30 transition-colors">
+                  {columns.map((col) => {
+                    const value = row[col.key];
+                    const display = value === null || value === undefined ? '—' : String(value);
+                    return (
+                      <td
+                        key={col.key}
+                        className={`px-3 py-2 border-b border-border/50 ${
+                          col.align === 'right' ? 'text-right tabular-nums' : col.align === 'center' ? 'text-center' : ''
+                        }`}
+                      >
+                        {display}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+      {data.config.footer && (
+        <CardFooter>
+          <div className="leading-none text-sm text-muted-foreground">
+            {data.config.footer}
+          </div>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
+
 export function ChartRenderer({ data }: { data: ChartData }) {
   console.log('[ChartRenderer] Rendering chart:', {
     chartType: data.chartType,
@@ -412,6 +473,8 @@ export function ChartRenderer({ data }: { data: ChartData }) {
     case "network":
       console.log('[ChartRenderer] Rendering network chart with data:', data.networkData);
       return <CitationNetworkGraph data={data} />;
+    case "table":
+      return <TableChartComponent data={data} />;
     default:
       console.warn('[ChartRenderer] Unknown chart type:', data.chartType);
       return null;

@@ -1,30 +1,60 @@
 import React from "react";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ResearchPaperCard } from "../papers/ResearchPaperCard";
 import type { MessageComponentProps } from "@/types/research";
-import { withBasePath } from "@/lib/basePath";
+
+const ARC_PATH =
+  "m -32.550678,102.75277 c -0.404813,-2.06904 -0.896938,-4.074579 -1.4605,-5.963704 -0.53975,-1.881188 -1.164167,-3.577167 -1.857375,-5.045604 -0.685271,-1.471084 -1.441979,-2.640542 -2.248959,-3.476625 -0.769937,-0.796396 -1.55575,-1.185333 -2.405062,-1.185333 -0.775229,0 -1.505479,0.375708 -2.227792,1.145645 -0.764646,0.817563 -1.500187,1.952625 -2.185458,3.381375 -0.672042,1.423459 -1.309688,3.087688 -1.894417,4.947709 -0.563562,1.862666 -1.066271,3.857627 -1.494895,5.926667 -0.428625,2.05317 -0.783167,4.14337 -1.055688,6.21242 -0.251354,1.91293 -0.433917,3.76237 -0.550333,5.50068 h 1.561041 c 0.09525,-1.60866 0.248709,-3.31787 0.460375,-5.08529 0.251354,-1.9341 0.563563,-3.88144 0.928688,-5.78908 0.365125,-1.905 0.780521,-3.738564 1.23825,-5.445127 0.481541,-1.73302 0.992187,-3.291416 1.518708,-4.632854 0.534458,-1.359958 1.090083,-2.44475 1.656292,-3.230562 0.650875,-0.894292 1.338791,-1.344084 2.045229,-1.344084 0.732896,0 1.423458,0.455084 2.050521,1.349375 0.584729,0.801688 1.153583,1.899709 1.688041,3.259667 0.529167,1.346729 1.02923,2.905125 1.484313,4.632854 0.455083,1.719792 0.870479,3.563941 1.23825,5.479521 0.365125,1.905 0.674687,3.8391 0.926041,5.7494 0.232834,1.76212 0.396875,3.46075 0.494771,5.05618 h 1.598084 c -0.0979,-1.62983 -0.272521,-3.39725 -0.52123,-5.25727 -0.248708,-2.03464 -0.582083,-4.11427 -0.986895,-6.18596";
+
+function AgentLogo({ spinning }: { spinning: boolean }) {
+  return (
+    <div className={`relative flex-shrink-0 ${spinning ? "w-2.5 h-3.5 mt-1.5" : "w-5 h-7 mt-1"}`}>
+      {/* Static center column */}
+      <svg
+        viewBox="0 0 18.889 27.115"
+        className="absolute inset-0 w-full h-full dark:invert"
+      >
+        <g transform="translate(49.931157,-87.081504)">
+          <rect
+            x="-41.266052"
+            y="96.143478"
+            width="1.55575"
+            height="12.430124"
+          />
+        </g>
+      </svg>
+      {/* Spinning arc */}
+      <svg
+        viewBox="0 0 18.889 27.115"
+        className={`absolute inset-0 w-full h-full dark:invert ${spinning ? "animate-spin-y" : ""}`}
+      >
+        <g transform="translate(49.931157,-87.081504)">
+          <path d={ARC_PATH} />
+        </g>
+      </svg>
+    </div>
+  );
+}
 
 export const MessageComponent: React.FC<MessageComponentProps> = ({
   message,
   onShowAllPapers,
 }) => {
+  const isThinking = message.content === "thinking";
+
   return (
     <div className="flex items-start gap-2">
-      {message.role === "assistant" && (
-        <Avatar className="w-8 h-8 border">
-          <AvatarImage src={withBasePath("/ant-logo.svg")} alt="OpenAIRE Assistant" />
-          <AvatarFallback>OA</AvatarFallback>
-        </Avatar>
-      )}
+      {message.role === "assistant" && <AgentLogo spinning={isThinking} />}
       <div
         className={`flex flex-col max-w-[75%] ${
           message.role === "user" ? "ml-auto" : ""
         }`}
       >
+        {isThinking ? (
+          <span className="animate-shimmer italic mt-1">Thinking...</span>
+        ) : (
         <div
           className={`p-3 rounded-md text-base ${
             message.role === "user"
@@ -32,35 +62,28 @@ export const MessageComponent: React.FC<MessageComponentProps> = ({
               : "bg-muted border"
           }`}
         >
-          {message.content === "thinking" ? (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900 mr-2" />
-              {message.hasToolUse ? (
-                <div className="flex flex-col gap-2">
-                  <Badge variant="secondary" className="inline-flex">
-                    <Search className="w-4 h-4 mr-1" /> Searching OpenAIRE
-                  </Badge>
-                  <span>Thinking...</span>
-                </div>
-              ) : (
-                <span>Thinking...</span>
-              )}
-            </div>
-          ) : message.role === "assistant" ? (
-            <div className="flex flex-col gap-2">
-              {message.hasToolUse && (
-                <Badge variant="secondary" className="inline-flex px-0">
-                  <Search className="w-4 h-4 mr-1" /> Found Research
-                </Badge>
-              )}
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
-              </div>
+          {message.role === "assistant" ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  strong: ({ children }) => {
+                    const text = String(children);
+                    if (text.includes('visualization panel')) {
+                      return <span className="text-xs font-bold" style={{ color: 'hsl(var(--chart-1))' }}>{children}</span>;
+                    }
+                    return <strong>{children}</strong>;
+                  },
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
             </div>
           ) : (
             <span>{message.content}</span>
           )}
         </div>
+        )}
 
         {/* Display research results inline */}
         {message.researchData && message.researchData.length > 0 && (

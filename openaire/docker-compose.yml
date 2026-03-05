@@ -3,13 +3,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire:0.1.5
+    image: rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire:0.2.0
     ports:
-      - "3001:3000"
+      - "3002:3000"
     environment:
       - NODE_ENV=production
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PLUGIN_DIR=/app/.claude-plugins/alien-openscience
+      # Omit OPENAIRE_MCP_URL for standalone (uses embedded stdio MCP)
+      # Set OPENAIRE_MCP_URL for remote: https://your-mcp-server/mcp
       - LOG_LEVEL=info
-    stdin_open: true
-    tty: true
     restart: unless-stopped

@@ -29,11 +29,7 @@ export const ToolTimeline = ({ toolCalls, isOpen, onToggle }: ToolTimelineProps)
 
 const ToolCallItem = ({ call }: { call: ToolCall }) => {
   const secondsAgo = Math.floor((Date.now() - call.timestamp) / 1000);
-  const agentIcon = {
-    'research-explorer': '🔍',
-    'citation-mapper': '🕸️',
-    'research-validator': '✓'
-  }[call.agent] || '🔧';
+  const agentIcon = '🔧';
 
   const toolName = call.tool
     .replace('mcp__openaire__', '')

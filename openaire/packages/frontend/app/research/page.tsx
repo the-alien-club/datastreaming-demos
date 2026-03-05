@@ -18,7 +18,7 @@ export default function ResearchChat() {
     input,
     isLoading,
     selectedModel,
-    agentStatus,
+    toolActivity,
     toolCalls,
     metrics,
     showTimeline,
@@ -38,25 +38,20 @@ export default function ResearchChat() {
   return (
     <div className="flex flex-col h-screen">
       <TopNavBar
-        features={{
-          showDomainSelector: false,
-          showViewModeSelector: false,
-          showPromptCaching: false,
-        }}
+        selectedModel={selectedModel}
+        onModelChange={setSelectedModel}
       />
 
-      <div className="flex-1 flex bg-background p-4 pt-0 gap-4 h-[calc(100vh-4rem)]">
+      <div className="flex-1 flex bg-background p-4 pt-0 gap-4 min-h-0">
         {/* Chat Sidebar - Left */}
         <ChatSidebar
           messages={messages}
           input={input}
           isLoading={isLoading}
-          selectedModel={selectedModel}
-          agentStatus={agentStatus}
+          toolActivity={toolActivity}
           toolCalls={toolCalls}
           metrics={metrics}
           showTimeline={showTimeline}
-          onModelChange={setSelectedModel}
           onShowTimeline={setShowTimeline}
           onInputChange={handleInputChange}
           onSetInput={setInput}

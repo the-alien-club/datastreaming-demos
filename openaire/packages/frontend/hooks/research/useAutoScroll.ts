@@ -1,26 +1,30 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import type { Message } from "@/types/research";
 
 /**
- * Hook to automatically scroll to the bottom when messages update
+ * Hook to automatically scroll to the bottom of a chat pane
+ * when messages or tool activity update.
  */
-export function useAutoScroll(messages: Message[], isLoading: boolean) {
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+export function useAutoScroll(
+  messages: Message[],
+  isLoading: boolean,
+  extraDepCount?: number
+) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const scrollToBottom = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, []);
+
+  // Scroll when messages change, loading state changes, or tool activity updates
   useEffect(() => {
-    const scrollToBottom = () => {
-      if (!messagesEndRef.current) return;
-      requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "end",
-        });
-      });
-    };
-
-    const timeoutId = setTimeout(scrollToBottom, 100);
+    const timeoutId = setTimeout(scrollToBottom, 50);
     return () => clearTimeout(timeoutId);
-  }, [messages, isLoading]);
+  }, [messages, messages.length, isLoading, extraDepCount, scrollToBottom]);
 
-  return messagesEndRef;
+  return scrollContainerRef;
 }

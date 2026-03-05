@@ -1,9 +1,6 @@
 import React from "react";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Search, Network, BookOpen, ArrowRight } from "lucide-react";
-import { WELCOME_TEXT, AGENT_FEATURES, EXAMPLE_QUERIES } from "@/constants/research-prompts";
-import { withBasePath } from "@/lib/basePath";
+import { ArrowRight } from "lucide-react";
+import { EXAMPLE_QUERIES } from "@/constants/research-prompts";
 
 interface EmptyStateProps {
   onQuerySelect?: (query: string) => void;
@@ -12,41 +9,11 @@ interface EmptyStateProps {
 export function EmptyState({ onQuerySelect }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full animate-fade-in-up max-w-[600px] mx-auto">
-      <Avatar className="w-12 h-12 mb-4 border">
-        <AvatarImage src={withBasePath("/ant-logo.svg")} alt="OpenAIRE Assistant" className="brightness-0 invert" />
-      </Avatar>
-      <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-2xl font-semibold">{WELCOME_TEXT.title}</h2>
-        <Badge variant="secondary" className="text-xs">
-          {WELCOME_TEXT.badge}
-        </Badge>
-      </div>
-      <p className="text-muted-foreground text-center mb-6">
-        {WELCOME_TEXT.subtitle}
+      <p className="text-lg font-semibold text-center mb-6">
+        Search 600M+ research products across all disciplines
       </p>
-      <div className="space-y-4 text-base w-full">
-        {AGENT_FEATURES.map((feature, index) => {
-          const IconComponent =
-            feature.icon === "search"
-              ? Search
-              : feature.icon === "network"
-              ? Network
-              : BookOpen;
-          return (
-            <div key={index} className="flex items-start gap-3">
-              <IconComponent className="text-primary w-6 h-6 mt-1 flex-shrink-0" />
-              <div>
-                <p className="font-medium">{feature.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {feature.description}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
-      <div className="mt-8 p-4 bg-muted rounded-lg w-full">
+      <div className="p-4 bg-muted rounded-lg w-full">
         <p className="text-sm font-medium mb-2">Try asking:</p>
         <div className="space-y-2">
           {EXAMPLE_QUERIES.map((query, index) => (

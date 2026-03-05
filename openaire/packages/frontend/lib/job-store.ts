@@ -1,27 +1,13 @@
 // In-memory job store for long-running SDK queries
-// Will upgrade to Redis later for production
 
-export type AgentType = 'data-discovery' | 'citation-impact' | 'network-analysis' | 'trends-analysis' | 'visualization';
-export type AgentInstanceStatus = 'starting' | 'running' | 'completed' | 'error';
-
-export interface AgentInstance {
-  id: string; // Unique ID for this agent instance
-  status: AgentInstanceStatus;
+export interface ToolActivity {
+  toolName: string;
+  toolUseId?: string;
   startedAt: number;
   completedAt?: number;
-  toolCallsComplete: number;
-  currentActivity?: string;
-  error?: string;
-}
-
-// Legacy backward compatibility type for existing UI components
-export interface AgentStatus {
-  status: 'waiting' | 'active' | 'complete';
-  startedAt?: number;
-  completedAt?: number;
-  toolCallsComplete: number;
-  toolCallsTotal: number;
-  currentActivity?: string;
+  status: 'running' | 'completed' | 'error';
+  input?: Record<string, any>;
+  outputSnippet?: string;
 }
 
 export interface ToolCall {
@@ -44,7 +30,7 @@ export interface ToolCall {
 export interface JobProgress {
   jobId: string;
   status: 'pending' | 'running' | 'complete' | 'error';
-  sessionId?: string; // SDK session ID for conversation continuity
+  sessionId?: string;
   messages: Array<{
     type: 'progress' | 'papers' | 'complete';
     content?: string;
@@ -52,13 +38,10 @@ export interface JobProgress {
     researchData?: any[];
     charts?: any[];
     usage?: any;
+    timestamp?: number;
   }>;
 
-  // Enhanced tracking - arrays of agent instances per type
-  agents: {
-    [K in AgentType]: AgentInstance[];
-  };
-
+  toolActivity: ToolActivity[];
   toolCalls: ToolCall[];
 
   metrics: {
@@ -67,7 +50,6 @@ export interface JobProgress {
     chartsCreated: number;
     toolCallCount: number;
     elapsedMs: number;
-    currentAgent?: string;
   };
 
   error?: string;
@@ -80,7 +62,6 @@ class JobStore {
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Clean up old jobs every 5 minutes
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
     }, 5 * 60 * 1000);
@@ -91,13 +72,7 @@ class JobStore {
       jobId,
       status: 'pending',
       messages: [],
-      agents: {
-        'data-discovery': [],
-        'citation-impact': [],
-        'network-analysis': [],
-        'trends-analysis': [],
-        'visualization': []
-      },
+      toolActivity: [],
       toolCalls: [],
       metrics: {
         papersFound: 0,
@@ -155,164 +130,24 @@ class JobStore {
     return job?.sessionId || null;
   }
 
-  // Agent instance management - NEW APPROACH
-
-  /**
-   * Start a new agent instance
-   * Returns the instance ID
-   */
-  startAgentInstance(jobId: string, agentType: AgentType, activity?: string): string {
+  // Tool activity tracking
+  addToolActivity(jobId: string, activity: ToolActivity): void {
     const job = this.jobs.get(jobId);
-    if (!job) return '';
-
-    const instanceId = `${agentType}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const instance: AgentInstance = {
-      id: instanceId,
-      status: 'starting',
-      startedAt: Date.now(),
-      toolCallsComplete: 0,
-      currentActivity: activity
-    };
-
-    job.agents[agentType].push(instance);
-    job.metrics.currentAgent = agentType;
-    job.updatedAt = Date.now();
-
-    console.log(`[${jobId}] Started ${agentType} instance: ${instanceId}`);
-    return instanceId;
-  }
-
-  /**
-   * Update an agent instance status
-   */
-  updateAgentInstance(
-    jobId: string,
-    agentType: AgentType,
-    instanceId: string,
-    updates: Partial<Pick<AgentInstance, 'status' | 'currentActivity' | 'completedAt' | 'error'>>
-  ): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    const instance = job.agents[agentType].find(a => a.id === instanceId);
-    if (!instance) {
-      console.warn(`[${jobId}] Agent instance not found: ${agentType}/${instanceId}`);
-      return;
-    }
-
-    Object.assign(instance, updates);
-
-    if (updates.status === 'completed' && !instance.completedAt) {
-      instance.completedAt = Date.now();
-    }
-
-    job.updatedAt = Date.now();
-  }
-
-  /**
-   * Increment tool call count for an agent instance
-   */
-  incrementAgentInstanceProgress(jobId: string, agentType: AgentType, instanceId: string): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    const instance = job.agents[agentType].find(a => a.id === instanceId);
-    if (instance) {
-      instance.toolCallsComplete++;
+    if (job) {
+      job.toolActivity.push(activity);
       job.updatedAt = Date.now();
     }
   }
 
-  /**
-   * Get agent statistics for a job
-   */
-  getAgentStats(jobId: string): Record<AgentType, {
-    total: number;
-    starting: number;
-    running: number;
-    completed: number;
-    error: number;
-  }> {
-    const job = this.jobs.get(jobId);
-    if (!job) {
-      return {
-        'data-discovery': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-        'citation-impact': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-        'network-analysis': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-        'trends-analysis': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-        'visualization': { total: 0, starting: 0, running: 0, completed: 0, error: 0 }
-      };
-    }
-
-    const stats: Record<AgentType, any> = {
-      'data-discovery': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-      'citation-impact': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-      'network-analysis': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-      'trends-analysis': { total: 0, starting: 0, running: 0, completed: 0, error: 0 },
-      'visualization': { total: 0, starting: 0, running: 0, completed: 0, error: 0 }
-    };
-
-    (Object.keys(job.agents) as AgentType[]).forEach(agentType => {
-      const instances = job.agents[agentType];
-      stats[agentType].total = instances.length;
-      instances.forEach(instance => {
-        stats[agentType][instance.status]++;
-      });
-    });
-
-    return stats;
-  }
-
-  /**
-   * Legacy compatibility - set agent status (creates/updates first instance)
-   */
-  setAgentStatus(jobId: string, agentType: AgentType, status: 'waiting' | 'active' | 'complete'): void {
+  updateToolActivity(jobId: string, toolName: string, updates: Partial<Pick<ToolActivity, 'completedAt' | 'status' | 'outputSnippet'>>): void {
     const job = this.jobs.get(jobId);
     if (!job) return;
 
-    // Map legacy statuses to new ones
-    const newStatus: AgentInstanceStatus =
-      status === 'waiting' ? 'starting' :
-      status === 'active' ? 'running' :
-      'completed';
-
-    // Get or create first instance
-    let instance = job.agents[agentType][0];
-    if (!instance) {
-      const instanceId = this.startAgentInstance(jobId, agentType);
-      instance = job.agents[agentType][0];
-    }
-
-    if (instance) {
-      this.updateAgentInstance(jobId, agentType, instance.id, { status: newStatus });
-    }
-  }
-
-  /**
-   * Legacy compatibility - set agent activity
-   */
-  setAgentActivity(jobId: string, agentType: AgentType, activity: string): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    let instance = job.agents[agentType][0];
-    if (!instance) {
-      this.startAgentInstance(jobId, agentType, activity);
-    } else {
-      this.updateAgentInstance(jobId, agentType, instance.id, { currentActivity: activity });
-    }
-  }
-
-  /**
-   * Legacy compatibility - increment agent progress
-   */
-  incrementAgentProgress(jobId: string, agentType: AgentType): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
-
-    const instance = job.agents[agentType][0];
-    if (instance) {
-      this.incrementAgentInstanceProgress(jobId, agentType, instance.id);
+    // Find the most recent running instance of this tool
+    const activity = [...job.toolActivity].reverse().find(a => a.toolName === toolName && a.status === 'running');
+    if (activity) {
+      Object.assign(activity, updates);
+      job.updatedAt = Date.now();
     }
   }
 

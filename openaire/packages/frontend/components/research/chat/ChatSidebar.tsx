@@ -4,15 +4,15 @@ import { ChatHeader } from "./ChatHeader";
 import { EmptyState } from "./EmptyState";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { useAutoScroll } from "@/hooks/research/useAutoScroll";
 import type { Message, ResearchProduct } from "@/types/research";
-import type { AgentInstance, AgentType, ToolCall } from "@/lib/job-store";
+import type { ToolActivity, ToolCall } from "@/lib/job-store";
 
 interface ChatSidebarProps {
   messages: Message[];
   input: string;
   isLoading: boolean;
-  selectedModel: string;
-  agentStatus: Record<AgentType, AgentInstance[]> | null;
+  toolActivity: ToolActivity[];
   toolCalls: ToolCall[];
   metrics: {
     papersFound: number;
@@ -20,7 +20,6 @@ interface ChatSidebarProps {
     elapsedMs: number;
   };
   showTimeline: boolean;
-  onModelChange: (model: string) => void;
   onShowTimeline: (show: boolean) => void;
   onInputChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onSetInput: (value: string) => void;
@@ -33,12 +32,10 @@ export function ChatSidebar({
   messages,
   input,
   isLoading,
-  selectedModel,
-  agentStatus,
+  toolActivity,
   toolCalls,
   metrics,
   showTimeline,
-  onModelChange,
   onShowTimeline,
   onInputChange,
   onSetInput,
@@ -46,24 +43,22 @@ export function ChatSidebar({
   onKeyDown,
   onShowAllPapers,
 }: ChatSidebarProps) {
+  const scrollRef = useAutoScroll(messages, isLoading, toolActivity.length);
+
   return (
     <Card className="w-1/3 flex flex-col h-full">
       <CardHeader className="py-3 px-4">
-        <ChatHeader
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          hasMessages={messages.length > 0}
-        />
+        <ChatHeader />
       </CardHeader>
 
-      <CardContent className="flex-1 overflow-y-auto p-4">
+      <CardContent ref={scrollRef} className="flex-1 overflow-y-auto p-4 scrollbar-hover">
         {messages.length === 0 ? (
           <EmptyState onQuerySelect={onSetInput} />
         ) : (
           <MessageList
             messages={messages}
             isLoading={isLoading}
-            agentStatus={agentStatus}
+            toolActivity={toolActivity}
             toolCalls={toolCalls}
             metrics={metrics}
             showTimeline={showTimeline}

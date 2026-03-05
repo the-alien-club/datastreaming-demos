@@ -8,12 +8,12 @@ import {
   POLLING_CONFIG,
 } from "@/lib/utils/polling-utils";
 import type { Message, JobStatus } from "@/types/research";
-import type { AgentInstance, AgentType, ToolCall } from "@/lib/job-store";
+import type { ToolActivity, ToolCall } from "@/lib/job-store";
 
 interface UseJobPollingOptions {
   jobId: string | null;
   onMessagesUpdate: (updater: (prev: Message[]) => Message[]) => void;
-  onAgentStatusUpdate: (status: Record<AgentType, AgentInstance[]>) => void;
+  onToolActivityUpdate: (activity: ToolActivity[]) => void;
   onToolCallsUpdate: (calls: ToolCall[]) => void;
   onMetricsUpdate: (metrics: { papersFound: number; toolCallCount: number; elapsedMs: number }) => void;
   onComplete: () => void;
@@ -26,7 +26,7 @@ interface UseJobPollingOptions {
 export function useJobPolling({
   jobId,
   onMessagesUpdate,
-  onAgentStatusUpdate,
+  onToolActivityUpdate,
   onToolCallsUpdate,
   onMetricsUpdate,
   onComplete,
@@ -37,7 +37,7 @@ export function useJobPolling({
   // Store callbacks in refs to avoid re-running effect when they change
   const callbacksRef = useRef({
     onMessagesUpdate,
-    onAgentStatusUpdate,
+    onToolActivityUpdate,
     onToolCallsUpdate,
     onMetricsUpdate,
     onComplete,
@@ -48,7 +48,7 @@ export function useJobPolling({
   useEffect(() => {
     callbacksRef.current = {
       onMessagesUpdate,
-      onAgentStatusUpdate,
+      onToolActivityUpdate,
       onToolCallsUpdate,
       onMetricsUpdate,
       onComplete,
@@ -59,25 +59,22 @@ export function useJobPolling({
   useEffect(() => {
     if (!jobId) return;
 
-    console.log(`🚀 Starting polling for job: ${jobId}`);
+    console.log(`Starting polling for job: ${jobId}`);
     lastMessageCountRef.current = 0;
 
     const pollJob = async () => {
       try {
         const job: JobStatus = await getJobStatus(jobId);
 
-        // Only update if there are changes
         const hasNewMessages = job.messages.length > lastMessageCountRef.current;
 
-        if (hasNewMessages || job.agents || job.toolCalls || job.metrics) {
-          console.log(`📊 Update: ${job.status}, messages=${job.messages.length}`);
+        if (hasNewMessages || job.toolActivity || job.toolCalls || job.metrics) {
+          console.log(`Update: ${job.status}, messages=${job.messages.length}`);
 
-          // Update agent status, tool calls, and metrics
-          if (job.agents) callbacksRef.current.onAgentStatusUpdate(job.agents);
+          if (job.toolActivity) callbacksRef.current.onToolActivityUpdate(job.toolActivity);
           if (job.toolCalls) callbacksRef.current.onToolCallsUpdate(job.toolCalls);
           if (job.metrics) callbacksRef.current.onMetricsUpdate(job.metrics);
 
-          // Process new messages
           const newMessages = job.messages.slice(lastMessageCountRef.current);
           lastMessageCountRef.current = job.messages.length;
 
@@ -85,7 +82,6 @@ export function useJobPolling({
             callbacksRef.current.onMessagesUpdate((prevMessages) => processJobMessage(prevMessages, msg));
           }
 
-          // Check if job is complete or errored
           if (job.status === "complete" || job.status === "error") {
             cleanup.stop();
             callbacksRef.current.onComplete();
@@ -102,7 +98,6 @@ export function useJobPolling({
       }
     };
 
-    // Start polling
     const pollInterval = createPollingInterval(pollJob, POLLING_CONFIG.INTERVAL_MS);
     const pollTimeout = createPollingTimeout(() => {
       cleanup.stop();
@@ -111,7 +106,6 @@ export function useJobPolling({
 
     const cleanup = createPollingCleanup(pollInterval, pollTimeout);
 
-    // Cleanup on unmount
     return () => cleanup.stop();
-  }, [jobId]); // Only depend on jobId, not the callbacks
+  }, [jobId]);
 }
