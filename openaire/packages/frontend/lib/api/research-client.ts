@@ -1,5 +1,4 @@
 import type { Message, JobStatus } from "@/types/research";
-import { withBasePath } from "@/lib/basePath";
 
 interface StartJobRequest {
   messages: Array<{ role: string; content: string }>;
@@ -33,9 +32,10 @@ export async function startResearchJob(
     ...(previousJobId && { previousJobId }),
   };
 
-  const response = await fetch(withBasePath("/api/research-sdk/start"), {
+  const response = await fetch("/api/research-sdk/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify(requestBody),
   });
 
@@ -51,7 +51,7 @@ export async function startResearchJob(
  * Get the current status of a research job
  */
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const response = await fetch(withBasePath(`/api/research-sdk/status/${jobId}`));
+  const response = await fetch(`/api/research-sdk/status/${jobId}`);
 
   if (!response.ok) {
     throw new Error(`Failed to get job status: ${response.status}`);

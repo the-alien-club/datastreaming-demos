@@ -12,6 +12,7 @@ interface ChatSidebarProps {
   messages: Message[];
   input: string;
   isLoading: boolean;
+  isAuthenticated: boolean;
   toolActivity: ToolActivity[];
   toolCalls: ToolCall[];
   metrics: {
@@ -32,6 +33,7 @@ export function ChatSidebar({
   messages,
   input,
   isLoading,
+  isAuthenticated,
   toolActivity,
   toolCalls,
   metrics,
@@ -74,7 +76,8 @@ export function ChatSidebar({
           onChange={onInputChange}
           onSubmit={onSubmit}
           onKeyDown={onKeyDown}
-          disabled={isLoading}
+          disabled={isLoading || !isAuthenticated}
+          placeholder={isAuthenticated ? undefined : "Sign in to start researching..."}
         />
       </CardFooter>
     </Card>

@@ -12,5 +12,13 @@ services:
       - PLUGIN_DIR=/app/.claude-plugins/alien-openscience
       # Omit OPENAIRE_MCP_URL for standalone (uses embedded stdio MCP)
       # Set OPENAIRE_MCP_URL for remote: https://your-mcp-server/mcp
+      - OPENAIRE_MCP_URL=${OPENAIRE_MCP_URL}
       - LOG_LEVEL=info
+      # Authentik OAuth via Better Auth
+      - NEXT_PUBLIC_AUTHENTIK_BASE_URL=${NEXT_PUBLIC_AUTHENTIK_BASE_URL:-https://auth.alien.club}
+      - AUTHENTIK_CLIENT_ID=${AUTHENTIK_CLIENT_ID}
+      - AUTHENTIK_CLIENT_SECRET=${AUTHENTIK_CLIENT_SECRET}
+      - AUTHENTIK_APP_SLUG=${AUTHENTIK_APP_SLUG:-mcp-service}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3002}
     restart: unless-stopped

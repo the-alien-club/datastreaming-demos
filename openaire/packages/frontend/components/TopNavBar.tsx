@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { Moon, Sun, ChevronDown } from "lucide-react";
+import { Moon, Sun, ChevronDown, LogIn, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   DropdownMenu,
@@ -10,8 +10,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { withBasePath } from "@/lib/basePath";
 import { AVAILABLE_MODELS } from "@/constants/models";
+import authClient from "@/lib/connectors/auth-client";
 
 /** Resolve the effective appearance for "system" theme */
 function resolvedIsDark(theme: string | undefined): boolean {
@@ -32,6 +32,7 @@ interface TopNavBarProps {
 const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) => {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { data: session, isPending } = authClient.useSession();
 
   useEffect(() => {
     setMounted(true);
@@ -45,7 +46,7 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
     <div className="flex items-center justify-between p-4">
       <div className="font-bold text-xl flex gap-2 items-center">
         <Image
-          src={withBasePath("/wordmark.svg")}
+          src="/wordmark.svg"
           alt="Company Wordmark"
           width={150}
           height={24}
@@ -72,6 +73,34 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        )}
+        {!isPending && (
+          session ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-sm gap-1.5"
+              onClick={() => authClient.signOut()}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              {session.user?.name || session.user?.email || "Sign out"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-sm gap-1.5"
+              onClick={() =>
+                authClient.signIn.social({
+                  provider: "authentik",
+                  callbackURL: window.location.href,
+                })
+              }
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              Sign in
+            </Button>
+          )
         )}
         <Button
           variant="outline"

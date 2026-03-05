@@ -7,11 +7,14 @@ import { ChatSidebar } from "@/components/research/chat/ChatSidebar";
 import { VisualizationsPanel } from "@/components/research/visualizations/VisualizationsPanel";
 import { ResearchResultsModal } from "@/components/research/papers/ResearchResultsModal";
 import { useResearchChat } from "@/hooks/research/useResearchChat";
+import authClient from "@/lib/connectors/auth-client";
 import type { ResearchProduct } from "@/types/research";
 
 export default function ResearchChat() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalPapers, setModalPapers] = useState<ResearchProduct[]>([]);
+  const { data: session } = authClient.useSession();
+  const isAuthenticated = !!session;
 
   const {
     messages,
@@ -48,6 +51,7 @@ export default function ResearchChat() {
           messages={messages}
           input={input}
           isLoading={isLoading}
+          isAuthenticated={isAuthenticated}
           toolActivity={toolActivity}
           toolCalls={toolCalls}
           metrics={metrics}

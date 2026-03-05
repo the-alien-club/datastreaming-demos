@@ -39,19 +39,36 @@ function ensureCleanupTimer() {
 
 /**
  * Generate an MCP config file with resolved paths.
+ * When OPENAIRE_MCP_URL is set, adds an HTTP MCP server with the access token.
  * Returns the path to the temp config file.
  */
-function generateMcpConfig(): string {
+function generateMcpConfig(accessToken?: string): string {
   const vizMcpPath = path.join(process.cwd(), '..', 'viz-mcp', 'dist', 'index.js');
 
-  const config: Record<string, any> = {
-    mcpServers: {
-      'viz-tools': {
-        command: 'node',
-        args: [vizMcpPath],
-      },
+  const mcpServers: Record<string, any> = {
+    'viz-tools': {
+      command: 'node',
+      args: [vizMcpPath],
     },
   };
+
+  // Add remote OpenAIRE MCP server when URL is configured
+  const openaireMcpUrl = process.env.OPENAIRE_MCP_URL;
+  if (openaireMcpUrl) {
+    const serverConfig: Record<string, any> = {
+      type: 'http',
+      url: openaireMcpUrl,
+    };
+    if (accessToken) {
+      serverConfig.headers = {
+        Authorization: `Bearer ${accessToken}`,
+      };
+    }
+    mcpServers['openaire-local'] = serverConfig;
+    console.log(`[claude-process] Remote MCP: ${openaireMcpUrl} (auth: ${accessToken ? 'yes' : 'no'})`);
+  }
+
+  const config = { mcpServers };
 
   const configDir = path.join(os.tmpdir(), 'claude-openaire');
   if (!fs.existsSync(configDir)) {
@@ -66,7 +83,7 @@ function generateMcpConfig(): string {
 /**
  * Get or create a persistent Claude Code process for a chat session.
  */
-export function getOrCreateProcess(chatSessionKey: string, model: string): ClaudeProcess {
+export function getOrCreateProcess(chatSessionKey: string, model: string, accessToken?: string): ClaudeProcess {
   const existing = processMap.get(chatSessionKey);
   if (existing && existing.alive) {
     existing.lastActivity = Date.now();
@@ -79,7 +96,7 @@ export function getOrCreateProcess(chatSessionKey: string, model: string): Claud
     processMap.delete(chatSessionKey);
   }
 
-  const mcpConfigPath = generateMcpConfig();
+  const mcpConfigPath = generateMcpConfig(accessToken);
   const pluginDir = process.env.PLUGIN_DIR;
 
   const args = [

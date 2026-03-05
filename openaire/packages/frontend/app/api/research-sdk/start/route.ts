@@ -2,6 +2,8 @@
 // Thin relay: user messages → claude -p stdin, stdout JSONL → job-store → poll → UI.
 
 import { NextRequest } from 'next/server';
+import { headers } from 'next/headers';
+import auth from '@/lib/auth';
 import { getOrCreateProcess, writeUserMessage, destroyProcess } from '@/lib/claude-process';
 import { extractPapersFromToolResult, extractChartFromToolResult, extractTablesFromMarkdown, isCitationNetwork } from '@/lib/stream-parser';
 import { jobStore } from '@/lib/job-store';
@@ -12,6 +14,22 @@ export const maxDuration = 900;
 
 export async function POST(req: NextRequest) {
   try {
+    // Extract Authentik access token from Better Auth session
+    let accessToken: string | undefined;
+    try {
+      const reqHeaders = await headers();
+      const session = await auth.api.getSession({ headers: reqHeaders });
+      if (session) {
+        const tokenData = await auth.api.getAccessToken({
+          headers: reqHeaders,
+          body: { providerId: "authentik" },
+        });
+        accessToken = tokenData?.accessToken || undefined;
+      }
+    } catch {
+      // Auth not configured or no session — continue without token
+    }
+
     const { messages, model, previousJobId } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
@@ -27,9 +45,9 @@ export async function POST(req: NextRequest) {
     // Chat session key: reuse previous job's key for multi-turn conversation
     const chatSessionKey = previousJobId || jobId;
 
-    console.log(`[${jobId}] Research query started (${messages.length} messages, session: ${chatSessionKey})`);
+    console.log(`[${jobId}] Research query started (${messages.length} messages, session: ${chatSessionKey}, auth: ${accessToken ? 'yes' : 'no'})`);
 
-    processQuery(jobId, chatSessionKey, messages, model || 'claude-opus-4-6');
+    processQuery(jobId, chatSessionKey, messages, model || 'claude-opus-4-6', accessToken);
 
     return new Response(
       JSON.stringify({ jobId, status: 'started' }),
@@ -44,14 +62,14 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function processQuery(jobId: string, chatSessionKey: string, messages: any[], model: string) {
+async function processQuery(jobId: string, chatSessionKey: string, messages: any[], model: string, accessToken?: string) {
   try {
     jobStore.setStatus(jobId, 'running');
 
     // Get or create persistent Claude process for this chat session
     let proc;
     try {
-      proc = getOrCreateProcess(chatSessionKey, model);
+      proc = getOrCreateProcess(chatSessionKey, model, accessToken);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to spawn Claude process';
       console.error(`[${jobId}] Process spawn error: ${msg}`);
