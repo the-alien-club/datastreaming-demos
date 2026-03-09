@@ -9,11 +9,11 @@ echo "=== OpenAIRE Demo Setup ==="
 ENV_FILE="$SCRIPT_DIR/packages/frontend/.env.local"
 if [ ! -f "$ENV_FILE" ]; then
   echo "Creating $ENV_FILE ..."
-  cat > "$ENV_FILE" <<'EOF'
-ANTHROPIC_API_KEY=REDACTED_API_KEY
-OPENAIRE_MCP_URL=https://openaire.mcp.alpha.alien.club/mcp
+  cat > "$ENV_FILE" <<EOF
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in your environment}
+OPENAIRE_MCP_URL=${OPENAIRE_MCP_URL:-https://openaire.mcp.alpha.alien.club/mcp}
 EOF
-  echo "  Created .env.local with API key and prod MCP URL"
+  echo "  Created .env.local (API key sourced from environment)"
 else
   echo "  .env.local already exists, skipping"
 fi
