@@ -32,6 +32,30 @@ export function insertProgressMessage(
 }
 
 /**
+ * Insert a regular assistant message before the thinking placeholder
+ */
+export function insertAssistantMessage(
+  messages: Message[],
+  content: string,
+  timestamp?: number
+): Message[] {
+  const newMessages = [...messages];
+  const thinkingIdx = newMessages.findIndex((m) => m.content === "thinking");
+
+  if (thinkingIdx !== -1) {
+    newMessages.splice(thinkingIdx, 0, {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: content,
+      messageType: "complete",
+      timestamp,
+    });
+  }
+
+  return newMessages;
+}
+
+/**
  * Create a complete message from job data
  */
 export function createCompleteMessage(jobMessage: JobMessage): Message {
@@ -56,6 +80,9 @@ export function processJobMessage(
   switch (jobMessage.type) {
     case "progress":
       return insertProgressMessage(messages, jobMessage.content || "", jobMessage.timestamp);
+
+    case "assistant-text":
+      return insertAssistantMessage(messages, jobMessage.content || "", jobMessage.timestamp);
 
     case "papers":
       console.log(`📄 Papers: ${jobMessage.count}`);

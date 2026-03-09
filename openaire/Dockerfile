@@ -89,6 +89,7 @@ RUN mkdir -p /etc/claude-code /tmp/claude-openaire /app/.claude \
     && chown -R nextjs:nodejs /etc/claude-code /tmp/claude-openaire /app/.claude
 
 ENV PLUGIN_DIR=/app/.claude-plugins/alien-openscience
+ENV SKILL_PATH=/app/.claude-plugins/alien-openscience/skills/explore-openaire/SKILL.md
 
 USER nextjs
 

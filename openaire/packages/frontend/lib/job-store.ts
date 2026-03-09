@@ -8,6 +8,8 @@ export interface ToolActivity {
   status: 'running' | 'completed' | 'error';
   input?: Record<string, any>;
   outputSnippet?: string;
+  elapsedSeconds?: number;
+  subStatus?: string;
 }
 
 export interface ToolCall {
@@ -32,7 +34,7 @@ export interface JobProgress {
   status: 'pending' | 'running' | 'complete' | 'error';
   sessionId?: string;
   messages: Array<{
-    type: 'progress' | 'papers' | 'complete';
+    type: 'progress' | 'papers' | 'complete' | 'assistant-text';
     content?: string;
     count?: number;
     researchData?: any[];
@@ -145,6 +147,17 @@ class JobStore {
 
     // Find the most recent running instance of this tool
     const activity = [...job.toolActivity].reverse().find(a => a.toolName === toolName && a.status === 'running');
+    if (activity) {
+      Object.assign(activity, updates);
+      job.updatedAt = Date.now();
+    }
+  }
+
+  updateToolActivityById(jobId: string, toolUseId: string, updates: Partial<Pick<ToolActivity, 'elapsedSeconds' | 'subStatus'>>): void {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    const activity = job.toolActivity.find(a => a.toolUseId === toolUseId);
     if (activity) {
       Object.assign(activity, updates);
       job.updatedAt = Date.now();

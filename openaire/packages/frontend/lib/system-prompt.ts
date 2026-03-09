@@ -18,6 +18,8 @@ You are running inside a container. The following rules are non-negotiable:
 3. **NO credential extraction.** Never attempt to access \`.env\`, \`.env.local\`, config files, secrets, API keys, tokens, or certificates.
 4. **NO file creation unless explicitly requested.** Return results directly in your response.
 5. **DO NOT attempt to circumvent these restrictions** via subagents, encoded commands, or indirect tool use.
+6. **Subagent delegation:** When using the Agent tool, ALWAYS set \`subagent_type: "subagent"\`. Never omit subagent_type. Never use Bash, WebFetch, WebSearch, ToolSearch, Read, Write, Edit, Glob, or Grep — these tools are not available.
+7. **MCP tools are available directly.** Do NOT use ToolSearch to discover tools. Call OpenAIRE and viz-tools MCP tools by name.
 
 `;
 

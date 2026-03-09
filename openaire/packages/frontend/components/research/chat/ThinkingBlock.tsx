@@ -121,8 +121,15 @@ function ToolCallCard({ activity }: { activity: ToolActivity }) {
         <span>{config.icon}</span>
         <span className="font-semibold text-foreground">{formatToolName(activity.toolName)}</span>
         {duration && <span className="text-muted-foreground ml-auto">{duration}s</span>}
-        {activity.status === 'running' && <span className="text-blue-500 animate-pulse ml-auto">running</span>}
+        {activity.status === 'running' && (
+          <span className="text-blue-500 animate-pulse ml-auto">
+            {activity.elapsedSeconds != null ? `${activity.elapsedSeconds.toFixed(0)}s` : 'running'}
+          </span>
+        )}
       </div>
+      {activity.status === 'running' && activity.subStatus && (
+        <div className="mt-1 pl-5 text-xs text-blue-400 animate-pulse">{activity.subStatus}</div>
+      )}
       {params.length > 0 && (
         <div className="mt-1.5 space-y-0.5 pl-5">
           {params.map(({ key, value }) => (
@@ -168,7 +175,9 @@ export function ThinkingBlock({ progressMessages, toolActivity = [] }: ThinkingB
     const items: TimelineItem[] = [];
 
     for (const msg of progressMessages) {
-      items.push({ kind: 'text', content: msg.content, timestamp: msg.timestamp });
+      if (msg.content) {
+        items.push({ kind: 'text', content: msg.content, timestamp: msg.timestamp });
+      }
     }
 
     for (const activity of toolActivity) {

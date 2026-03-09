@@ -48,7 +48,7 @@ export interface APIResponse {
 
 // Job status types
 export interface JobMessage {
-  type: 'progress' | 'papers' | 'complete';
+  type: 'progress' | 'assistant-text' | 'papers' | 'complete';
   content?: string;
   count?: number;
   researchData?: ResearchProduct[];
