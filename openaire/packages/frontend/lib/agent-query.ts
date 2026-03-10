@@ -1,6 +1,7 @@
 // Agent SDK query wrapper.
 // MCP URL is discovered from the plugin repo on GitHub (single source of truth).
 // Auth token is injected programmatically per-request.
+// Security: blocks dangerous built-in tools, enforces explicit MCP tool allowlist.
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKUserMessage, McpServerConfig, AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
@@ -11,7 +12,14 @@ const MARKETPLACE_REPO = 'the-alien-club/claude-marketplace';
 const MARKETPLACE_BRANCH = process.env.MARKETPLACE_BRANCH || 'local';
 const PLUGIN_MCP_PATH = 'plugins/alien-openscience/.mcp.json';
 
-// Built dynamically from discovered MCP config
+// Built-in tools that must never be available — hard-denied at runtime via canUseTool
+const BLOCKED_TOOLS_LIST = [
+  'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
+  'WebFetch', 'WebSearch', 'ToolSearch', 'NotebookEdit',
+];
+const BLOCKED_TOOLS = new Set(BLOCKED_TOOLS_LIST);
+
+// Built dynamically from discovered MCP config — explicit tool names, no wildcards
 function buildResearchTools(discoveredConfig: Record<string, any>): string[] {
   const tools: string[] = [];
   const mcpServers = discoveredConfig.mcpServers || {};
@@ -145,7 +153,31 @@ export async function startQuery(
     model,
     systemPrompt,
     mcpServers,
+    // Hard enforcement layer 1: only Agent as built-in tool
+    tools: ['Agent'],
+    // Hard enforcement layer 2: remove blocked tools from model's context
+    disallowedTools: BLOCKED_TOOLS_LIST,
+    // Auto-approve MCP tools + Agent without permission prompts
     allowedTools: [...researchTools, 'Agent'],
+    // Hard enforcement layer 3: runtime gate — denies blocked tools and
+    // rejects Agent calls that don't use subagent_type: "subagent"
+    canUseTool: async (
+      toolName: string,
+      input: Record<string, unknown>,
+    ) => {
+      if (BLOCKED_TOOLS.has(toolName)) {
+        console.log(`[security] DENIED tool: ${toolName}`);
+        return { result: 'deny', reason: 'Tool not available in this environment' };
+      }
+      if (toolName === 'Agent') {
+        const subagentType = input.subagent_type as string | undefined;
+        if (subagentType && subagentType !== 'subagent') {
+          console.log(`[security] DENIED agent type: ${subagentType}`);
+          return { result: 'deny', reason: 'Only subagent_type "subagent" is allowed' };
+        }
+      }
+      return { result: 'allow' };
+    },
     agents,
     permissionMode: 'acceptEdits',
     persistSession: true,
