@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
-import { startResearchJob, stopResearchJob } from "@/lib/api/research-client";
+import { startResearchJob, stopResearchJob, AuthExpiredError } from "@/lib/api/research-client";
+import authClient from "@/lib/connectors/auth-client";
 import { useJobPolling } from "./useJobPolling";
 import { useAgentStatus } from "./useAgentStatus";
 import { toast } from "@/hooks/use-toast";
@@ -109,6 +110,20 @@ export function useResearchChat() {
       } catch (error) {
         console.error("Submit Error:", error);
         setIsLoading(false);
+
+        if (error instanceof AuthExpiredError) {
+          toast({
+            title: "Session expired",
+            description: "Your session has expired. Please sign in again.",
+            variant: "destructive",
+          });
+          // Clear stale session → UI flips to logged-out
+          authClient.signOut();
+          // Remove the thinking placeholder
+          setMessages((prev) => prev.filter((m) => m.messageType !== "thinking"));
+          return;
+        }
+
         toast({
           title: "Error",
           description: "Failed to start research job. Please try again.",

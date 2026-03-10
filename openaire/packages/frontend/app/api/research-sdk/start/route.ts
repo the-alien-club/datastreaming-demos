@@ -16,9 +16,11 @@ export async function POST(req: NextRequest) {
   try {
     // Extract Authentik access token from Better Auth session
     let accessToken: string | undefined;
+    let hasSession = false;
     try {
       const reqHeaders = await headers();
       const session = await auth.api.getSession({ headers: reqHeaders });
+      hasSession = !!session;
       if (session) {
         const tokenData = await auth.api.getAccessToken({
           headers: reqHeaders,
@@ -30,6 +32,14 @@ export async function POST(req: NextRequest) {
       if (accessToken) console.log(`[auth][DEBUG] Token: ${accessToken}`);
     } catch {
       // Auth not configured or no session — continue without token
+    }
+
+    // Session exists but token is gone → expired, tell frontend to re-auth
+    if (hasSession && !accessToken) {
+      return new Response(
+        JSON.stringify({ error: 'auth_expired', message: 'Session expired. Please sign in again.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     const { messages, model, previousJobId } = await req.json();

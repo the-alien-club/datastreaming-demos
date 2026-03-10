@@ -1,5 +1,12 @@
 import type { Message, JobStatus } from "@/types/research";
 
+export class AuthExpiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthExpiredError';
+  }
+}
+
 interface StartJobRequest {
   messages: Array<{ role: string; content: string }>;
   model: string;
@@ -40,6 +47,12 @@ export async function startResearchJob(
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      const body = await response.json().catch(() => ({}));
+      if (body.error === 'auth_expired') {
+        throw new AuthExpiredError(body.message || 'Session expired');
+      }
+    }
     throw new Error(`Failed to start research job: ${response.status}`);
   }
 
