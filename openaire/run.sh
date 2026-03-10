@@ -15,7 +15,7 @@ if [ ! -d "$SCRIPT_DIR/packages/frontend/node_modules" ]; then
 fi
 
 echo "=== Starting OpenAIRE Demo ==="
-echo "  MCP: ${OPENAIRE_MCP_URL:-https://openaire.mcp.alpha.alien.club/mcp} (remote)"
+echo "  MCP: ${OPENAIRE_MCP_URL:-<not set, will discover from plugin>}"
 echo "  Viz: packages/viz-mcp (local stdio)"
 echo "  UI:  http://localhost:3000"
 echo ""

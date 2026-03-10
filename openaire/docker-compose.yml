@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire:0.2.0
+    image: ${DOCKER_IMAGE:-demo-openaire:latest}
     ports:
       - "3002:3000"
     environment:
@@ -15,10 +15,10 @@ services:
       - OPENAIRE_MCP_URL=${OPENAIRE_MCP_URL}
       - LOG_LEVEL=info
       # Authentik OAuth via Better Auth
-      - NEXT_PUBLIC_AUTHENTIK_BASE_URL=${NEXT_PUBLIC_AUTHENTIK_BASE_URL:-https://auth.alien.club}
+      - NEXT_PUBLIC_AUTHENTIK_BASE_URL=${NEXT_PUBLIC_AUTHENTIK_BASE_URL:?Set NEXT_PUBLIC_AUTHENTIK_BASE_URL}
       - AUTHENTIK_CLIENT_ID=${AUTHENTIK_CLIENT_ID}
       - AUTHENTIK_CLIENT_SECRET=${AUTHENTIK_CLIENT_SECRET}
-      - AUTHENTIK_APP_SLUG=${AUTHENTIK_APP_SLUG:-mcp-service}
+      - AUTHENTIK_APP_SLUG=${AUTHENTIK_APP_SLUG:-datastreaming}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3002}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:?Set BETTER_AUTH_URL}
     restart: unless-stopped

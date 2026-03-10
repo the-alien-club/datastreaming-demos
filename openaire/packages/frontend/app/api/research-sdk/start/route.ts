@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
         accessToken = tokenData?.accessToken || undefined;
       }
       console.log(`[auth] Access token: ${accessToken ? 'yes' : 'no'}`);
-      if (accessToken) console.log(`[auth][DEBUG] Token: ${accessToken}`);
     } catch {
       // Auth not configured or no session — continue without token
     }

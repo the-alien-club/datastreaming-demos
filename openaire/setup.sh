@@ -11,7 +11,7 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "Creating $ENV_FILE ..."
   cat > "$ENV_FILE" <<EOF
 ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in your environment}
-OPENAIRE_MCP_URL=${OPENAIRE_MCP_URL:-https://openaire.mcp.alpha.alien.club/mcp}
+OPENAIRE_MCP_URL=${OPENAIRE_MCP_URL:-}
 EOF
   echo "  Created .env.local (API key sourced from environment)"
 else

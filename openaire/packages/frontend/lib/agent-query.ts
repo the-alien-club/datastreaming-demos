@@ -8,7 +8,7 @@ import type { SDKUserMessage, McpServerConfig, AgentDefinition } from '@anthropi
 import { getSystemPrompt } from './system-prompt';
 import path from 'path';
 
-const MARKETPLACE_REPO = 'the-alien-club/claude-marketplace';
+const MARKETPLACE_REPO = process.env.MARKETPLACE_REPO || 'the-alien-club/claude-marketplace';
 const MARKETPLACE_BRANCH = process.env.MARKETPLACE_BRANCH || 'local';
 const PLUGIN_MCP_PATH = 'plugins/alien-openscience/.mcp.json';
 

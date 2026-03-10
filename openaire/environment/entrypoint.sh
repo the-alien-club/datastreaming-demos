@@ -3,6 +3,7 @@ set -e
 
 # --- Write Claude Code settings with marketplace + plugin config ---
 # The SDK loads the plugin from GitHub (equivalent of: /plugin marketplace add the-alien-club/claude-marketplace#local)
+MARKETPLACE_REPO="${MARKETPLACE_REPO:-the-alien-club/claude-marketplace}"
 MARKETPLACE_BRANCH="${MARKETPLACE_BRANCH:-local}"
 
 SETTINGS=$(cat <<ENDJSON
@@ -19,7 +20,7 @@ SETTINGS=$(cat <<ENDJSON
     "alien-openscience": {
       "source": {
         "source": "github",
-        "repo": "the-alien-club/claude-marketplace",
+        "repo": "$MARKETPLACE_REPO",
         "ref": "$MARKETPLACE_BRANCH"
       }
     }
@@ -36,7 +37,7 @@ echo "$SETTINGS" > /etc/claude-code/managed-settings.json
 echo "$SETTINGS" > ~/.claude/settings.json
 echo "$SETTINGS" > /app/.claude/settings.json
 
-echo "[entrypoint] Marketplace: the-alien-club/claude-marketplace#$MARKETPLACE_BRANCH"
+echo "[entrypoint] Marketplace: $MARKETPLACE_REPO#$MARKETPLACE_BRANCH"
 echo "[entrypoint] Plugin: openaire@alien-openscience"
 echo "[entrypoint] Settings written"
 

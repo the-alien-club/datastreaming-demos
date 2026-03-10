@@ -1,9 +1,9 @@
 import { betterAuth } from "better-auth";
 import { genericOAuth } from "better-auth/plugins";
 
-const appSlug = process.env.AUTHENTIK_APP_SLUG || "mcp-service";
+const appSlug = process.env.AUTHENTIK_APP_SLUG || "datastreaming";
 const authentikBaseUrl =
-  process.env.NEXT_PUBLIC_AUTHENTIK_BASE_URL || "https://auth.alien.club";
+  process.env.NEXT_PUBLIC_AUTHENTIK_BASE_URL || "http://localhost:0";
 const auth = betterAuth({
   appName: "OpenAIRE Research Intelligence",
   secret: process.env.BETTER_AUTH_SECRET,
