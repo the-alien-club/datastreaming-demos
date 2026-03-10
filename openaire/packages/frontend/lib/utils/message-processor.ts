@@ -16,7 +16,11 @@ export function insertProgressMessage(
   timestamp?: number
 ): Message[] {
   const newMessages = [...messages];
-  const thinkingIdx = newMessages.findIndex((m) => m.content === "thinking");
+  // Search from the end so progress targets the most recent thinking placeholder
+  let thinkingIdx = -1;
+  for (let i = newMessages.length - 1; i >= 0; i--) {
+    if (newMessages[i].content === "thinking") { thinkingIdx = i; break; }
+  }
 
   if (thinkingIdx !== -1) {
     newMessages.splice(thinkingIdx, 0, {
@@ -40,7 +44,10 @@ export function insertAssistantMessage(
   timestamp?: number
 ): Message[] {
   const newMessages = [...messages];
-  const thinkingIdx = newMessages.findIndex((m) => m.content === "thinking");
+  let thinkingIdx = -1;
+  for (let i = newMessages.length - 1; i >= 0; i--) {
+    if (newMessages[i].content === "thinking") { thinkingIdx = i; break; }
+  }
 
   if (thinkingIdx !== -1) {
     newMessages.splice(thinkingIdx, 0, {

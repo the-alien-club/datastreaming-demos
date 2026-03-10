@@ -67,6 +67,18 @@ export function useResearchChat() {
         console.error("Failed to stop job:", error);
       }
     }
+    // Immediately remove thinking placeholder and add stopped message —
+    // don't rely on polling (race: user can submit before poll processes complete)
+    setMessages((prev) => {
+      const cleaned = prev.filter((m) => m.content !== "thinking");
+      cleaned.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Research stopped.",
+        messageType: "complete",
+      });
+      return cleaned;
+    });
     setIsLoading(false);
   }, [currentJobId]);
 
