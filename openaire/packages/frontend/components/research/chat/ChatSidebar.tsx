@@ -26,6 +26,7 @@ interface ChatSidebarProps {
   onSetInput: (value: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onStop: () => void;
   onShowAllPapers: (papers: ResearchProduct[]) => void;
 }
 
@@ -43,6 +44,7 @@ export function ChatSidebar({
   onSetInput,
   onSubmit,
   onKeyDown,
+  onStop,
   onShowAllPapers,
 }: ChatSidebarProps) {
   const scrollRef = useAutoScroll(messages, isLoading, toolActivity.length);
@@ -76,6 +78,8 @@ export function ChatSidebar({
           onChange={onInputChange}
           onSubmit={onSubmit}
           onKeyDown={onKeyDown}
+          isLoading={isLoading}
+          onStop={onStop}
           disabled={isLoading || !isAuthenticated}
           placeholder={isAuthenticated ? undefined : "Sign in to start researching..."}
         />

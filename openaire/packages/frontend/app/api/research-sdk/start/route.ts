@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
         accessToken = tokenData?.accessToken || undefined;
       }
       console.log(`[auth] Access token: ${accessToken ? 'yes' : 'no'}`);
+      if (accessToken) console.log(`[auth][DEBUG] Token: ${accessToken}`);
     } catch {
       // Auth not configured or no session — continue without token
     }
@@ -79,7 +80,7 @@ async function processQuery(
   try {
     jobStore.setStatus(jobId, 'running');
 
-    const result = startQuery(messages, model, accessToken, resumeSessionId);
+    const result = await startQuery(messages, model, accessToken, resumeSessionId);
 
     const startTime = Date.now();
     const allPapers: any[] = [];

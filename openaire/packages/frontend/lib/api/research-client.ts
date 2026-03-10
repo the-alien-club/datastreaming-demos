@@ -59,3 +59,16 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
 
   return response.json();
 }
+
+/**
+ * Stop a running research job
+ */
+export async function stopResearchJob(jobId: string): Promise<void> {
+  const response = await fetch(`/api/research-sdk/stop/${jobId}`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to stop research job: ${response.status}`);
+  }
+}

@@ -31,6 +31,7 @@ export default function ResearchChat() {
     handleSubmit,
     handleKeyDown,
     handleInputChange,
+    handleStop,
   } = useResearchChat();
 
   const handleShowAllPapers = (papers: ResearchProduct[]) => {
@@ -61,6 +62,7 @@ export default function ResearchChat() {
           onSetInput={setInput}
           onSubmit={handleSubmit}
           onKeyDown={handleKeyDown}
+          onStop={handleStop}
           onShowAllPapers={handleShowAllPapers}
         />
 

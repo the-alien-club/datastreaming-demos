@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { startResearchJob } from "@/lib/api/research-client";
+import { useState, useCallback, useRef } from "react";
+import { startResearchJob, stopResearchJob } from "@/lib/api/research-client";
 import { useJobPolling } from "./useJobPolling";
 import { useAgentStatus } from "./useAgentStatus";
 import { toast } from "@/hooks/use-toast";
@@ -56,6 +56,19 @@ export function useResearchChat() {
     },
   });
 
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const handleStop = useCallback(async () => {
+    if (currentJobId) {
+      try {
+        await stopResearchJob(currentJobId);
+      } catch (error) {
+        console.error("Failed to stop job:", error);
+      }
+    }
+    setIsLoading(false);
+  }, [currentJobId]);
+
   const handleSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -79,6 +92,11 @@ export function useResearchChat() {
       setMessages((prev) => [...prev, userMessage, thinkingMessage]);
       setInput("");
       setIsLoading(true);
+
+      // Reset textarea height after clearing input
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "44px";
+      }
 
       try {
         const jobId = await startResearchJob(
@@ -133,6 +151,7 @@ export function useResearchChat() {
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const textarea = event.target;
+      textareaRef.current = textarea;
       setInput(textarea.value);
       textarea.style.height = "auto";
       textarea.style.height = `${Math.min(textarea.scrollHeight, 300)}px`;
@@ -158,5 +177,6 @@ export function useResearchChat() {
     handleSubmit,
     handleKeyDown,
     handleInputChange,
+    handleStop,
   };
 }

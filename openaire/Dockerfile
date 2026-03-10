@@ -77,19 +77,16 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/node_modules ./
 COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/static ./packages/frontend/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/public ./packages/frontend/public
 
-# Copy plugin (skill + marketplace + .mcp.json template)
-COPY --chown=nextjs:nodejs environment/plugin/alien-openscience/ /app/.claude-plugins/alien-openscience/
-
 # Copy entrypoint script
 COPY --chown=nextjs:nodejs environment/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
+# Install git (needed for SDK to clone plugin from GitHub)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 # Create writable dirs for Claude Code and MCP config
 RUN mkdir -p /etc/claude-code /tmp/claude-openaire /app/.claude \
     && chown -R nextjs:nodejs /etc/claude-code /tmp/claude-openaire /app/.claude
-
-ENV PLUGIN_DIR=/app/.claude-plugins/alien-openscience
-ENV SKILL_PATH=/app/.claude-plugins/alien-openscience/skills/explore-openaire/SKILL.md
 
 USER nextjs
 

@@ -9,9 +9,9 @@ services:
     environment:
       - NODE_ENV=production
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - PLUGIN_DIR=/app/.claude-plugins/alien-openscience
-      # Omit OPENAIRE_MCP_URL for standalone (uses embedded stdio MCP)
-      # Set OPENAIRE_MCP_URL for remote: https://your-mcp-server/mcp
+      # Plugin marketplace branch (default: local). Change to dev/main for other environments.
+      - MARKETPLACE_BRANCH=${MARKETPLACE_BRANCH:-local}
+      # OpenAIRE MCP URL — configured programmatically (auth token injected per-request)
       - OPENAIRE_MCP_URL=${OPENAIRE_MCP_URL}
       - LOG_LEVEL=info
       # Authentik OAuth via Better Auth

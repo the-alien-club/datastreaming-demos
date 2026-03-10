@@ -1,47 +1,44 @@
 #!/bin/bash
 set -e
 
-PLUGIN_DIR="/app/.claude-plugins/alien-openscience"
-MCP_URL="${OPENAIRE_MCP_URL:-}"
+# --- Write Claude Code settings with marketplace + plugin config ---
+# The SDK loads the plugin from GitHub (equivalent of: /plugin marketplace add the-alien-club/claude-marketplace#local)
+MARKETPLACE_BRANCH="${MARKETPLACE_BRANCH:-local}"
 
-# --- Generate .mcp.json in plugin dir based on env vars ---
-if [ -n "$MCP_URL" ]; then
-  # Remote HTTP MCP server (like eval/production)
-  cat > "$PLUGIN_DIR/.mcp.json" <<EOF
+SETTINGS=$(cat <<ENDJSON
 {
-  "mcpServers": {
-    "openaire-local": {
-      "type": "http",
-      "url": "$MCP_URL"
+  "permissions": {
+    "allow": [
+      "mcp__openaire-local__*",
+      "mcp__viz-tools__*",
+      "Bash", "Read", "Write", "Edit", "Glob", "Grep",
+      "WebFetch", "Task", "WebSearch", "Skill"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "alien-openscience": {
+      "source": {
+        "source": "github",
+        "repo": "the-alien-club/claude-marketplace",
+        "ref": "$MARKETPLACE_BRANCH"
+      }
     }
+  },
+  "enabledPlugins": {
+    "openaire@alien-openscience": true
   }
 }
-EOF
-  echo "[entrypoint] MCP: HTTP → $MCP_URL"
-else
-  # Standalone: use embedded TypeScript MCP server via stdio
-  cat > "$PLUGIN_DIR/.mcp.json" <<EOF
-{
-  "mcpServers": {
-    "openaire-local": {
-      "command": "node",
-      "args": ["/app/packages/mcp/dist/index.js"]
-    }
-  }
-}
-EOF
-  echo "[entrypoint] MCP: stdio → /app/packages/mcp/dist/index.js"
-fi
-
-# --- Write Claude Code settings (auto-allow MCP tools + standard tools) ---
-SETTINGS='{"permissions":{"allow":["mcp__openaire-local__*","mcp__viz-tools__*","Bash","Read","Write","Edit","Glob","Grep","WebFetch","Task","WebSearch","Skill"]}}'
+ENDJSON
+)
 
 mkdir -p /etc/claude-code ~/.claude /app/.claude
 echo "$SETTINGS" > /etc/claude-code/managed-settings.json
 echo "$SETTINGS" > ~/.claude/settings.json
 echo "$SETTINGS" > /app/.claude/settings.json
 
-echo "[entrypoint] Claude Code settings written"
+echo "[entrypoint] Marketplace: the-alien-club/claude-marketplace#$MARKETPLACE_BRANCH"
+echo "[entrypoint] Plugin: openaire@alien-openscience"
+echo "[entrypoint] Settings written"
 
 # --- Start Next.js ---
 exec node packages/frontend/server.js

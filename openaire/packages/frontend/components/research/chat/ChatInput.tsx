@@ -1,13 +1,15 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send } from "lucide-react";
+import { Send, Square } from "lucide-react";
 
 interface ChatInputProps {
   value: string;
   onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  isLoading?: boolean;
+  onStop?: () => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -17,6 +19,8 @@ export function ChatInput({
   onChange,
   onSubmit,
   onKeyDown,
+  isLoading = false,
+  onStop,
   disabled = false,
   placeholder = "Ask about research papers, datasets, or trends...",
 }: ChatInputProps) {
@@ -34,13 +38,24 @@ export function ChatInput({
             rows={1}
           />
         </div>
-        <Button
-          type="submit"
-          disabled={disabled || !value.trim()}
-          className="h-[44px]"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+        {isLoading ? (
+          <Button
+            type="button"
+            variant="destructive"
+            className="h-[44px]"
+            onClick={onStop}
+          >
+            <Square className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            type="submit"
+            disabled={disabled || !value.trim()}
+            className="h-[44px]"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </form>
   );

@@ -1,4 +1,4 @@
 [submodule "openaire/environment/plugin"]
 	path = openaire/environment/plugin
-	url = git@gitlab.com:alias3/datastreaming/mcp/mcp-plugins.git
+	url = git@github.com:the-alien-club/claude-marketplace.git
 	branch = local

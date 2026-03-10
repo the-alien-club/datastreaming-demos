@@ -1,9 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 
-const SKILL_PATH = process.env.SKILL_PATH
-  || path.join(process.cwd(), '..', '..', '..', '..', '..', 'datastreaming', 'MCPs',
-     'mcp-plugins', 'alien-openscience', 'skills', 'explore-openaire', 'SKILL.md');
+// Try to load SKILL.md if available locally (container with copied plugin).
+// When loaded via GitHub marketplace plugin, the SDK injects skill content automatically.
+const SKILL_SEARCH_PATHS = [
+  process.env.SKILL_PATH,
+  '/app/.claude-plugins/alien-openscience/skills/explore-openaire/SKILL.md',
+  path.join(process.cwd(), '..', '..', '..', '..', '..', 'datastreaming', 'MCPs',
+    'mcp-plugins', 'alien-openscience', 'skills', 'explore-openaire', 'SKILL.md'),
+].filter(Boolean) as string[];
 
 let _skillContent: string | null = null;
 
@@ -23,10 +28,23 @@ You are running inside a container. The following rules are non-negotiable:
 
 `;
 
+function loadSkillContent(): string {
+  for (const skillPath of SKILL_SEARCH_PATHS) {
+    try {
+      const content = fs.readFileSync(skillPath, 'utf-8');
+      console.log(`[system-prompt] Loaded SKILL.md (${content.length} chars) from ${skillPath}`);
+      return content;
+    } catch {
+      // Try next path
+    }
+  }
+  console.log(`[system-prompt] SKILL.md not found locally — relying on plugin to provide skill content`);
+  return '';
+}
+
 export function getSystemPrompt(): string {
-  if (!_skillContent) {
-    _skillContent = fs.readFileSync(SKILL_PATH, 'utf-8');
-    console.log(`[system-prompt] Loaded SKILL.md (${_skillContent.length} chars) from ${SKILL_PATH}`);
+  if (_skillContent === null) {
+    _skillContent = loadSkillContent();
   }
   return _skillContent + SECURITY_SUFFIX;
 }

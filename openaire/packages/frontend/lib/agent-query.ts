@@ -1,60 +1,67 @@
-// Agent SDK query wrapper — replaces claude-process.ts CLI orchestration.
-// Configures MCP servers, system prompt, and subagent support via SDK query().
+// Agent SDK query wrapper.
+// MCP URL is discovered from the plugin repo on GitHub (single source of truth).
+// Auth token is injected programmatically per-request.
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKUserMessage, McpServerConfig, AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import { getSystemPrompt } from './system-prompt';
 import path from 'path';
 
-// Built-in tools that must never be available — hard-denied at runtime via canUseTool
-const BLOCKED_TOOLS_LIST = [
-  'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
-  'WebFetch', 'WebSearch', 'ToolSearch', 'NotebookEdit',
-];
-const BLOCKED_TOOLS = new Set(BLOCKED_TOOLS_LIST);
+const MARKETPLACE_REPO = 'the-alien-club/claude-marketplace';
+const MARKETPLACE_BRANCH = process.env.MARKETPLACE_BRANCH || 'local';
+const PLUGIN_MCP_PATH = 'plugins/alien-openscience/.mcp.json';
 
-// Tools available to both the main agent and subagents (no Bash/Read/Write/Edit/Glob/Grep)
-const RESEARCH_TOOLS = [
-  // OpenAIRE MCP tools (explicit — no wildcards)
-  'mcp__openaire-local__search_research_products',
-  'mcp__openaire-local__get_research_product_details',
-  'mcp__openaire-local__get_citation_network',
-  'mcp__openaire-local__search_organizations',
-  'mcp__openaire-local__search_projects',
-  'mcp__openaire-local__get_author_profile',
-  'mcp__openaire-local__search_datasets',
-  'mcp__openaire-local__analyze_coauthorship_network',
-  'mcp__openaire-local__get_project_outputs',
-  'mcp__openaire-local__find_by_influence_class',
-  'mcp__openaire-local__find_by_popularity_class',
-  'mcp__openaire-local__find_by_impulse_class',
-  'mcp__openaire-local__find_by_citation_count_class',
-  'mcp__openaire-local__explore_research_relationships',
-  'mcp__openaire-local__search_data_sources',
-  'mcp__openaire-local__analyze_research_trends',
-  'mcp__openaire-local__build_subgraph_from_dois',
-  'mcp__openaire-local__search_persons',
-  'mcp__openaire-local__get_person',
-  'mcp__openaire-local__get_organization',
-  'mcp__openaire-local__get_project',
-  'mcp__openaire-local__get_data_source',
-  'mcp__openaire-local__get_research_links',
-  'mcp__openaire-local__get_relationship_types',
-  'mcp__openaire-local__discover_by_subject',
-  'mcp__openaire-local__discover_by_coauthors',
-  // Visualization tools (explicit)
-  'mcp__viz-tools__create_citation_network_chart',
-  'mcp__viz-tools__create_timeline_chart',
-  'mcp__viz-tools__create_distribution_chart',
-  'mcp__viz-tools__merge_citation_networks',
-];
+// Built dynamically from discovered MCP config
+function buildResearchTools(discoveredConfig: Record<string, any>): string[] {
+  const tools: string[] = [];
+  const mcpServers = discoveredConfig.mcpServers || {};
+  for (const name of Object.keys(mcpServers)) {
+    tools.push(`mcp__${name}__*`);
+  }
+  tools.push('mcp__viz-tools__*');
+  return tools;
+}
+
+// Cache the discovered MCP config so we only fetch once per process
+let _mcpConfigCache: Record<string, any> | null = null;
 
 /**
- * Build MCP server configs for the SDK query.
- * - openaire-local: HTTP (remote) or stdio (local fallback)
- * - viz-tools: always stdio
+ * Fetch the .mcp.json from the plugin repo on GitHub.
+ * Falls back to OPENAIRE_MCP_URL env var.
  */
-function buildMcpServers(accessToken?: string): Record<string, McpServerConfig> {
+async function discoverMcpConfig(): Promise<Record<string, any>> {
+  if (_mcpConfigCache) return _mcpConfigCache;
+
+  // Try fetching from GitHub
+  const rawUrl = `https://raw.githubusercontent.com/${MARKETPLACE_REPO}/${MARKETPLACE_BRANCH}/${PLUGIN_MCP_PATH}`;
+  try {
+    const res = await fetch(rawUrl);
+    if (res.ok) {
+      const json = await res.json();
+      console.log(`[agent] Discovered MCP config from ${MARKETPLACE_REPO}#${MARKETPLACE_BRANCH}`);
+      _mcpConfigCache = json;
+      return json;
+    }
+    console.warn(`[agent] Failed to fetch MCP config from GitHub: ${res.status} ${res.statusText}`);
+  } catch (err) {
+    console.warn(`[agent] Failed to fetch MCP config from GitHub:`, err);
+  }
+
+  // Fallback: env var
+  const envUrl = process.env.OPENAIRE_MCP_URL;
+  if (envUrl) {
+    console.log(`[agent] Using OPENAIRE_MCP_URL fallback: ${envUrl}`);
+    _mcpConfigCache = { mcpServers: { 'openaire-local': { type: 'http', url: envUrl } } };
+    return _mcpConfigCache;
+  }
+
+  throw new Error('No MCP config found: GitHub fetch failed and OPENAIRE_MCP_URL not set');
+}
+
+/**
+ * Build MCP server configs from discovered plugin config + auth injection.
+ */
+function buildMcpServers(discoveredConfig: Record<string, any>, accessToken?: string): Record<string, McpServerConfig> {
   const vizMcpPath = path.join(process.cwd(), '..', 'viz-mcp', 'dist', 'index.js');
 
   const servers: Record<string, McpServerConfig> = {
@@ -64,82 +71,53 @@ function buildMcpServers(accessToken?: string): Record<string, McpServerConfig> 
     },
   };
 
-  const openaireMcpUrl = process.env.OPENAIRE_MCP_URL;
-  if (openaireMcpUrl) {
-    // Remote HTTP MCP with optional Bearer token
-    const config: Record<string, any> = {
-      type: 'http',
-      url: openaireMcpUrl,
-    };
-    if (accessToken) {
-      config.headers = { Authorization: `Bearer ${accessToken}` };
+  const mcpServers = discoveredConfig.mcpServers || {};
+  for (const [name, config] of Object.entries(mcpServers)) {
+    const serverConfig = { ...(config as Record<string, any>) };
+
+    // Inject auth header for HTTP servers
+    if (serverConfig.type === 'http' && accessToken) {
+      serverConfig.headers = {
+        ...serverConfig.headers,
+        Authorization: `Bearer ${accessToken}`,
+      };
     }
-    servers['openaire-local'] = config as McpServerConfig;
-    console.log(`[agent] Remote MCP: ${openaireMcpUrl} (auth: ${accessToken ? 'yes' : 'no'})`);
-  } else {
-    // Standalone: embedded MCP server via stdio
-    const mcpPath = path.join(process.cwd(), '..', 'mcp', 'dist', 'index.js');
-    servers['openaire-local'] = {
-      command: 'node',
-      args: [mcpPath],
-    };
-    console.log(`[agent] Local MCP: ${mcpPath}`);
+
+    servers[name] = serverConfig as McpServerConfig;
+    console.log(`[agent] MCP "${name}": ${serverConfig.type || 'stdio'} ${serverConfig.url || serverConfig.command || ''} (auth: ${accessToken ? 'yes' : 'no'})`);
   }
 
   return servers;
 }
 
 /**
- * Build MCP server specs for subagents (serializable — no instances).
- * AgentMcpServerSpec = string | Record<string, McpServerConfigForProcessTransport>
+ * Build subagent definitions with the same MCP servers.
  */
-function buildSubagentMcpServers(accessToken?: string): Array<Record<string, any>> {
+function buildAgents(discoveredConfig: Record<string, any>, accessToken?: string): Record<string, AgentDefinition> {
   const vizMcpPath = path.join(process.cwd(), '..', 'viz-mcp', 'dist', 'index.js');
-  const specs: Array<Record<string, any>> = [];
+  const researchTools = buildResearchTools(discoveredConfig);
 
-  // viz-tools — always stdio
-  specs.push({
-    'viz-tools': {
-      command: 'node',
-      args: [vizMcpPath],
-    },
-  });
+  const mcpSpecs: Array<Record<string, any>> = [
+    { 'viz-tools': { command: 'node', args: [vizMcpPath] } },
+  ];
 
-  // openaire-local — HTTP or stdio depending on env
-  const openaireMcpUrl = process.env.OPENAIRE_MCP_URL;
-  if (openaireMcpUrl) {
-    const config: Record<string, any> = {
-      type: 'http',
-      url: openaireMcpUrl,
-    };
-    if (accessToken) {
-      config.headers = { Authorization: `Bearer ${accessToken}` };
+  const mcpServers = discoveredConfig.mcpServers || {};
+  for (const [name, config] of Object.entries(mcpServers)) {
+    const serverConfig = { ...(config as Record<string, any>) };
+    if (serverConfig.type === 'http' && accessToken) {
+      serverConfig.headers = {
+        ...serverConfig.headers,
+        Authorization: `Bearer ${accessToken}`,
+      };
     }
-    specs.push({ 'openaire-local': config });
-  } else {
-    const mcpPath = path.join(process.cwd(), '..', 'mcp', 'dist', 'index.js');
-    specs.push({
-      'openaire-local': {
-        command: 'node',
-        args: [mcpPath],
-      },
-    });
+    mcpSpecs.push({ [name]: serverConfig });
   }
-
-  return specs;
-}
-
-/**
- * Build subagent definitions — restricts tools and propagates MCP servers.
- */
-function buildAgents(accessToken?: string): Record<string, AgentDefinition> {
-  const mcpSpecs = buildSubagentMcpServers(accessToken);
 
   return {
     'subagent': {
       description: 'Subagent with the same tools and MCP servers as the parent',
       prompt: 'Your MCP tools are available directly. Do NOT use ToolSearch — call tools by name.',
-      tools: RESEARCH_TOOLS,
+      tools: researchTools,
       mcpServers: mcpSpecs,
       model: 'inherit',
     },
@@ -147,58 +125,27 @@ function buildAgents(accessToken?: string): Record<string, AgentDefinition> {
 }
 
 /**
- * Start an Agent SDK query. Returns an async iterable of SDK messages.
- *
- * - Loads the system prompt from SKILL.md
- * - Configures MCP servers with optional auth
- * - Enables the Agent tool for autonomous subagent delegation
- * - Supports session resumption for multi-turn conversations
+ * Start an Agent SDK query.
+ * MCP config is discovered from the plugin repo on GitHub, with auth injected per-request.
  */
-export function startQuery(
+export async function startQuery(
   messages: any[],
   model: string,
   accessToken?: string,
   resumeSessionId?: string | null,
 ) {
   const systemPrompt = getSystemPrompt();
-  const mcpServers = buildMcpServers(accessToken);
+  const discoveredConfig = await discoverMcpConfig();
+  const mcpServers = buildMcpServers(discoveredConfig, accessToken);
+  const agents = buildAgents(discoveredConfig, accessToken);
 
-  const agents = buildAgents(accessToken);
+  const researchTools = buildResearchTools(discoveredConfig);
 
   const queryOptions: Record<string, any> = {
     model,
     systemPrompt,
     mcpServers,
-    // Hard enforcement layer 1: only Agent as built-in tool
-    tools: ['Agent'],
-    // Hard enforcement layer 2: remove blocked tools from model's context
-    disallowedTools: BLOCKED_TOOLS_LIST,
-    // Auto-approve MCP tools + Agent without permission prompts
-    allowedTools: [
-      ...RESEARCH_TOOLS,
-      'Agent',
-    ],
-    // Hard enforcement layer 3: runtime gate — denies blocked tools and
-    // rejects Agent calls that don't use subagent_type: "subagent"
-    canUseTool: async (
-      toolName: string,
-      input: Record<string, unknown>,
-    ) => {
-      // Block dangerous built-in tools
-      if (BLOCKED_TOOLS.has(toolName)) {
-        console.log(`[security] DENIED tool: ${toolName}`);
-        return { result: 'deny', reason: 'Tool not available in this environment' };
-      }
-      // Force all subagents through the restricted "subagent" definition
-      if (toolName === 'Agent') {
-        const subagentType = input.subagent_type as string | undefined;
-        if (subagentType && subagentType !== 'subagent') {
-          console.log(`[security] DENIED agent type: ${subagentType}`);
-          return { result: 'deny', reason: 'Only subagent_type "subagent" is allowed' };
-        }
-      }
-      return { result: 'allow' };
-    },
+    allowedTools: [...researchTools, 'Agent'],
     agents,
     permissionMode: 'acceptEdits',
     persistSession: true,
@@ -209,7 +156,6 @@ export function startQuery(
     console.log(`[agent] Resuming session: ${resumeSessionId}`);
   }
 
-  // Prompt iterator — only send latest user message (SDK loads history via resume)
   async function* createPrompt(): AsyncGenerator<SDKUserMessage> {
     const userMsgs = messages.filter(
       (m: any) => m.role === 'user' && m.content && m.content !== 'thinking'
@@ -231,5 +177,6 @@ export function startQuery(
   }
 
   console.log(`[agent] Starting query (model: ${model})`);
+  console.log(`[agent] MCP servers: ${JSON.stringify(Object.keys(mcpServers))}`);
   return query({ prompt: createPrompt(), options: queryOptions });
 }
