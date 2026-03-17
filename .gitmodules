@@ -1,4 +1,4 @@
 [submodule "openaire/environment/plugin"]
 	path = openaire/environment/plugin
-	url = git@github.com:the-alien-club/claude-marketplace.git
+	url = https://github.com/the-alien-club/claude-marketplace.git
 	branch = local
