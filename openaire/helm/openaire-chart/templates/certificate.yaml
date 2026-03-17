@@ -1,0 +1,18 @@
+{{- if .Values.istio.certificate.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "openaire.fullname" . }}-tls
+  namespace: istio-system  # Must be in gateway namespace for Istio to access the secret
+  labels:
+    {{- include "openaire.labels" . | nindent 4 }}
+    app.kubernetes.io/component: certificate
+spec:
+  secretName: {{ include "openaire.fullname" . }}-tls
+  issuerRef:
+    name: {{ .Values.istio.certificate.issuerName }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.istio.host }}
+{{- end }}

@@ -1,0 +1,35 @@
+{{- if .Values.istio.gateway.create }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ include "openaire.fullname" . }}-gateway
+  namespace: {{ .Values.istio.gatewayNamespace }}
+  labels:
+    {{- include "openaire.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTP server for ACME HTTP-01 challenges (no redirect)
+    - port:
+        number: 80
+        name: http-openaire
+        protocol: HTTP
+      hosts:
+        - {{ .Values.istio.host }}
+      tls:
+        httpsRedirect: false
+
+    # HTTPS server with cert-manager issued certificate
+    - port:
+        number: 443
+        name: https-openaire
+        protocol: HTTPS
+      hosts:
+        - {{ .Values.istio.host }}
+      tls:
+        mode: SIMPLE
+        credentialName: {{ include "openaire.fullname" . }}-tls
+{{- end }}

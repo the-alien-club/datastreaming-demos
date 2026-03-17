@@ -13,21 +13,31 @@ service:
   targetPort: 3000
 
 ingress:
-  enabled: true
-  className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
-    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
-  hosts:
-    - host: demo.datastreaming.ai
-      paths:
-        - path: /openaire
-          pathType: Prefix
-  tls:
-    - secretName: openaire-tls
-      hosts:
-        - demo.datastreaming.ai
+  enabled: false  # Disabled - using Istio Gateway + VirtualService instead
+
+# Istio Gateway / VirtualService / Certificate configuration
+namespace: demo-openaire
+
+istio:
+  host: demo.beta.alien.club
+  path: /openaire
+
+  gatewayNamespace: istio-system
+
+  gateway:
+    create: true
+
+  virtualService:
+    enabled: true
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+
+  certificate:
+    enabled: true
+    issuerName: letsencrypt-prod
 
 resources:
   requests:
