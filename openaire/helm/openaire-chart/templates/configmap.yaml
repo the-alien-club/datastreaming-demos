@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "openaire.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "openaire.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+data:
+  OPENAIRE_MCP_URL: {{ .Values.config.openaireeMcpUrl | quote }}
+  MARKETPLACE_BRANCH: {{ .Values.config.marketplaceBranch | quote }}
+  NEXT_PUBLIC_AUTHENTIK_BASE_URL: {{ .Values.config.authentikBaseUrl | quote }}
+  AUTHENTIK_APP_SLUG: {{ .Values.config.authentikAppSlug | quote }}
+  BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}

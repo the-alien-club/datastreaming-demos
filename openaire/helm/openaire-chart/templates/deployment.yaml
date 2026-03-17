@@ -32,12 +32,15 @@ spec:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
-          env:
-            {{- toYaml .Values.env | nindent 12 }}
-          {{- if .Values.envFrom }}
           envFrom:
-            {{- toYaml .Values.envFrom | nindent 12 }}
-          {{- end }}
+            - configMapRef:
+                name: {{ include "openaire.fullname" . }}-config
+            - secretRef:
+                name: {{ include "openaire.fullname" . }}-authentik
+            - secretRef:
+                name: {{ include "openaire.fullname" . }}-ai-providers
+            - secretRef:
+                name: {{ include "openaire.fullname" . }}-app
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
