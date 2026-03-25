@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository:  rg.fr-par.scw.cloud/ns-data-streaming/demo-openaire
   pullPolicy: Always
-  tag: "0.1.7"
+  tag: "0.1.8"
 
 imagePullSecrets: []
 
@@ -53,7 +53,7 @@ config:
   marketplaceBranch: main
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
-  betterAuthUrl: https://demo.beta.alien.club/openaire
+  betterAuthUrl: https://demo.beta.alien.club
 
 livenessProbe:
   httpGet:

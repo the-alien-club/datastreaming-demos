@@ -51,7 +51,7 @@ WORKDIR /app/packages/frontend
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_BASE_PATH=/openaire
 ENV BETTER_AUTH_SECRET=build-time-placeholder
-ENV BETTER_AUTH_URL=http://localhost:3000/openaire
+ENV BETTER_AUTH_URL=http://localhost:3000
 RUN npm run build
 
 # Stage 3: Production runtime
@@ -74,9 +74,8 @@ COPY --from=builder --chown=node:node /app/packages/viz-mcp/dist ./packages/viz-
 COPY --from=builder --chown=node:node /app/packages/viz-mcp/package.json ./packages/viz-mcp/
 COPY --from=builder --chown=node:node /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
 
-# Copy Next.js standalone build
+# Copy Next.js standalone build (includes its own trimmed node_modules — do NOT overwrite)
 COPY --from=builder --chown=node:node /app/packages/frontend/.next/standalone ./packages/frontend/
-COPY --from=builder --chown=node:node /app/packages/frontend/node_modules ./packages/frontend/node_modules
 COPY --from=builder --chown=node:node /app/packages/frontend/.next/static ./packages/frontend/.next/static
 COPY --from=builder --chown=node:node /app/packages/frontend/public ./packages/frontend/public
 
