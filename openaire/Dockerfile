@@ -74,12 +74,12 @@ COPY --from=builder --chown=node:node /app/packages/viz-mcp/dist ./packages/viz-
 COPY --from=builder --chown=node:node /app/packages/viz-mcp/package.json ./packages/viz-mcp/
 COPY --from=builder --chown=node:node /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
 
-# Copy Next.js standalone build (includes its own trimmed node_modules)
+# Copy Next.js standalone build, then layer full node_modules on top.
+# Standalone tracing misses runtime deps like the Agent SDK (spawns CLI subprocess).
 COPY --from=builder --chown=node:node /app/packages/frontend/.next/standalone ./packages/frontend/
+COPY --from=builder --chown=node:node /app/packages/frontend/node_modules ./packages/frontend/node_modules
 COPY --from=builder --chown=node:node /app/packages/frontend/.next/static ./packages/frontend/.next/static
 COPY --from=builder --chown=node:node /app/packages/frontend/public ./packages/frontend/public
-# Agent SDK spawns claude CLI as subprocess — not traced by standalone, copy explicitly
-COPY --from=builder --chown=node:node /app/packages/frontend/node_modules/@anthropic-ai ./packages/frontend/node_modules/@anthropic-ai
 
 # Copy entrypoint script
 COPY --chown=node:node environment/entrypoint.sh /app/entrypoint.sh
