@@ -1,5 +1,7 @@
 import type { Message, JobStatus } from "@/types/research";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export class AuthExpiredError extends Error {
   constructor(message: string) {
     super(message);
@@ -39,7 +41,7 @@ export async function startResearchJob(
     ...(previousJobId && { previousJobId }),
   };
 
-  const response = await fetch("/api/research-sdk/start", {
+  const response = await fetch(`${basePath}/api/research-sdk/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -64,7 +66,7 @@ export async function startResearchJob(
  * Get the current status of a research job
  */
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const response = await fetch(`/api/research-sdk/status/${jobId}`);
+  const response = await fetch(`${basePath}/api/research-sdk/status/${jobId}`);
 
   if (!response.ok) {
     throw new Error(`Failed to get job status: ${response.status}`);
@@ -77,7 +79,7 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
  * Stop a running research job
  */
 export async function stopResearchJob(jobId: string): Promise<void> {
-  const response = await fetch(`/api/research-sdk/stop/${jobId}`, {
+  const response = await fetch(`${basePath}/api/research-sdk/stop/${jobId}`, {
     method: "POST",
   });
 

@@ -45,9 +45,13 @@ WORKDIR /app/packages/viz-mcp
 RUN npm run build
 
 # Build Next.js (NEXT_PUBLIC_BASE_PATH baked at build time for prod routing)
+# BETTER_AUTH_* are build-time placeholders so static generation doesn't fail;
+# real values are injected at runtime via ConfigMap/Secrets.
 WORKDIR /app/packages/frontend
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_BASE_PATH=/openaire
+ENV BETTER_AUTH_SECRET=build-time-placeholder
+ENV BETTER_AUTH_URL=http://localhost:3000/openaire
 RUN npm run build
 
 # Stage 3: Production runtime
