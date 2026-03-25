@@ -44,9 +44,10 @@ RUN npm run build
 WORKDIR /app/packages/viz-mcp
 RUN npm run build
 
-# Build Next.js
+# Build Next.js (NEXT_PUBLIC_BASE_PATH baked at build time for prod routing)
 WORKDIR /app/packages/frontend
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_BASE_PATH=/openaire
 RUN npm run build
 
 # Stage 3: Production runtime
@@ -55,40 +56,35 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install Claude Code CLI globally
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Code CLI globally and git (needed for SDK to clone plugin from GitHub)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @anthropic-ai/claude-code
 
-# Create non-root user with home directory (Claude Code needs ~/.claude/)
-RUN groupadd --system --gid 1001 nodejs \
-    && useradd --system --uid 1001 --gid nodejs --create-home nextjs
-
+# Use the built-in node user (UID 1000, GID 1000) — matches Helm securityContext.runAsUser
 # Copy built MCP servers
-COPY --from=builder --chown=nextjs:nodejs /app/packages/mcp/dist ./packages/mcp/dist
-COPY --from=builder --chown=nextjs:nodejs /app/packages/mcp/package.json ./packages/mcp/
-COPY --from=builder --chown=nextjs:nodejs /app/packages/mcp/node_modules ./packages/mcp/node_modules
+COPY --from=builder --chown=node:node /app/packages/mcp/dist ./packages/mcp/dist
+COPY --from=builder --chown=node:node /app/packages/mcp/package.json ./packages/mcp/
+COPY --from=builder --chown=node:node /app/packages/mcp/node_modules ./packages/mcp/node_modules
 
-COPY --from=builder --chown=nextjs:nodejs /app/packages/viz-mcp/dist ./packages/viz-mcp/dist
-COPY --from=builder --chown=nextjs:nodejs /app/packages/viz-mcp/package.json ./packages/viz-mcp/
-COPY --from=builder --chown=nextjs:nodejs /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
+COPY --from=builder --chown=node:node /app/packages/viz-mcp/dist ./packages/viz-mcp/dist
+COPY --from=builder --chown=node:node /app/packages/viz-mcp/package.json ./packages/viz-mcp/
+COPY --from=builder --chown=node:node /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
 
 # Copy Next.js standalone build
-COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/standalone ./packages/frontend/
-COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/node_modules ./packages/frontend/node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/.next/static ./packages/frontend/.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/packages/frontend/public ./packages/frontend/public
+COPY --from=builder --chown=node:node /app/packages/frontend/.next/standalone ./packages/frontend/
+COPY --from=builder --chown=node:node /app/packages/frontend/node_modules ./packages/frontend/node_modules
+COPY --from=builder --chown=node:node /app/packages/frontend/.next/static ./packages/frontend/.next/static
+COPY --from=builder --chown=node:node /app/packages/frontend/public ./packages/frontend/public
 
 # Copy entrypoint script
-COPY --chown=nextjs:nodejs environment/entrypoint.sh /app/entrypoint.sh
+COPY --chown=node:node environment/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Install git (needed for SDK to clone plugin from GitHub)
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
 # Create writable dirs for Claude Code and MCP config
-RUN mkdir -p /etc/claude-code /tmp/claude-openaire /app/.claude \
-    && chown -R nextjs:nodejs /etc/claude-code /tmp/claude-openaire /app/.claude
+RUN mkdir -p /etc/claude-code /tmp/claude-openaire /home/node/.claude \
+    && chown -R node:node /etc/claude-code /tmp/claude-openaire /home/node/.claude /app
 
-USER nextjs
+USER node
 
 EXPOSE 3000
 

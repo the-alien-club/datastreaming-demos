@@ -32,10 +32,8 @@ SETTINGS=$(cat <<ENDJSON
 ENDJSON
 )
 
-mkdir -p /etc/claude-code ~/.claude /app/.claude
-echo "$SETTINGS" > /etc/claude-code/managed-settings.json
+mkdir -p ~/.claude
 echo "$SETTINGS" > ~/.claude/settings.json
-echo "$SETTINGS" > /app/.claude/settings.json
 
 echo "[entrypoint] Marketplace: $MARKETPLACE_REPO#$MARKETPLACE_BRANCH"
 echo "[entrypoint] Plugin: openaire@alien-openscience"
