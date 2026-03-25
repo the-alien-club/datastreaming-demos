@@ -74,10 +74,10 @@ COPY --from=builder --chown=node:node /app/packages/viz-mcp/dist ./packages/viz-
 COPY --from=builder --chown=node:node /app/packages/viz-mcp/package.json ./packages/viz-mcp/
 COPY --from=builder --chown=node:node /app/packages/viz-mcp/node_modules ./packages/viz-mcp/node_modules
 
-# Copy Next.js standalone build, then layer full node_modules on top.
-# Standalone tracing misses runtime deps like the Agent SDK (spawns CLI subprocess).
-COPY --from=builder --chown=node:node /app/packages/frontend/.next/standalone ./packages/frontend/
+# Copy full node_modules first (standalone tracing misses runtime deps like Agent SDK).
+# Then copy standalone build ON TOP — its patched Next.js internals (basePath etc.) win.
 COPY --from=builder --chown=node:node /app/packages/frontend/node_modules ./packages/frontend/node_modules
+COPY --from=builder --chown=node:node /app/packages/frontend/.next/standalone ./packages/frontend/
 COPY --from=builder --chown=node:node /app/packages/frontend/.next/static ./packages/frontend/.next/static
 COPY --from=builder --chown=node:node /app/packages/frontend/public ./packages/frontend/public
 
