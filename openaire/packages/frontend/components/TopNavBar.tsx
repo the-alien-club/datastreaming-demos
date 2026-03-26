@@ -45,9 +45,10 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
   return (
     <div className="flex items-center justify-between p-4">
       <div className="font-bold text-xl flex gap-2 items-center">
-        <Image
-          src="/wordmark.svg"
-          alt="Company Wordmark"
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/wordmark.svg`}
+          alt="Alien Intelligence"
           width={150}
           height={24}
           className="invert dark:invert-0"
