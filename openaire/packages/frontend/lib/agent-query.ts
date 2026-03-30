@@ -142,7 +142,7 @@ export async function startQuery(
   accessToken?: string,
   resumeSessionId?: string | null,
 ) {
-  const systemPrompt = getSystemPrompt();
+  const systemPrompt = await getSystemPrompt();
   const discoveredConfig = await discoverMcpConfig();
   const mcpServers = buildMcpServers(discoveredConfig, accessToken);
   const agents = buildAgents(discoveredConfig, accessToken);
