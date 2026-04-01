@@ -19,7 +19,7 @@ ingress:
 namespace: demo-openaire
 
 istio:
-  host: demo.beta.alien.club
+  host: demo.alien.club
   path: /openaire
 
   gatewayNamespace: istio-system
@@ -49,11 +49,11 @@ resources:
 
 # Non-sensitive config — override these in ArgoCD helm.values
 config:
-  openaireeMcpUrl: https://openaire.mcp.beta.alien.club/mcp
+  openaireeMcpUrl: https://openaire.mcp.alien.club/mcp
   marketplaceBranch: main
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
-  betterAuthUrl: https://demo.beta.alien.club
+  betterAuthUrl: https://demo.alien.club
 
 livenessProbe:
   httpGet:
