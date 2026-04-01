@@ -68,23 +68,39 @@ export default function HowItWorksDialog() {
             {/* Architecture */}
             <section>
               <h3 className="text-sm font-semibold mb-2">Architecture</h3>
-              <div className="rounded-lg border bg-muted/50 p-4 text-xs font-mono space-y-1">
-                <p className="text-muted-foreground">{"  "}You ask a question</p>
-                <p>{"      "}|</p>
-                <p>{"      "}v</p>
-                <p className="text-foreground">{"  "}Claude (Agent SDK)</p>
-                <p>{"      "}|</p>
-                <p>{"   "}+--+--+</p>
-                <p>{"   "}|{"     "}|{"     "}|</p>
-                <p>{"   "}v{"     "}v{"     "}v</p>
-                <p>
-                  <span className="text-blue-500 dark:text-blue-400">OpenAIRE</span>
-                  {"  "}
-                  <span className="text-green-500 dark:text-green-400">bioRxiv</span>
-                  {"  "}
-                  <span className="text-orange-500 dark:text-orange-400">medRxiv</span>
-                </p>
-                <p className="text-muted-foreground">{"  "}MCP{"      "}MCP{"      "}MCP</p>
+              <div className="rounded-lg border bg-muted/50 p-5 flex flex-col items-center gap-0">
+                {/* User */}
+                <div className="rounded-md border bg-background px-4 py-2 text-xs font-medium">
+                  Your question
+                </div>
+                <div className="h-4 w-px bg-border" />
+                {/* Claude */}
+                <div className="rounded-md border-2 border-primary/50 bg-background px-4 py-2 text-xs font-semibold">
+                  Claude (Agent SDK)
+                </div>
+                {/* Branching lines */}
+                <div className="h-4 w-px bg-border" />
+                <div className="relative w-3/4 h-px bg-border">
+                  <div className="absolute left-0 top-0 h-4 w-px bg-border" />
+                  <div className="absolute left-1/2 top-0 h-4 w-px bg-border -translate-x-px" />
+                  <div className="absolute right-0 top-0 h-4 w-px bg-border" />
+                </div>
+                <div className="h-4" />
+                {/* MCP Servers */}
+                <div className="grid grid-cols-3 gap-3 w-full">
+                  <div className="flex flex-col items-center gap-1 rounded-md border bg-background p-2">
+                    <span className="text-[10px] font-medium text-blue-500 dark:text-blue-400">OpenAIRE</span>
+                    <span className="text-[10px] text-muted-foreground">MCP</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 rounded-md border bg-background p-2">
+                    <span className="text-[10px] font-medium text-green-500 dark:text-green-400">bioRxiv</span>
+                    <span className="text-[10px] text-muted-foreground">MCP</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1 rounded-md border bg-background p-2">
+                    <span className="text-[10px] font-medium text-orange-500 dark:text-orange-400">medRxiv</span>
+                    <span className="text-[10px] text-muted-foreground">MCP</span>
+                  </div>
+                </div>
               </div>
             </section>
 
