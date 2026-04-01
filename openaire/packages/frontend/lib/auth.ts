@@ -10,6 +10,9 @@ const auth = betterAuth({
   appName: "OpenAIRE Research Intelligence",
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL,
+  rateLimit: {
+    enabled: false,
+  },
   session: {
     cookieCache: {
       enabled: true,
