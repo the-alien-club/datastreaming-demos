@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AVAILABLE_MODELS } from "@/constants/models";
 import authClient from "@/lib/connectors/auth-client";
+import HowItWorksDialog from "@/components/HowItWorksDialog";
+import InstallPluginDialog from "@/components/InstallPluginDialog";
 
 /** Resolve the effective appearance for "system" theme */
 function resolvedIsDark(theme: string | undefined): boolean {
@@ -53,6 +55,10 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
           height={24}
           className="invert dark:invert-0"
         />
+      </div>
+      <div className="flex items-center gap-1">
+        <HowItWorksDialog />
+        <InstallPluginDialog />
       </div>
       <div className="flex items-center gap-2">
         {selectedModel && onModelChange && (
