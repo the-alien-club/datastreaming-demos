@@ -37,8 +37,8 @@ function BarChartComponent({ data }: { data: ChartData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{data.config.title}</CardTitle>
-        <CardDescription>{data.config.description}</CardDescription>
+        <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
+        <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={data.chartConfig}>
@@ -93,8 +93,8 @@ function MultiBarChartComponent({ data }: { data: ChartData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{data.config.title}</CardTitle>
-        <CardDescription>{data.config.description}</CardDescription>
+        <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
+        <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={data.chartConfig}>
@@ -152,8 +152,8 @@ function LineChartComponent({ data }: { data: ChartData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{data.config.title}</CardTitle>
-        <CardDescription>{data.config.description}</CardDescription>
+        <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
+        <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={data.chartConfig}>
@@ -232,8 +232,8 @@ function PieChartComponent({ data }: { data: ChartData }) {
   return (
     <Card className="flex flex-col">
       <CardHeader className="items-center pb-0">
-        <CardTitle className="text-xl">{data.config.title}</CardTitle>
-        <CardDescription>{data.config.description}</CardDescription>
+        <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
+        <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex-1 pb-0">
         <ChartContainer
@@ -318,8 +318,8 @@ function AreaChartComponent({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{data.config.title}</CardTitle>
-        <CardDescription>{data.config.description}</CardDescription>
+        <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
+        <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={data.chartConfig}>
@@ -396,8 +396,8 @@ function TableChartComponent({ data }: { data: ChartData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-xl">{data.config.title}</CardTitle>
-        <CardDescription>{data.config.description}</CardDescription>
+        <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
+        <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
