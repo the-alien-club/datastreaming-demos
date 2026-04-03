@@ -35,7 +35,7 @@ function BarChartComponent({ data }: { data: ChartData }) {
   const dataKey = Object.keys(data.chartConfig)[0];
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
         <CardDescription className="break-words">{data.config.description}</CardDescription>
@@ -91,7 +91,7 @@ function BarChartComponent({ data }: { data: ChartData }) {
 
 function MultiBarChartComponent({ data }: { data: ChartData }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
         <CardDescription className="break-words">{data.config.description}</CardDescription>
@@ -150,7 +150,7 @@ function MultiBarChartComponent({ data }: { data: ChartData }) {
 
 function LineChartComponent({ data }: { data: ChartData }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
         <CardDescription className="break-words">{data.config.description}</CardDescription>
@@ -230,7 +230,7 @@ function PieChartComponent({ data }: { data: ChartData }) {
   });
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col overflow-hidden">
       <CardHeader className="items-center pb-0">
         <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
         <CardDescription className="break-words">{data.config.description}</CardDescription>
@@ -316,7 +316,7 @@ function AreaChartComponent({
   stacked?: boolean;
 }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
         <CardDescription className="break-words">{data.config.description}</CardDescription>
@@ -394,14 +394,14 @@ function TableChartComponent({ data }: { data: ChartData }) {
   const rows = data.data || [];
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader>
         <CardTitle className="text-base xl:text-xl break-words">{data.config.title}</CardTitle>
         <CardDescription className="break-words">{data.config.description}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
+        <div className="overflow-x-auto -mx-2 px-2">
+          <table className="w-full text-xs xl:text-sm border-collapse">
             <thead>
               <tr>
                 {columns.map((col) => (

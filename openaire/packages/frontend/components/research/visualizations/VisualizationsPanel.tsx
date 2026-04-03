@@ -65,17 +65,17 @@ export function VisualizationsPanel({ messages }: VisualizationsPanelProps) {
           Research Analytics
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto min-h-0 snap-y snap-mandatory scrollbar-hover">
+      <CardContent className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 snap-y snap-mandatory scrollbar-hover">
         <div className="min-h-full flex flex-col">
           {messages
             .flatMap((m) => m.charts || [])
             .map((chart, index) => (
               <div
                 key={`chart-${index}`}
-                className="w-full min-h-full flex-shrink-0 snap-start snap-always"
+                className="w-full min-h-full flex-shrink-0 snap-start snap-always overflow-hidden"
               >
-                <div className="w-full h-full p-3 md:p-6 flex flex-col">
-                  <div className="w-full md:w-[90%] flex-1 mx-auto">
+                <div className="w-full h-full p-2 xl:p-6 flex flex-col">
+                  <div className="w-full xl:w-[90%] flex-1 mx-auto min-w-0">
                     <ChartRenderer data={chart} />
                   </div>
                 </div>
