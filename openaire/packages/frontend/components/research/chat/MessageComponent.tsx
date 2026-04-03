@@ -48,7 +48,7 @@ export const MessageComponent: React.FC<MessageComponentProps> = ({
     <div className="flex items-start gap-2">
       {message.role === "assistant" && <AgentLogo spinning={isThinking} />}
       <div
-        className={`flex flex-col max-w-[75%] ${
+        className={`flex flex-col max-w-[90%] md:max-w-[75%] ${
           message.role === "user" ? "ml-auto" : ""
         }`}
       >
@@ -56,7 +56,7 @@ export const MessageComponent: React.FC<MessageComponentProps> = ({
           <span className="animate-shimmer italic mt-1">Thinking...</span>
         ) : (
         <div
-          className={`p-3 rounded-md text-base ${
+          className={`p-2.5 md:p-3 rounded-md text-sm md:text-base ${
             message.role === "user"
               ? "bg-primary text-primary-foreground"
               : "bg-muted border"

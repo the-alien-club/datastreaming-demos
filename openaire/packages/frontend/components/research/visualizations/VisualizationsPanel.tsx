@@ -36,13 +36,13 @@ export function VisualizationsPanel({ messages }: VisualizationsPanelProps) {
 
   if (!hasCharts) {
     return (
-      <Card className="flex-1 flex flex-col h-full overflow-hidden">
-        <CardContent className="flex-1 flex flex-col items-center justify-center">
+      <Card className="w-full flex-1 flex flex-col h-full overflow-hidden">
+        <CardContent className="flex-1 flex flex-col items-center justify-center p-4">
           <div className="flex flex-col items-center gap-4 text-center">
-            <ChartLine className="w-12 h-12 text-muted-foreground" />
+            <ChartLine className="w-10 h-10 md:w-12 md:h-12 text-muted-foreground" />
             <div className="space-y-2">
-              <CardTitle className="text-lg">Research Analytics</CardTitle>
-              <CardDescription className="text-base">
+              <CardTitle className="text-base md:text-lg">Research Analytics</CardTitle>
+              <CardDescription className="text-sm md:text-base">
                 Visualizations will appear here when you search
               </CardDescription>
               <div className="flex flex-wrap justify-center gap-2 mt-4">
@@ -58,9 +58,9 @@ export function VisualizationsPanel({ messages }: VisualizationsPanelProps) {
   }
 
   return (
-    <Card className="flex-1 flex flex-col h-full overflow-hidden">
+    <Card className="w-full flex-1 flex flex-col h-full overflow-hidden">
       <CardHeader className="py-3 px-4 shrink-0">
-        <CardTitle className="text-lg flex items-center gap-2">
+        <CardTitle className="text-base md:text-lg flex items-center gap-2">
           <ChartLine className="w-5 h-5" />
           Research Analytics
         </CardTitle>
@@ -74,8 +74,8 @@ export function VisualizationsPanel({ messages }: VisualizationsPanelProps) {
                 key={`chart-${index}`}
                 className="w-full min-h-full flex-shrink-0 snap-start snap-always"
               >
-                <div className="w-full h-full p-6 flex flex-col">
-                  <div className="w-[90%] flex-1 mx-auto">
+                <div className="w-full h-full p-3 md:p-6 flex flex-col">
+                  <div className="w-full md:w-[90%] flex-1 mx-auto">
                     <ChartRenderer data={chart} />
                   </div>
                 </div>

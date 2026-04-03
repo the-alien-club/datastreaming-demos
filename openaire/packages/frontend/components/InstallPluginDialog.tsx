@@ -70,10 +70,10 @@ export default function InstallPluginDialog() {
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 text-sm gap-1.5">
           <Download className="h-3.5 w-3.5" />
-          Install the plugin
+          <span className="hidden xl:inline">Install the plugin</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh]">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>Install the plugin</DialogTitle>
           <DialogDescription>

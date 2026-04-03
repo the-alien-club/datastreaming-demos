@@ -41,10 +41,10 @@ export default function HowItWorksDialog() {
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 text-sm gap-1.5">
           <Info className="h-3.5 w-3.5" />
-          How it works
+          <span className="hidden xl:inline">How it works</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh]">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>How it works</DialogTitle>
           <DialogDescription>

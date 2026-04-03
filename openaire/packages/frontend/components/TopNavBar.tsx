@@ -45,28 +45,34 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
   }
 
   return (
-    <div className="flex items-center justify-between p-4">
-      <div className="font-bold text-xl flex gap-2 items-center">
+    <div className="flex items-center justify-between p-3 xl:p-4 gap-1 overflow-hidden">
+      {/* Logo */}
+      <div className="font-bold text-xl flex gap-2 items-center shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/wordmark.svg`}
           alt="Alien Intelligence"
           width={150}
           height={24}
-          className="invert dark:invert-0"
+          className="invert dark:invert-0 h-5 xl:h-6 w-auto"
         />
       </div>
-      <div className="flex items-center gap-1">
+
+      {/* Actions — single row, wraps text labels only on large screens */}
+      <div className="flex items-center gap-1 shrink-0">
         <HowItWorksDialog />
         <InstallPluginDialog />
-      </div>
-      <div className="flex items-center gap-2">
         {selectedModel && onModelChange && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-8 text-sm">
-                {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name}
-                <ChevronDown className="ml-2 h-4 w-4" />
+              <Button variant="outline" className="h-8 text-xs xl:text-sm px-2 xl:px-3">
+                <span className="hidden xl:inline">
+                  {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name}
+                </span>
+                <span className="xl:hidden">
+                  {AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.name?.split(" ")[0]}
+                </span>
+                <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -90,7 +96,7 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
               onClick={() => authClient.signOut()}
             >
               <LogOut className="h-3.5 w-3.5" />
-              {session.user?.name || session.user?.email || "Sign out"}
+              <span className="hidden xl:inline">{session.user?.name || session.user?.email || "Sign out"}</span>
             </Button>
           ) : (
             <Button
@@ -105,13 +111,14 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
               }
             >
               <LogIn className="h-3.5 w-3.5" />
-              Sign in
+              <span className="hidden xl:inline">Sign in</span>
             </Button>
           )
         )}
         <Button
           variant="outline"
           size="icon"
+          className="h-8 w-8 shrink-0"
           onClick={() => setTheme(resolvedIsDark(theme) ? "light" : "dark")}
         >
           <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />

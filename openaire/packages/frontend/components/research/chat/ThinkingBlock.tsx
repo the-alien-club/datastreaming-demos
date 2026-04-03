@@ -204,7 +204,7 @@ export function ThinkingBlock({ progressMessages, toolActivity = [] }: ThinkingB
       <div className="w-5 flex-shrink-0 mt-2.5 flex justify-center">
         <div className="w-3 h-3 rounded-full bg-foreground" />
       </div>
-      <div className="flex flex-col max-w-[75%]">
+      <div className="flex flex-col max-w-[90%] md:max-w-[75%]">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 p-2 rounded-md text-sm text-muted-foreground hover:bg-muted transition-colors"

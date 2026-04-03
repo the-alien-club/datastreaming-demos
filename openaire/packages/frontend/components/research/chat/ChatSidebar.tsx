@@ -50,7 +50,7 @@ export function ChatSidebar({
   const scrollRef = useAutoScroll(messages, isLoading, toolActivity.length);
 
   return (
-    <Card className="w-1/3 flex flex-col h-full">
+    <Card className="w-full flex flex-col h-full">
       <CardHeader className="py-3 px-4">
         <ChatHeader />
       </CardHeader>
