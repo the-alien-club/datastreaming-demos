@@ -29,6 +29,12 @@ export async function POST(req: NextRequest) {
         accessToken = tokenData?.accessToken || undefined;
       }
       console.log(`[auth] Access token: ${accessToken ? 'yes' : 'no'}`);
+      // Debug-only: log token shape for triaging MCP auth failures.
+      // if (accessToken) {
+      //   console.log(
+      //     `[auth] Access token prefix=${JSON.stringify(accessToken.slice(0, 24))} len=${accessToken.length} dots=${(accessToken.match(/\./g) || []).length}`
+      //   );
+      // }
     } catch {
       // Auth not configured or no session — continue without token
     }

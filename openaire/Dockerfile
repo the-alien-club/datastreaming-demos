@@ -85,9 +85,11 @@ COPY --from=builder --chown=node:node /app/packages/frontend/public ./packages/f
 COPY --chown=node:node environment/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Create writable dirs for Claude Code and MCP config
+# Create writable dirs for Claude Code and MCP config.
+# /app is already node-owned via COPY --chown=node:node above; recursing into
+# it here adds ~90s on overlayfs because of node_modules copy-up.
 RUN mkdir -p /etc/claude-code /tmp/claude-openaire /home/node/.claude \
-    && chown -R node:node /etc/claude-code /tmp/claude-openaire /home/node/.claude /app
+    && chown node:node /etc/claude-code /tmp/claude-openaire /home/node/.claude
 
 USER node
 

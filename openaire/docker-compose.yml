@@ -21,4 +21,9 @@ services:
       - AUTHENTIK_APP_SLUG=${AUTHENTIK_APP_SLUG:-datastreaming}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:?Set BETTER_AUTH_URL}
+    # Required on Linux: Docker Desktop adds host.docker.internal automatically
+    # but native Linux Docker does not. Without this the container can't reach
+    # OPENAIRE_MCP_URL when it points at localhost-on-host (e.g. dev stack).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

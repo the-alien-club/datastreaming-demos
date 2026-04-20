@@ -47,6 +47,17 @@ async function discoverMcpConfig(): Promise<Record<string, any>> {
     if (res.ok) {
       const json = await res.json();
       console.log(`[agent] Discovered MCP config from ${MARKETPLACE_REPO}#${MARKETPLACE_BRANCH}`);
+
+      // Per-server override: OPENAIRE_MCP_URL rewrites the plugin's openaire URL
+      // while keeping sibling servers (datacluster-*) intact.
+      // Enable for local dev against a host-exposed mcp-openaire (requires
+      // host.docker.internal:host-gateway extra_hosts on Linux).
+      // const overrideUrl = process.env.OPENAIRE_MCP_URL;
+      // if (overrideUrl && json?.mcpServers?.openaire) {
+      //   console.log(`[agent] Overriding openaire URL: ${json.mcpServers.openaire.url} -> ${overrideUrl}`);
+      //   json.mcpServers.openaire.url = overrideUrl;
+      // }
+
       _mcpConfigCache = json;
       return json;
     }
