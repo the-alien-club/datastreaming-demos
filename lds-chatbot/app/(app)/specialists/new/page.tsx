@@ -25,28 +25,18 @@ interface AIModel {
   provider: { id: number; slug: string; name: string }
 }
 
-const MCP_CONFIGS = [
-  {
-    id: "datacluster",
-    name: "Data Cluster",
-    description: "Search and retrieve documents from data cluster datasets.",
-  },
-  {
-    id: "biorxiv",
-    name: "BioRxiv",
-    description: "Search and read biomedical preprints from BioRxiv and MedRxiv.",
-  },
-  {
-    id: "openaire",
-    name: "OpenAIRE",
-    description: "Access 600M+ research products. Author profiles, citations, projects.",
-  },
-]
+interface McpConfig {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+}
 
 export default function NewSpecialistPage() {
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
   const [models, setModels] = useState<AIModel[]>([])
+  const [mcpList, setMcpList] = useState<McpConfig[]>([])
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -55,10 +45,13 @@ export default function NewSpecialistPage() {
   const [mcpIds, setMcpIds] = useState<string[]>([])
 
   useEffect(() => {
-    fetch("/api/models")
-      .then((r) => r.json())
-      .then((data: AIModel[]) => setModels(Array.isArray(data) ? data : []))
-      .catch(() => {})
+    Promise.all([
+      fetch("/api/models").then((r) => r.json()).catch(() => []),
+      fetch("/api/mcps").then((r) => r.json()).catch(() => []),
+    ]).then(([modelsData, mcpsData]: [AIModel[], McpConfig[]]) => {
+      setModels(Array.isArray(modelsData) ? modelsData : [])
+      setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
+    })
   }, [])
 
   function toggleMcp(mcpId: string) {
@@ -187,25 +180,34 @@ export default function NewSpecialistPage() {
 
         <div className="space-y-2">
           <Label>MCP Tools</Label>
-          <div className="space-y-2">
-            {MCP_CONFIGS.map((mcp) => (
-              <label
-                key={mcp.id}
-                className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/40 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5 accent-primary"
-                  checked={mcpIds.includes(mcp.id)}
-                  onChange={() => toggleMcp(mcp.id)}
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{mcp.name}</p>
-                  <p className="text-xs text-muted-foreground">{mcp.description}</p>
-                </div>
-              </label>
-            ))}
-          </div>
+          {mcpList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No MCPs registered.{" "}
+              <Link href="/mcps" className="underline">Add one</Link> to enable tools.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {mcpList.map((mcp) => (
+                <label
+                  key={mcp.id}
+                  className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-primary"
+                    checked={mcpIds.includes(mcp.id)}
+                    onChange={() => toggleMcp(mcp.id)}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{mcp.name}</p>
+                    {mcp.description && (
+                      <p className="text-xs text-muted-foreground">{mcp.description}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">

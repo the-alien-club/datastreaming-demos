@@ -53,7 +53,13 @@ export default async function ConversationsPage() {
     .from(conversations)
     .leftJoin(agents, eq(conversations.agentId, agents.id))
     .leftJoin(messages, eq(messages.conversationId, conversations.id))
-    .groupBy(conversations.id)
+    .groupBy(
+      conversations.id,
+      conversations.agentId,
+      conversations.title,
+      conversations.updatedAt,
+      agents.name,
+    )
     .orderBy(desc(conversations.updatedAt))
 
   // Group by date

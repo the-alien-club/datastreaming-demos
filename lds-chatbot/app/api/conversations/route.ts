@@ -27,7 +27,15 @@ export async function GET(request: Request): Promise<Response> {
     .from(conversations)
     .leftJoin(agents, eq(conversations.agentId, agents.id))
     .leftJoin(messages, eq(messages.conversationId, conversations.id))
-    .groupBy(conversations.id)
+    .groupBy(
+      conversations.id,
+      conversations.agentId,
+      conversations.title,
+      conversations.sessionId,
+      conversations.createdAt,
+      conversations.updatedAt,
+      agents.name,
+    )
     .orderBy(desc(conversations.updatedAt))
 
   return NextResponse.json(rows)

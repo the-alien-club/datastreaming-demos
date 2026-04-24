@@ -3,26 +3,22 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
-import { specialists } from "@/lib/db/schema"
+import { specialists, mcps } from "@/lib/db/schema"
 import { desc } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { BrainCircuit, Plus, Settings } from "lucide-react"
 
-const MCP_NAMES: Record<string, string> = {
-  datacluster: "Data Cluster",
-  biorxiv: "BioRxiv",
-  openaire: "OpenAIRE",
-}
-
 export default async function SpecialistsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const specialistList = await db.query.specialists.findMany({
-    orderBy: [desc(specialists.createdAt)],
-  })
+  const [specialistList, mcpRows] = await Promise.all([
+    db.query.specialists.findMany({ orderBy: [desc(specialists.createdAt)] }),
+    db.select({ id: mcps.id, name: mcps.name }).from(mcps),
+  ])
+  const mcpNames = new Map(mcpRows.map((m) => [m.id, m.name]))
 
   return (
     <div className="p-6">
@@ -83,7 +79,7 @@ export default async function SpecialistsPage() {
                     </Badge>
                     {mcpIds.map((mcpId) => (
                       <Badge key={mcpId} variant="outline" className="text-xs">
-                        {MCP_NAMES[mcpId] ?? mcpId}
+                        {mcpNames.get(mcpId) ?? mcpId}
                       </Badge>
                     ))}
                   </div>
