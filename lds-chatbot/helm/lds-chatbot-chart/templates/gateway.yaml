@@ -1,0 +1,35 @@
+{{- if .Values.istio.gateway.create }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ include "lds-chatbot.fullname" . }}-gateway
+  namespace: {{ .Values.istio.gatewayNamespace }}
+  labels:
+    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTP server for ACME HTTP-01 challenges (no redirect).
+    - port:
+        number: 80
+        name: http-lds-chatbot
+        protocol: HTTP
+      hosts:
+        - {{ .Values.istio.host }}
+      tls:
+        httpsRedirect: false
+
+    # HTTPS server with cert-manager issued certificate.
+    - port:
+        number: 443
+        name: https-lds-chatbot
+        protocol: HTTPS
+      hosts:
+        - {{ .Values.istio.host }}
+      tls:
+        mode: SIMPLE
+        credentialName: {{ include "lds-chatbot.fullname" . }}-tls
+{{- end }}

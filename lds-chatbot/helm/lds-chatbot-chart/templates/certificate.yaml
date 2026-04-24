@@ -1,0 +1,19 @@
+{{- if .Values.istio.certificate.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "lds-chatbot.fullname" . }}-tls
+  # Must live in the gateway namespace so Istio can mount the TLS secret.
+  namespace: {{ .Values.istio.gatewayNamespace }}
+  labels:
+    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: certificate
+spec:
+  secretName: {{ include "lds-chatbot.fullname" . }}-tls
+  issuerRef:
+    name: {{ .Values.istio.certificate.issuerName }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.istio.host }}
+{{- end }}

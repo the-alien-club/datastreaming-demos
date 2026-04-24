@@ -1,0 +1,128 @@
+replicaCount: 1
+
+image:
+  repository: rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot
+  pullPolicy: Always
+  tag: "0.1.0"
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+namespace: demo-lds-chatbot
+
+# Attaches to an existing Istio Gateway that already serves `istio.host`.
+# The `/agents` prefix is baked into the Next.js bundle at image build time via
+# NEXT_PUBLIC_BASE_PATH and must match `istio.path` below.
+istio:
+  host: demo.alien.club
+  path: /agents
+
+  gatewayNamespace: istio-system
+  # REQUIRED unless gateway.create is true. Name of the existing Istio Gateway
+  # (in gatewayNamespace) that serves `istio.host`. Discover with:
+  #   kubectl get vs -A -o wide | grep <host>
+  sharedGatewayName: ""
+
+  gateway:
+    # If no shared Gateway exists for istio.host, flip to true and also enable
+    # certificate.enabled below. The chart will provision its own Gateway.
+    create: false
+
+  virtualService:
+    enabled: true
+    timeout: 60s
+    retries:
+      attempts: 3
+      perTryTimeout: 20s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+
+  certificate:
+    # Only needed when gateway.create is true.
+    enabled: false
+    issuerName: letsencrypt
+
+# Bundled Postgres StatefulSet — single replica, PVC-backed, no replication.
+# Suitable for a demo; not for real production data.
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  database: lds_chatbot
+  username: lds_chatbot
+  # Password is generated once and preserved across upgrades (see postgres-secret.yaml).
+  port: 5432
+  persistence:
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+    # storageClassName: leave unset to use the cluster default (sbs-default on Scaleway)
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+config:
+  platformApiUrl: https://api.alien.club
+  clusterId: "77"
+  datalclusterMcpUrl: https://mcp.alien.club/datacluster/mcp
+  authentikBaseUrl: https://auth.alien.club
+  authentikAppSlug: datastreaming
+  # basePath is appended because the app is served under istio.path.
+  betterAuthUrl: https://demo.alien.club/agents
+  publicAppUrl: https://demo.alien.club/agents
+  basePath: /agents
+
+# Scaleway Secret Manager reference for Authentik OAuth credentials.
+secrets:
+  authentik:
+    scalewaySecretName: authentik-prod
+    clientIdProperty: AUTHENTIK_CLIENT_ID
+    clientSecretProperty: AUTHENTIK_CLIENT_SECRET
+
+livenessProbe:
+  httpGet:
+    path: /agents
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /agents
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
