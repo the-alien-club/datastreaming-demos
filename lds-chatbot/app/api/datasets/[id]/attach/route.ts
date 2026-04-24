@@ -109,7 +109,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
   if (!agent.workflowId) {
     return Response.json({ error: "Agent has no linked workflow" }, { status: 422 })
   }
-  const token = resolveAccessToken(session.user.id)
+  const token = await resolveAccessToken(session.user.id)
   await updateWorkflow(agent.workflowId, { nodes, edges }, token)
 
   // 6. Persist the new corpus subagent to DB

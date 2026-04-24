@@ -68,7 +68,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     subagents: allSubagents,
   }, mcpConfigs)
 
-  const token = resolveAccessToken(session.user.id)
+  const token = await resolveAccessToken(session.user.id)
   if (!existing.workflowId) {
     return Response.json({ error: "Agent has no linked workflow" }, { status: 422 })
   }
@@ -155,7 +155,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     subagents: remainingSubagents,
   }, mcpConfigs)
 
-  const token = resolveAccessToken(session.user.id)
+  const token = await resolveAccessToken(session.user.id)
   if (!existing.workflowId) {
     return Response.json({ error: "Agent has no linked workflow" }, { status: 422 })
   }

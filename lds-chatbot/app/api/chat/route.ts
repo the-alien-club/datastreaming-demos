@@ -5,6 +5,7 @@ import { agents, conversations, messages } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { runWorkflow } from "@/lib/platform/client"
 import { streamJobSSE } from "@/lib/platform/sse"
+import { extractAgentOutput } from "@/lib/platform/results"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 
 export const dynamic = "force-dynamic"
@@ -56,7 +57,7 @@ export async function POST(request: Request): Promise<Response> {
     return new Response("Unauthorized", { status: 401 })
   }
 
-  const accessToken = resolveAccessToken(session.user.id)
+  const accessToken = await resolveAccessToken(session.user.id)
 
   let body: Record<string, unknown>
   try {
@@ -78,6 +79,9 @@ export async function POST(request: Request): Promise<Response> {
   const agent = await db.query.agents.findFirst({ where: eq(agents.id, agentId) })
   if (!agent) {
     return new Response("Agent not found", { status: 404 })
+  }
+  if (agent.workflowId === null) {
+    return new Response("Agent has no platform workflow yet — finish configuring it first", { status: 409 })
   }
 
   const existingConversation = existingConversationId
@@ -196,20 +200,29 @@ export async function POST(request: Request): Promise<Response> {
         const streamBlock = streamAll?.agent as Record<string, unknown> | null | undefined
         const chunks = (streamBlock?.chunks as PlatformChunk[] | undefined) ?? []
 
-        for (let i = lastChunkIndex; i < chunks.length; i++) {
-          const chunk = chunks[i]
-          const choice = firstChoice(chunk)
-          const delta = choice?.delta
-          if (!delta) continue
+        // `chunks` is NOT monotonic across a run: when a subagent takes over
+        // the platform swaps a shorter array in, then swaps the main agent's
+        // longer array back in. Only advance on forward motion — never rewind
+        // `lastChunkIndex`, otherwise a swing like 125 → 1 → 309 would replay
+        // 124 already-emitted deltas and the UI shows duplicated lines.
+        // TODO: remove this workaround once the worker writes per-agent chunk
+        // streams under distinct keys instead of sharing stream.agent.chunks.
+        if (chunks.length > lastChunkIndex) {
+          for (let i = lastChunkIndex; i < chunks.length; i++) {
+            const chunk = chunks[i]
+            const choice = firstChoice(chunk)
+            const delta = choice?.delta
+            if (!delta) continue
 
-          if (delta.content) {
-            writeTextDelta(delta.content)
+            if (delta.content) {
+              writeTextDelta(delta.content)
+            }
+            if (delta.tool_calls && delta.tool_calls.length > 0) {
+              for (const tc of delta.tool_calls) emitToolCall(tc)
+            }
           }
-          if (delta.tool_calls && delta.tool_calls.length > 0) {
-            for (const tc of delta.tool_calls) emitToolCall(tc)
-          }
+          lastChunkIndex = chunks.length
         }
-        lastChunkIndex = chunks.length
 
         const eventType = event.type as string | undefined
         const eventStatus = event.status as string | undefined
@@ -219,33 +232,14 @@ export async function POST(request: Request): Promise<Response> {
           eventStatus === "completed" ||
           eventStatus === "failed"
         ) {
-          const results = result?.results as Record<string, unknown> | null | undefined
-          if (results) {
-            const outputKey = Object.keys(results)[0]
-            const outputArr = results[outputKey] as Array<Record<string, unknown>> | undefined
-            const outputData = (
-              outputArr?.[0]?.results as Record<string, unknown> | undefined
-            )?.data as Record<string, unknown> | undefined
+          const output = extractAgentOutput(result)
+          finalSessionId = output.sessionId
+          finalMetadata = output.answer.metadata
 
-            finalSessionId =
-              (outputData?.session_id as string | null) ??
-              ((outputData?.answer as Record<string, unknown> | undefined)
-                ?.session_id as string | null) ??
-              null
-
-            finalMetadata =
-              ((outputData?.answer as Record<string, unknown> | undefined)
-                ?.metadata as Record<string, unknown> | null) ?? null
-
-            // Non-streaming fallback: if no content streamed, use result text
-            if (!fullContent && outputData?.answer) {
-              const answerContent = (
-                outputData.answer as Record<string, unknown>
-              )?.content as string | undefined
-              if (answerContent) {
-                writeTextDelta(answerContent)
-              }
-            }
+          // Non-streaming fallback: some runs return the full answer only at
+          // terminal, with no incremental text-delta chunks.
+          if (!fullContent && output.answer.content) {
+            writeTextDelta(output.answer.content)
           }
           break
         }

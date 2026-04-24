@@ -1,7 +1,6 @@
 "use client"
 
 import { use, useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
@@ -12,7 +11,6 @@ interface ChatPageProps {
 
 export default function NewChatPage({ params }: ChatPageProps) {
   const { id: agentId } = use(params)
-  const router = useRouter()
 
   // Track the conversation id assigned by the server after the first message
   const conversationIdRef = useRef<string | null>(null)
@@ -28,7 +26,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
       .catch(() => undefined)
   }, [agentId])
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       // Inject agentId + conversationId into the request body.
@@ -65,8 +63,13 @@ export default function NewChatPage({ params }: ChatPageProps) {
     sendMessage({ text })
   }
 
+  // We never actually navigate to /chat/[conversationId] — after the first
+  // turn we just rewrite the URL with replaceState. So "New chat" is a local
+  // reset: drop the conversation ref, clear messages, restore the base URL.
   function handleNewChat() {
-    router.push(`/agents/${agentId}/chat`)
+    conversationIdRef.current = null
+    setMessages([])
+    window.history.replaceState(null, "", `/agents/${agentId}/chat`)
   }
 
   return (

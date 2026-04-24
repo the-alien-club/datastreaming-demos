@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   const name = body.name.trim()
   const description = body.description?.trim() ?? ""
 
-  const accessToken = resolveAccessToken(session.user.id)
+  const accessToken = await resolveAccessToken(session.user.id)
   const client = getClusterClient(accessToken)
 
   // 1. Create dataset on cluster

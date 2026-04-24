@@ -4,6 +4,7 @@ import { agents, conversations } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { runWorkflow } from "@/lib/platform/client"
 import { streamJobSSE } from "@/lib/platform/sse"
+import { extractAgentOutput } from "@/lib/platform/results"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -114,20 +115,6 @@ function isTerminal(event: Record<string, unknown>): boolean {
   return event.type === "done" || event.status === "completed" || event.status === "failed"
 }
 
-function extractSessionId(result: Record<string, unknown> | null | undefined): string | null {
-  const results = result?.results as Record<string, unknown> | null | undefined
-  if (!results) return null
-  const outputKey = Object.keys(results)[0]
-  const outputData = (
-    (results[outputKey] as Array<Record<string, unknown>> | undefined)
-      ?.[0]?.results as Record<string, unknown> | undefined
-  )?.data as Record<string, unknown> | undefined
-  return (
-    (outputData?.session_id as string | null) ??
-    ((outputData?.answer as Record<string, unknown> | undefined)?.session_id as string | null) ??
-    null
-  )
-}
 
 // ── Route handler ──────────────────────────────────────────────────────────────
 
@@ -142,7 +129,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const userId = getUserIdFromToken(accessToken)
+  const userId = await getUserIdFromToken(accessToken)
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
@@ -150,6 +137,9 @@ export async function POST(
   const agent = await db.query.agents.findFirst({ where: eq(agents.id, agentId) })
   if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 })
+  }
+  if (agent.workflowId === null) {
+    return NextResponse.json({ error: "Agent has no platform workflow yet" }, { status: 409 })
   }
 
   let body: {
@@ -214,15 +204,19 @@ export async function POST(
 
           for await (const event of streamJobSSE(job.id, accessToken)) {
             const chunks = extractChunks(event)
-            for (let i = lastChunkIndex; i < chunks.length; i++) {
-              const content = (
-                chunks[i].choices as Array<{ delta?: { content?: string } }> | undefined
-              )?.[0]?.delta?.content
-              if (content) {
-                controller.enqueue(encoder.encode(buildStreamChunk(chunkId, model, { content }, null)))
+            // Only advance forward — see comment in app/api/chat/route.ts for
+            // why `chunks` is non-monotonic across subagent handoffs.
+            if (chunks.length > lastChunkIndex) {
+              for (let i = lastChunkIndex; i < chunks.length; i++) {
+                const content = (
+                  chunks[i].choices as Array<{ delta?: { content?: string } }> | undefined
+                )?.[0]?.delta?.content
+                if (content) {
+                  controller.enqueue(encoder.encode(buildStreamChunk(chunkId, model, { content }, null)))
+                }
               }
+              lastChunkIndex = chunks.length
             }
-            lastChunkIndex = chunks.length
 
             if (isTerminal(event)) {
               finalResult = event.result as Record<string, unknown> | null | undefined
@@ -230,7 +224,7 @@ export async function POST(
             }
           }
 
-          const newSessionId = extractSessionId(finalResult)
+          const newSessionId = extractAgentOutput(finalResult).sessionId
           if (newSessionId) {
             await persistSessionId(conversation.id, newSessionId)
           }
@@ -263,42 +257,34 @@ export async function POST(
 
   for await (const event of streamJobSSE(job.id, accessToken)) {
     const chunks = extractChunks(event)
-    for (let i = lastChunkIndex; i < chunks.length; i++) {
-      const content = (
-        chunks[i].choices as Array<{ delta?: { content?: string } }> | undefined
-      )?.[0]?.delta?.content
-      if (content) fullContent += content
+    // Only advance forward — see comment in app/api/chat/route.ts.
+    if (chunks.length > lastChunkIndex) {
+      for (let i = lastChunkIndex; i < chunks.length; i++) {
+        const content = (
+          chunks[i].choices as Array<{ delta?: { content?: string } }> | undefined
+        )?.[0]?.delta?.content
+        if (content) fullContent += content
+      }
+      lastChunkIndex = chunks.length
     }
-    lastChunkIndex = chunks.length
 
     if (isTerminal(event)) {
       finalResult = event.result as Record<string, unknown> | null | undefined
 
-      const results = finalResult?.results as Record<string, unknown> | null | undefined
-      if (results) {
-        const outputKey = Object.keys(results)[0]
-        const outputData = (
-          (results[outputKey] as Array<Record<string, unknown>> | undefined)
-            ?.[0]?.results as Record<string, unknown> | undefined
-        )?.data as Record<string, unknown> | undefined
-
-        const metadata = (outputData?.answer as Record<string, unknown> | undefined)
-          ?.metadata as Record<string, unknown> | undefined
-        if (metadata) {
-          promptTokens = (metadata.total_input_tokens as number | undefined) ?? 0
-          completionTokens = (metadata.total_output_tokens as number | undefined) ?? 0
-        }
-
-        if (!fullContent && outputData?.answer) {
-          fullContent =
-            ((outputData.answer as Record<string, unknown>)?.content as string | undefined) ?? ""
-        }
+      const output = extractAgentOutput(finalResult)
+      const metadata = output.answer.metadata
+      if (metadata) {
+        promptTokens = (metadata.total_input_tokens as number | undefined) ?? 0
+        completionTokens = (metadata.total_output_tokens as number | undefined) ?? 0
+      }
+      if (!fullContent && output.answer.content) {
+        fullContent = output.answer.content
       }
       break
     }
   }
 
-  const newSessionId = extractSessionId(finalResult)
+  const newSessionId = extractAgentOutput(finalResult).sessionId
   if (newSessionId) {
     await persistSessionId(conversation.id, newSessionId)
   }

@@ -1,7 +1,7 @@
 import { getStoredOAuthToken } from "@/lib/db"
 
-export function resolveAccessToken(userId: string): string {
-  const token = getStoredOAuthToken(userId)
+export async function resolveAccessToken(userId: string): Promise<string> {
+  const token = await getStoredOAuthToken(userId)
   if (!token) throw new Error("No Authentik OAuth token found — please sign in via Authentik")
   return token
 }

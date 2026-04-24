@@ -87,7 +87,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     subagents: subagentConfigs,
   }, mcpConfigs)
 
-  const token = resolveAccessToken(session.user.id)
+  const token = await resolveAccessToken(session.user.id)
 
   // Patch workflow on platform
   if (!existing.workflowId) {

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     return Response.json(modelsCache.data)
   }
 
-  const token = resolveAccessToken(session.user.id)
+  const token = await resolveAccessToken(session.user.id)
   const models = await getAiModels(token)
   modelsCache = { data: models, fetchedAt: now }
 

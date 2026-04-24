@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "Dataset not yet synced with cluster" }, { status: 422 })
   }
 
-  const accessToken = resolveAccessToken(session.user.id)
+  const accessToken = await resolveAccessToken(session.user.id)
   const client = getClusterClient(accessToken)
 
   const result = await client.entries.listEntriesApiV1EntriesGet({
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "At least one file is required" }, { status: 422 })
   }
 
-  const accessToken = resolveAccessToken(session.user.id)
+  const accessToken = await resolveAccessToken(session.user.id)
   const client = getClusterClient(accessToken)
 
   const results: unknown[] = []

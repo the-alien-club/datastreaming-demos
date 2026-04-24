@@ -1,7 +1,7 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
 
-export const mcps = sqliteTable("mcps", {
+export const mcps = pgTable("mcps", {
   id: text("id").primaryKey(), // uuid or slug (e.g. 'datacluster')
   name: text("name").notNull(),
   serverUrl: text("server_url").notNull(),
@@ -9,23 +9,23 @@ export const mcps = sqliteTable("mcps", {
   authToken: text("auth_token"),
   description: text("description"),
   category: text("category"), // e.g. 'data', 'research', 'legal'
-  enabled: integer("enabled", { mode: "boolean" }).default(true),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  enabled: boolean("enabled").default(true),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
-export const specialists = sqliteTable("specialists", {
+export const specialists = pgTable("specialists", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   systemPrompt: text("system_prompt").notNull(),
   model: text("model").default("mistral-small-latest"),
   mcpIds: text("mcp_ids"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
-export const agents = sqliteTable("agents", {
+export const agents = pgTable("agents", {
   id: text("id").primaryKey(), // uuid
   workflowId: integer("workflow_id"), // platform backend workflow ID (null if creation pending/failed)
   name: text("name").notNull(),
@@ -33,11 +33,11 @@ export const agents = sqliteTable("agents", {
   systemPrompt: text("system_prompt"), // overall system prompt
   steps: text("steps"), // JSON array of {name, prompt} objects
   model: text("model").default("mistral-small-latest"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
-export const agentSubagents = sqliteTable("agent_subagents", {
+export const agentSubagents = pgTable("agent_subagents", {
   id: text("id").primaryKey(), // uuid
   agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   name: text("name").notNull(), // display name / description for the deep agent
@@ -46,36 +46,36 @@ export const agentSubagents = sqliteTable("agent_subagents", {
   mcpIds: text("mcp_ids"), // JSON array of MCP config IDs from static file
   datasetId: text("dataset_id"), // if corpus-based, the dataset ID to inject
   nodeId: text("node_id"), // the subagent node ID in the workflow graph
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
-export const conversations = sqliteTable("conversations", {
+export const conversations = pgTable("conversations", {
   id: text("id").primaryKey(), // uuid
   agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   userId: text("user_id"), // better-auth user id; null for legacy rows
   sessionId: text("session_id"), // platform session_id for multi-turn
   title: text("title"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
-export const messages = sqliteTable("messages", {
+export const messages = pgTable("messages", {
   id: text("id").primaryKey(), // uuid
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // 'user' | 'assistant' | 'system'
   content: text("content").notNull(),
   metadata: text("metadata"), // JSON: {model, tokens, cost, tool_calls, agent_context}
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
-export const datasets = sqliteTable("datasets", {
+export const datasets = pgTable("datasets", {
   id: text("id").primaryKey(), // uuid
   clusterDatasetId: integer("cluster_dataset_id"), // data cluster dataset ID
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").default("pending"), // pending | processing | ready | error
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
 // Relations for query builder

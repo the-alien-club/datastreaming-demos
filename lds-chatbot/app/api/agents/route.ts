@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     subagents: subagentConfigs,
   }, mcpConfigs)
 
-  const token = resolveAccessToken(session.user.id)
+  const token = await resolveAccessToken(session.user.id)
 
   // Create workflow on platform
   const slug = `lds-agent-${crypto.randomUUID()}`

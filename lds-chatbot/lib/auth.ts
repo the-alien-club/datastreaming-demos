@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth"
 import { genericOAuth } from "better-auth/plugins"
-import Database from "better-sqlite3"
+import { pool } from "@/lib/db"
 
 const authentikBaseUrl = process.env.NEXT_PUBLIC_AUTHENTIK_BASE_URL!
 const appSlug = process.env.AUTHENTIK_APP_SLUG || "datastreaming"
@@ -10,7 +10,7 @@ export const auth = betterAuth({
   appName: "LDS Chatbot",
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL,
-  database: new Database("sqlite.db"),
+  database: pool,
   session: {
     cookieCache: {
       enabled: true,
