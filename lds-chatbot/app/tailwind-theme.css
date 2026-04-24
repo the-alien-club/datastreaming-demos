@@ -1,0 +1,256 @@
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-base-accent: var(--base-accent);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    /* Levels / statuses */
+    --color-info: var(--info);
+    --color-info-foreground: var(--info-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    /* Charts */
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    /* Datasets */
+    --color-dataset-1: var(--dataset-1);
+    --color-dataset-1-muted: var(--dataset-1-muted);
+    --color-dataset-1-foreground: var(--dataset-1-foreground);
+    --color-dataset-2: var(--dataset-2);
+    --color-dataset-2-muted: var(--dataset-2-muted);
+    --color-dataset-2-foreground: var(--dataset-2-foreground);
+    --color-dataset-3: var(--dataset-3);
+    --color-dataset-3-muted: var(--dataset-3-muted);
+    --color-dataset-3-foreground: var(--dataset-3-foreground);
+    --color-dataset-4: var(--dataset-4);
+    --color-dataset-4-muted: var(--dataset-4-muted);
+    --color-dataset-4-foreground: var(--dataset-4-foreground);
+    --color-dataset-5: var(--dataset-5);
+    --color-dataset-5-muted: var(--dataset-5-muted);
+    --color-dataset-5-foreground: var(--dataset-5-foreground);
+    --color-dataset-6: var(--dataset-6);
+    --color-dataset-6-muted: var(--dataset-6-muted);
+    --color-dataset-6-foreground: var(--dataset-6-foreground);
+    --color-dataset-7: var(--dataset-7);
+    --color-dataset-7-muted: var(--dataset-7-muted);
+    --color-dataset-7-foreground: var(--dataset-7-foreground);
+
+    /* Sidebar */
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+
+    /* Fonts */
+    --font-sans: var(--font-sans);
+    --font-mono: var(--font-mono);
+    --font-serif: var(--font-serif);
+
+    /* Radius sizes */
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+
+    /* Shadow dimensions */
+    --shadow-2xs: var(--shadow-2xs);
+    --shadow-xs: var(--shadow-xs);
+    --shadow-sm: var(--shadow-sm);
+    --shadow: var(--shadow);
+    --shadow-md: var(--shadow-md);
+    --shadow-lg: var(--shadow-lg);
+    --shadow-xl: var(--shadow-xl);
+    --shadow-2xl: var(--shadow-2xl);
+
+    /* Custom colors */
+    --tailwind-colors-black: hsla(0, 0%, 7%, 1);
+    --tailwind-colors-white: hsla(0, 0%, 100%, 1);
+    --tailwind-colors-transparent: hsla(0, 0%, 100%, 0);
+
+    /* Teal */
+    --tailwind-colors-teal-50: hsla(180, 22%, 95%, 1);
+    --tailwind-colors-teal-100: hsla(184, 20%, 83%, 1);
+    --tailwind-colors-teal-200: hsla(182, 20%, 71%, 1);
+    --tailwind-colors-teal-300: hsla(183, 21%, 59%, 1);
+    --tailwind-colors-teal-400: hsla(183, 24%, 47%, 1);
+    --tailwind-colors-teal-500: hsla(183, 39%, 35%, 1);
+    --tailwind-colors-teal-600: hsla(183, 39%, 30%, 1);
+    --tailwind-colors-teal-700: hsla(182, 39%, 25%, 1);
+    --tailwind-colors-teal-800: hsla(183, 39%, 20%, 1);
+    --tailwind-colors-teal-900: hsla(184, 38%, 15%, 1);
+    --tailwind-colors-teal-950: hsla(183, 40%, 10%, 1);
+
+    /* Example */
+    --custom-colors-example-50: hsla(0, 0%, 100%, 1);
+
+    /* Neutral */
+    --tailwind-colors-neutral-50: hsla(0, 0%, 98%, 1);
+    --tailwind-colors-neutral-100: hsla(0, 0%, 89%, 1);
+    --tailwind-colors-neutral-200: hsla(0, 0%, 80%, 1);
+    --tailwind-colors-neutral-300: hsla(0, 0%, 71%, 1);
+    --tailwind-colors-neutral-400: hsla(0, 0%, 62%, 1);
+    --tailwind-colors-neutral-500: hsla(0, 0%, 53%, 1);
+    --tailwind-colors-neutral-600: hsla(0, 0%, 44%, 1);
+    --tailwind-colors-neutral-700: hsla(0, 0%, 24%, 1);
+    --tailwind-colors-neutral-800: hsla(0, 0%, 18%, 1);
+    --tailwind-colors-neutral-900: hsla(0, 0%, 13%, 1);
+    --tailwind-colors-neutral-950: hsla(0, 0%, 7%, 1);
+
+    /* Stone */
+    --tailwind-colors-stone-50: hsla(24, 38%, 97%, 1);
+    --tailwind-colors-stone-100: hsla(30, 36%, 90%, 1);
+    --tailwind-colors-stone-200: hsla(32, 37%, 83%, 1);
+    --tailwind-colors-stone-300: hsla(31, 36%, 76%, 1);
+    --tailwind-colors-stone-400: hsla(31, 37%, 69%, 1);
+    --tailwind-colors-stone-500: hsla(31, 36%, 62%, 1);
+    --tailwind-colors-stone-600: hsla(31, 26%, 53%, 1);
+    --tailwind-colors-stone-700: hsla(32, 22%, 45%, 1);
+    --tailwind-colors-stone-800: hsla(31, 22%, 36%, 1);
+    --tailwind-colors-stone-900: hsla(31, 22%, 27%, 1);
+    --tailwind-colors-stone-950: hsla(31, 22%, 19%, 1);
+
+    /* Red */
+    --tailwind-colors-red-50: hsla(5, 100%, 98%, 1);
+    --tailwind-colors-red-100: hsla(6, 91%, 92%, 1);
+    --tailwind-colors-red-200: hsla(6, 92%, 86%, 1);
+    --tailwind-colors-red-300: hsla(6, 92%, 80%, 1);
+    --tailwind-colors-red-400: hsla(6, 91%, 74%, 1);
+    --tailwind-colors-red-500: hsla(6, 92%, 67%, 1);
+    --tailwind-colors-red-600: hsla(6, 61%, 58%, 1);
+    --tailwind-colors-red-700: hsla(7, 44%, 49%, 1);
+    --tailwind-colors-red-800: hsla(6, 44%, 39%, 1);
+    --tailwind-colors-red-900: hsla(6, 44%, 30%, 1);
+    --tailwind-colors-red-950: hsla(7, 44%, 20%, 1);
+
+    /* Orange */
+    --tailwind-colors-orange-50: hsla(28, 87%, 97%, 1);
+    --tailwind-colors-orange-100: hsla(27, 89%, 90%, 1);
+    --tailwind-colors-orange-200: hsla(28, 87%, 82%, 1);
+    --tailwind-colors-orange-300: hsla(28, 88%, 74%, 1);
+    --tailwind-colors-orange-400: hsla(28, 87%, 67%, 1);
+    --tailwind-colors-orange-500: hsla(28, 88%, 59%, 1);
+    --tailwind-colors-orange-600: hsla(28, 63%, 51%, 1);
+    --tailwind-colors-orange-700: hsla(27, 60%, 43%, 1);
+    --tailwind-colors-orange-800: hsla(28, 61%, 34%, 1);
+    --tailwind-colors-orange-900: hsla(27, 61%, 26%, 1);
+    --tailwind-colors-orange-950: hsla(27, 60%, 18%, 1);
+
+    /* Yellow */
+    --tailwind-colors-yellow-50: hsla(40, 100%, 98%, 1);
+    --tailwind-colors-yellow-100: hsla(40, 100%, 92%, 1);
+    --tailwind-colors-yellow-200: hsla(41, 100%, 85%, 1);
+    --tailwind-colors-yellow-300: hsla(41, 100%, 79%, 1);
+    --tailwind-colors-yellow-400: hsla(40, 100%, 73%, 1);
+    --tailwind-colors-yellow-500: hsla(40, 100%, 67%, 1);
+    --tailwind-colors-yellow-600: hsla(40, 67%, 58%, 1);
+    --tailwind-colors-yellow-700: hsla(40, 49%, 48%, 1);
+    --tailwind-colors-yellow-800: hsla(40, 49%, 39%, 1);
+    --tailwind-colors-yellow-900: hsla(41, 49%, 29%, 1);
+    --tailwind-colors-yellow-950: hsla(40, 50%, 20%, 1);
+
+    /* Green */
+    --tailwind-colors-green-50: hsla(132, 45%, 98%, 1);
+    --tailwind-colors-green-100: hsla(130, 43%, 92%, 1);
+    --tailwind-colors-green-200: hsla(130, 41%, 85%, 1);
+    --tailwind-colors-green-300: hsla(130, 41%, 79%, 1);
+    --tailwind-colors-green-400: hsla(130, 41%, 73%, 1);
+    --tailwind-colors-green-500: hsla(130, 41%, 67%, 1);
+    --tailwind-colors-green-600: hsla(129, 27%, 58%, 1);
+    --tailwind-colors-green-700: hsla(130, 20%, 48%, 1);
+    --tailwind-colors-green-800: hsla(129, 20%, 39%, 1);
+    --tailwind-colors-green-900: hsla(130, 21%, 30%, 1);
+    --tailwind-colors-green-950: hsla(129, 20%, 20%, 1);
+
+    /* Cyan */
+    --tailwind-colors-cyan-50: hsla(190, 100%, 98%, 1);
+    --tailwind-colors-cyan-100: hsla(190, 100%, 91%, 1);
+    --tailwind-colors-cyan-200: hsla(189, 100%, 85%, 1);
+    --tailwind-colors-cyan-300: hsla(189, 100%, 79%, 1);
+    --tailwind-colors-cyan-400: hsla(189, 100%, 72%, 1);
+    --tailwind-colors-cyan-500: hsla(189, 100%, 66%, 1);
+    --tailwind-colors-cyan-600: hsla(189, 67%, 57%, 1);
+    --tailwind-colors-cyan-700: hsla(189, 52%, 47%, 1);
+    --tailwind-colors-cyan-800: hsla(189, 52%, 38%, 1);
+    --tailwind-colors-cyan-900: hsla(189, 51%, 29%, 1);
+    --tailwind-colors-cyan-950: hsla(189, 52%, 20%, 1);
+
+    /* Blue */
+    --tailwind-colors-blue-50: hsla(210, 100%, 98%, 1);
+    --tailwind-colors-blue-100: hsla(212, 95%, 92%, 1);
+    --tailwind-colors-blue-200: hsla(212, 95%, 85%, 1);
+    --tailwind-colors-blue-300: hsla(211, 94%, 79%, 1);
+    --tailwind-colors-blue-400: hsla(212, 94%, 73%, 1);
+    --tailwind-colors-blue-500: hsla(212, 94%, 66%, 1);
+    --tailwind-colors-blue-600: hsla(212, 63%, 57%, 1);
+    --tailwind-colors-blue-700: hsla(212, 48%, 48%, 1);
+    --tailwind-colors-blue-800: hsla(212, 47%, 39%, 1);
+    --tailwind-colors-blue-900: hsla(211, 48%, 29%, 1);
+    --tailwind-colors-blue-950: hsla(211, 47%, 20%, 1);
+
+    /* Indigo */
+    --tailwind-colors-indigo-50: hsla(240, 83%, 98%, 1);
+    --tailwind-colors-indigo-100: hsla(237, 86%, 91%, 1);
+    --tailwind-colors-indigo-200: hsla(238, 89%, 85%, 1);
+    --tailwind-colors-indigo-300: hsla(238, 89%, 79%, 1);
+    --tailwind-colors-indigo-400: hsla(238, 88%, 73%, 1);
+    --tailwind-colors-indigo-500: hsla(238, 88%, 67%, 1);
+    --tailwind-colors-indigo-600: hsla(238, 59%, 58%, 1);
+    --tailwind-colors-indigo-700: hsla(238, 44%, 48%, 1);
+    --tailwind-colors-indigo-800: hsla(238, 43%, 39%, 1);
+    --tailwind-colors-indigo-900: hsla(238, 44%, 29%, 1);
+    --tailwind-colors-indigo-950: hsla(239, 44%, 20%, 1);
+
+    /* Animations */
+    --animate-fade-out: fade-out 500ms ease-in-out forwards;
+
+    /* Pink */
+    --tailwind-colors-pink-50: hsla(310, 100%, 99%, 1);
+    --tailwind-colors-pink-100: hsla(312, 100%, 96%, 1);
+    --tailwind-colors-pink-200: hsla(312, 100%, 93%, 1);
+    --tailwind-colors-pink-300: hsla(311, 100%, 90%, 1);
+    --tailwind-colors-pink-400: hsla(311, 100%, 87%, 1);
+    --tailwind-colors-pink-500: hsla(311, 100%, 84%, 1);
+    --tailwind-colors-pink-600: hsla(311, 49%, 73%, 1);
+    --tailwind-colors-pink-700: hsla(311, 29%, 61%, 1);
+    --tailwind-colors-pink-800: hsla(312, 18%, 49%, 1);
+    --tailwind-colors-pink-900: hsla(310, 19%, 37%, 1);
+    --tailwind-colors-pink-950: hsla(312, 18%, 25%, 1);
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}

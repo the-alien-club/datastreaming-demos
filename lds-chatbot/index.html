@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LDS Chatbot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 12px 20px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .session-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    .session-controls button {
+      padding: 6px 12px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      color: #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .session-controls button:hover { background: #333; }
+
+    .session-id-display {
+      font-size: 11px;
+      color: #666;
+      font-family: monospace;
+    }
+
+    .api-token-bar {
+      padding: 8px 20px;
+      background: #141414;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .api-token-bar label {
+      font-size: 12px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .api-token-bar input {
+      flex: 1;
+      padding: 6px 10px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .api-token-bar input:focus { outline: none; border-color: #555; }
+
+    .chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .message {
+      max-width: 75%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #1e3a5f;
+      color: #d0e8ff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      color: #d0d0d0;
+      border-bottom-left-radius: 4px;
+    }
+
+    .message.error {
+      align-self: center;
+      background: #3a1515;
+      border: 1px solid #5a2020;
+      color: #ff9999;
+      max-width: 90%;
+      font-size: 13px;
+    }
+
+    .message .meta {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #666;
+      border-top: 1px solid #333;
+      padding-top: 6px;
+    }
+
+    .typing-indicator {
+      align-self: flex-start;
+      padding: 12px 16px;
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      border-bottom-left-radius: 4px;
+      display: none;
+    }
+
+    .typing-indicator span {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #555;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+
+    .input-area {
+      padding: 16px 20px;
+      background: #1a1a1a;
+      border-top: 1px solid #2a2a2a;
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .input-area textarea {
+      flex: 1;
+      padding: 10px 14px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      min-height: 44px;
+      max-height: 120px;
+    }
+
+    .input-area textarea:focus { outline: none; border-color: #555; }
+
+    .input-area button {
+      padding: 10px 20px;
+      background: #1e3a5f;
+      border: none;
+      border-radius: 8px;
+      color: #d0e8ff;
+      font-size: 14px;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    .input-area button:hover { background: #264d7a; }
+    .input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #444;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LDS Chatbot</h1>
+    <span class="session-id-display" id="sessionDisplay"></span>
+    <div class="session-controls">
+      <button onclick="newSession()">New Session</button>
+      <button onclick="clearHistory()">Clear</button>
+    </div>
+  </header>
+
+  <div class="api-token-bar">
+    <label for="apiToken">API Token:</label>
+    <input type="password" id="apiToken" placeholder="Paste your Bearer token here" />
+  </div>
+
+  <div class="chat-area" id="chatArea">
+    <div class="empty-state" id="emptyState">Start a conversation...</div>
+  </div>
+
+  <div class="typing-indicator" id="typingIndicator">
+    <span></span><span></span><span></span>
+  </div>
+
+  <div class="input-area">
+    <textarea id="userInput" placeholder="Type a message..." rows="1"
+      onkeydown="handleKeydown(event)"></textarea>
+    <button id="sendBtn" onclick="sendMessage()">Send</button>
+  </div>
+
+  <script>
+    const API_URL = 'https://api.alpha.alien.club/workflows/47/run-sync';
+    const STORAGE_KEY = 'lds-chatbot-sessions';
+    const TOKEN_KEY = 'lds-chatbot-token';
+
+    let currentSessionId = null;   // local storage key
+    let serverSessionId = '';      // server-side session ID (empty = new session)
+    let sending = false;
+
+    // --- Init ---
+    function init() {
+      const saved = localStorage.getItem(TOKEN_KEY);
+      if (saved) document.getElementById('apiToken').value = saved;
+
+      document.getElementById('apiToken').addEventListener('change', (e) => {
+        localStorage.setItem(TOKEN_KEY, e.target.value);
+      });
+
+      const sessions = getSessions();
+      const lastId = localStorage.getItem('lds-chatbot-current');
+      if (lastId && sessions[lastId]) {
+        currentSessionId = lastId;
+        serverSessionId = sessions[lastId].serverSessionId || '';
+      } else {
+        newSession();
+      }
+      renderChat();
+    }
+
+    // --- Sessions ---
+    function getSessions() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    }
+
+    function saveSessions(sessions) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    }
+
+    function newSession() {
+      currentSessionId = crypto.randomUUID();
+      serverSessionId = '';  // empty = server will create a new session
+      localStorage.setItem('lds-chatbot-current', currentSessionId);
+      const sessions = getSessions();
+      sessions[currentSessionId] = { messages: [], serverSessionId: '' };
+      saveSessions(sessions);
+      renderChat();
+    }
+
+    function clearHistory() {
+      serverSessionId = '';
+      const sessions = getSessions();
+      sessions[currentSessionId] = { messages: [], serverSessionId: '' };
+      saveSessions(sessions);
+      renderChat();
+    }
+
+    function getMessages() {
+      const sessions = getSessions();
+      const session = sessions[currentSessionId];
+      return session?.messages || session || [];
+    }
+
+    function addMessage(role, content, meta) {
+      const sessions = getSessions();
+      if (!sessions[currentSessionId]?.messages) {
+        sessions[currentSessionId] = { messages: [], serverSessionId: serverSessionId };
+      }
+      sessions[currentSessionId].messages.push({ role, content, meta, ts: Date.now() });
+      saveSessions(sessions);
+    }
+
+    // --- Render ---
+    function renderChat() {
+      const area = document.getElementById('chatArea');
+      const msgs = getMessages();
+      document.getElementById('sessionDisplay').textContent = serverSessionId
+        ? `Server: ${serverSessionId.slice(0, 8)}...`
+        : 'New session (no server ID yet)';
+
+      if (msgs.length === 0) {
+        area.innerHTML = '<div class="empty-state">Start a conversation...</div>';
+        return;
+      }
+
+      area.innerHTML = msgs.map(m => {
+        const metaHtml = m.meta
+          ? `<div class="meta">${m.meta.model || ''} | ${(m.meta.time || 0).toFixed(1)}s | ${m.meta.tokens || 0} tokens</div>`
+          : '';
+        return `<div class="message ${m.role}">${escapeHtml(m.content)}${metaHtml}</div>`;
+      }).join('');
+
+      area.scrollTop = area.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // --- Send ---
+    async function sendMessage() {
+      if (sending) return;
+
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const token = document.getElementById('apiToken').value.trim();
+      if (!token) {
+        addMessage('error', 'Please set your API token first.', null);
+        renderChat();
+        return;
+      }
+
+      input.value = '';
+      input.style.height = 'auto';
+      addMessage('user', text, null);
+      renderChat();
+
+      sending = true;
+      document.getElementById('sendBtn').disabled = true;
+      document.getElementById('typingIndicator').style.display = 'block';
+
+      try {
+        const resp = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            input: {
+              session_id: serverSessionId,
+              user_prompt: text,
+            },
+          }),
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+        }
+
+        const data = await resp.json();
+
+        // Result path: data.data.result.results.<httpResponse node>[0].results.data.answer
+        const result = data?.data?.result;
+        let answer = null;
+
+        if (result?.results) {
+          // Find the httpResponse node (key starts with "httpResponse")
+          const responseKey = Object.keys(result.results).find(k => k.startsWith('httpResponse'));
+          if (responseKey) {
+            answer = result.results[responseKey]?.[0]?.results?.data?.answer;
+          }
+        }
+
+        const content = answer?.content || JSON.stringify(result || data, null, 2);
+        const metadata = answer?.metadata;
+        const returnedSessionId = answer?.session_id || result?.session_id;
+
+        // Store server session ID for subsequent messages
+        if (returnedSessionId) {
+          serverSessionId = returnedSessionId;
+        }
+
+        // Persist server session ID to storage immediately
+        const sessions = getSessions();
+        if (sessions[currentSessionId]) {
+          sessions[currentSessionId].serverSessionId = serverSessionId;
+          saveSessions(sessions);
+        }
+
+        const meta = metadata ? {
+          model: (metadata.llm_calls || metadata.llmCalls)?.[0]?.model || 'unknown',
+          time: metadata.execution_time_seconds || metadata.executionTimeSeconds || 0,
+          tokens: metadata.total_output_tokens || metadata.totalOutputTokens || 0,
+        } : null;
+
+        addMessage('assistant', content, meta);
+      } catch (err) {
+        addMessage('error', `Error: ${err.message}`, null);
+      } finally {
+        sending = false;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('typingIndicator').style.display = 'none';
+        renderChat();
+      }
+    }
+
+    // --- Auto-resize textarea ---
+    function handleKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+        return;
+      }
+      setTimeout(() => {
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+      }, 0);
+    }
+
+    init();
+  </script>
+</body>
+</html>
