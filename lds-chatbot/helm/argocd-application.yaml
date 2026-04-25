@@ -26,6 +26,24 @@ spec:
     server: https://kubernetes.default.svc
     namespace: demo-lds-chatbot
 
+  # ArgoCD's `helm template` runs without cluster access, so the chart's
+  # `lookup`-based password preservation does not work — every sync would
+  # otherwise rotate POSTGRES_PASSWORD and BETTER_AUTH_SECRET, breaking auth
+  # against an already-initialized Postgres and invalidating all sessions.
+  # Ignore drift on /data of the two generated Secrets; first install still
+  # creates them with random values, subsequent syncs leave them untouched.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: demo-lds-chatbot-prod-postgres
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: demo-lds-chatbot-prod-app
+      jsonPointers:
+        - /data
+
   syncPolicy:
     automated:
       prune: true
