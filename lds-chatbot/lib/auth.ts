@@ -2,7 +2,9 @@ import { betterAuth } from "better-auth"
 import { genericOAuth } from "better-auth/plugins"
 import { pool } from "@/lib/db"
 
-const authentikBaseUrl = process.env.NEXT_PUBLIC_AUTHENTIK_BASE_URL!
+// Server-side only — must NOT use the NEXT_PUBLIC_ prefix or Next.js
+// constant-folds it to the build-time placeholder.
+const authentikBaseUrl = process.env.AUTHENTIK_BASE_URL!
 const appSlug = process.env.AUTHENTIK_APP_SLUG || "datastreaming"
 const baseURL = process.env.BETTER_AUTH_URL!
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""

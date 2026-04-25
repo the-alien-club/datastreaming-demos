@@ -24,7 +24,8 @@ ENV NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH}
 ENV DATABASE_URL=postgres://build:build@localhost:5432/build
 ENV BETTER_AUTH_SECRET=build-time-placeholder
 ENV BETTER_AUTH_URL=http://localhost:3000
-ENV NEXT_PUBLIC_AUTHENTIK_BASE_URL=http://localhost
+# AUTHENTIK_BASE_URL has no NEXT_PUBLIC_ prefix on purpose: server-side only,
+# read at runtime from the ConfigMap. No build-time placeholder needed.
 ENV AUTHENTIK_APP_SLUG=datastreaming
 ENV AUTHENTIK_CLIENT_ID=build-time-placeholder
 ENV AUTHENTIK_CLIENT_SECRET=build-time-placeholder

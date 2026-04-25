@@ -11,7 +11,7 @@ data:
   PLATFORM_API_URL: {{ .Values.config.platformApiUrl | quote }}
   CLUSTER_ID: {{ .Values.config.clusterId | quote }}
   DATACLUSTER_MCP_URL: {{ .Values.config.datalclusterMcpUrl | quote }}
-  NEXT_PUBLIC_AUTHENTIK_BASE_URL: {{ .Values.config.authentikBaseUrl | quote }}
+  AUTHENTIK_BASE_URL: {{ .Values.config.authentikBaseUrl | quote }}
   AUTHENTIK_APP_SLUG: {{ .Values.config.authentikAppSlug | quote }}
   BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
   NEXT_PUBLIC_APP_URL: {{ .Values.config.publicAppUrl | quote }}
