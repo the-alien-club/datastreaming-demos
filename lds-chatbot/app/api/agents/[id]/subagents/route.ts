@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     name: sa.name,
     description: "",
     systemPrompt: sa.systemPrompt,
-    model: sa.model ?? "mistral-small-latest",
+    model: sa.model ?? "gpt-4.1-mini",
     mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
   }))
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     name: body.name,
     description: body.description ?? "",
     systemPrompt: body.systemPrompt,
-    model: body.model ?? "mistral-small-latest",
+    model: body.model ?? "gpt-4.1-mini",
     mcpIds: body.mcpIds ?? [],
   }
 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     name: existing.name,
     systemPrompt: existing.systemPrompt ?? "",
     steps,
-    model: existing.model ?? "mistral-small-latest",
+    model: existing.model ?? "gpt-4.1-mini",
     subagents: allSubagents,
   }, mcpConfigs)
 
@@ -141,7 +141,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       name: sa.name,
       description: "",
       systemPrompt: sa.systemPrompt,
-      model: sa.model ?? "mistral-small-latest",
+      model: sa.model ?? "gpt-4.1-mini",
       mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
     }))
 
@@ -151,7 +151,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     name: existing.name,
     systemPrompt: existing.systemPrompt ?? "",
     steps,
-    model: existing.model ?? "mistral-small-latest",
+    model: existing.model ?? "gpt-4.1-mini",
     subagents: remainingSubagents,
   }, mcpConfigs)
 

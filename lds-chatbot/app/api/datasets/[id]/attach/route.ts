@@ -80,7 +80,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
     name: `${dataset.name} Corpus`,
     description: corpusDescription,
     systemPrompt: corpusSystemPrompt,
-    model: agent.model ?? "mistral-small-latest",
+    model: agent.model ?? "gpt-4.1-mini",
     mcpIds: ["datacluster"],
   }
 
@@ -89,7 +89,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
     name: sa.name,
     description: "",
     systemPrompt: sa.systemPrompt,
-    model: sa.model ?? "mistral-small-latest",
+    model: sa.model ?? "gpt-4.1-mini",
     mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
   }))
 
@@ -102,7 +102,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
     name: agent.name,
     systemPrompt: agent.systemPrompt ?? "",
     steps,
-    model: agent.model ?? "mistral-small-latest",
+    model: agent.model ?? "gpt-4.1-mini",
     subagents: allSubagents,
   }, mcpConfigs)
 

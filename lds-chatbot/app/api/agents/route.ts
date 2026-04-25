@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   const description = body.description ?? null
   const systemPrompt = body.systemPrompt ?? ""
   const steps = body.steps ?? []
-  const model = body.model ?? "mistral-small-latest"
+  const model = body.model ?? "gpt-4.1-mini"
   const subagentConfigs: SubagentConfig[] = body.subagents ?? []
 
   // Build workflow graph

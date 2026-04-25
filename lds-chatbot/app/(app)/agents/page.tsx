@@ -72,7 +72,7 @@ export default async function AgentsPage() {
                 <CardContent className="pb-2 flex-1">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant="secondary" className="text-xs">
-                      {agent.model ?? "mistral-small-latest"}
+                      {agent.model ?? "gpt-4.1-mini"}
                     </Badge>
                     {steps.length > 0 && (
                       <Badge variant="outline" className="text-xs">

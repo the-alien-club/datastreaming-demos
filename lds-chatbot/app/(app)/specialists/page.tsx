@@ -75,7 +75,7 @@ export default async function SpecialistsPage() {
                 <CardContent className="pb-2 flex-1">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant="secondary" className="text-xs">
-                      {specialist.model ?? "mistral-small-latest"}
+                      {specialist.model ?? "gpt-4.1-mini"}
                     </Badge>
                     {mcpIds.map((mcpId) => (
                       <Badge key={mcpId} variant="outline" className="text-xs">

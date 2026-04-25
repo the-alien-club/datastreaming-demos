@@ -63,7 +63,7 @@ export async function PUT(
       name: body.name.trim(),
       description: body.description?.trim() ?? null,
       systemPrompt: body.systemPrompt.trim(),
-      model: body.model ?? "mistral-small-latest",
+      model: body.model ?? "gpt-4.1-mini",
       mcpIds: body.mcpIds && body.mcpIds.length > 0 ? JSON.stringify(body.mcpIds) : null,
       updatedAt: new Date(),
     })
