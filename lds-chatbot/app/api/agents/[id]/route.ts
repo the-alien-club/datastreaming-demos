@@ -47,13 +47,18 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "Agent not found" }, { status: 404 })
   }
 
+  // Body may arrive with `steps` and `subagents[].mcpIds` as either:
+  //   - already-parsed arrays (the typical UI flow), or
+  //   - JSON-encoded strings (a client that round-trips the GET response,
+  //     where these fields are stored as JSON text in SQLite).
+  // We coerce to arrays here and validate; never trust `.map()` on raw input.
   let body: {
     name?: string
     description?: string
     systemPrompt?: string
-    steps?: { name: string; prompt: string }[]
+    steps?: { name: string; prompt: string }[] | string
     model?: string
-    subagents?: SubagentConfig[]
+    subagents?: (Omit<SubagentConfig, "mcpIds"> & { mcpIds: string[] | string })[]
   }
 
   try {
@@ -62,20 +67,78 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
+  function coerceArray<T>(value: unknown, fieldName: string): T[] {
+    if (value === undefined || value === null) return []
+    if (Array.isArray(value)) return value as T[]
+    if (typeof value === "string") {
+      const trimmed = value.trim()
+      if (trimmed === "") return []
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(trimmed)
+      } catch {
+        throw new Error(
+          `${fieldName} must be an array or valid JSON array string`,
+        )
+      }
+      if (!Array.isArray(parsed)) {
+        throw new Error(`${fieldName} must be an array`)
+      }
+      return parsed as T[]
+    }
+    throw new Error(`${fieldName} must be an array (got: ${typeof value})`)
+  }
+
+  let parsedSteps: { name: string; prompt: string }[]
+  try {
+    parsedSteps = body.steps !== undefined
+      ? coerceArray<{ name: string; prompt: string }>(body.steps, "steps")
+      : (existing.steps ? JSON.parse(existing.steps) : [])
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Invalid steps" },
+      { status: 400 },
+    )
+  }
+
   const name = body.name?.trim() ?? existing.name
   const description = "description" in body ? (body.description ?? null) : existing.description
   const systemPrompt = body.systemPrompt ?? existing.systemPrompt ?? ""
-  const steps = body.steps ?? (existing.steps ? JSON.parse(existing.steps) : [])
-  const model = body.model ?? existing.model ?? "mistral-small-latest"
-  const subagentConfigs: SubagentConfig[] =
-    body.subagents ??
-    existing.subagents.map((sa) => ({
-      name: sa.name,
-      description: "",
-      systemPrompt: sa.systemPrompt,
-      model: sa.model ?? "mistral-small-latest",
-      mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
-    }))
+  const steps = parsedSteps
+  const model = body.model ?? existing.model ?? "gpt-4.1-mini"
+
+  let subagentConfigs: SubagentConfig[]
+  try {
+    if (body.subagents !== undefined) {
+      const rawSubagents = coerceArray<{
+        name: string
+        description?: string
+        systemPrompt: string
+        model: string
+        mcpIds: string[] | string
+      }>(body.subagents, "subagents")
+      subagentConfigs = rawSubagents.map((sa, idx) => ({
+        name: sa.name,
+        description: sa.description ?? "",
+        systemPrompt: sa.systemPrompt,
+        model: sa.model,
+        mcpIds: coerceArray<string>(sa.mcpIds, `subagents[${idx}].mcpIds`),
+      }))
+    } else {
+      subagentConfigs = existing.subagents.map((sa) => ({
+        name: sa.name,
+        description: "",
+        systemPrompt: sa.systemPrompt,
+        model: sa.model ?? "gpt-4.1-mini",
+        mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
+      }))
+    }
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Invalid subagents" },
+      { status: 400 },
+    )
+  }
 
   // Rebuild workflow graph from merged config
   const mcpConfigs = await loadEnabledMcpConfigs()

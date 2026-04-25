@@ -4,10 +4,11 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Server, Plus, Trash2, Pencil, Loader2, KeyRound } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 interface McpRecord {
   id: string
@@ -86,7 +87,7 @@ function McpDialog({
 
       const url = isNew ? "/api/mcps" : `/api/mcps/${(initial as McpRecord).id}`
       const method = isNew ? "POST" : "PUT"
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -117,6 +118,9 @@ function McpDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isNew ? "Add MCP server" : "Edit MCP server"}</DialogTitle>
+          <DialogDescription>
+            Register a Model Context Protocol server so agents can call its tools.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-1">
@@ -218,7 +222,7 @@ export default function McpsPage() {
   const [dialog, setDialog] = useState<null | { isNew: true } | McpRecord>(null)
 
   useEffect(() => {
-    fetch("/api/mcps")
+    apiFetch("/api/mcps")
       .then((r) => r.json())
       .then((data) => setMcps(Array.isArray(data) ? data : []))
       .catch(() => toast.error("Failed to load MCP servers"))
@@ -229,7 +233,7 @@ export default function McpsPage() {
     if (!confirm(`Delete MCP "${name}"? Agents using it will lose this tool on next workflow rebuild.`)) return
     setDeleting(id)
     try {
-      const res = await fetch(`/api/mcps/${id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/mcps/${id}`, { method: "DELETE" })
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`)
       setMcps((prev) => prev.filter((m) => m.id !== id))
       toast.success("MCP deleted")
@@ -243,7 +247,7 @@ export default function McpsPage() {
   async function handleToggle(mcp: McpRecord) {
     setToggling(mcp.id)
     try {
-      const res = await fetch(`/api/mcps/${mcp.id}`, {
+      const res = await apiFetch(`/api/mcps/${mcp.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !mcp.enabled }),

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 interface AIModel {
   id: number
@@ -41,13 +42,13 @@ export default function NewSpecialistPage() {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
-  const [model, setModel] = useState("mistral-small-latest")
+  const [model, setModel] = useState("gpt-4.1-mini")
   const [mcpIds, setMcpIds] = useState<string[]>([])
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/models").then((r) => r.json()).catch(() => []),
-      fetch("/api/mcps").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/models").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
     ]).then(([modelsData, mcpsData]: [AIModel[], McpConfig[]]) => {
       setModels(Array.isArray(modelsData) ? modelsData : [])
       setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
@@ -74,7 +75,7 @@ export default function NewSpecialistPage() {
 
     setSubmitting(true)
     try {
-      const response = await fetch("/api/specialists", {
+      const response = await apiFetch("/api/specialists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -157,7 +158,7 @@ export default function NewSpecialistPage() {
               id="model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="mistral-small-latest"
+              placeholder="gpt-4.1-mini"
             />
           ) : (
             <Select value={model} onValueChange={setModel}>

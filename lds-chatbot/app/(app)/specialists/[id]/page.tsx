@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 interface AIModel {
   id: number
@@ -41,7 +42,7 @@ interface McpConfig {
   category: string | null
 }
 
-const DEFAULT_MODEL = "mistral-small-latest"
+const DEFAULT_MODEL = "gpt-4.1-mini"
 
 export default function SpecialistEditorPage({
   params,
@@ -66,9 +67,9 @@ export default function SpecialistEditorPage({
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/specialists/${id}`).then((r) => r.json()),
-      fetch("/api/models").then((r) => r.json()).catch(() => []),
-      fetch("/api/mcps").then((r) => r.json()).catch(() => []),
+      apiFetch(`/api/specialists/${id}`).then((r) => r.json()),
+      apiFetch("/api/models").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
     ])
       .then(([data, modelsData, mcpsData]: [SpecialistRecord, AIModel[], McpConfig[]]) => {
         setSpecialist(data)
@@ -101,7 +102,7 @@ export default function SpecialistEditorPage({
     }
     setSaving(true)
     try {
-      const response = await fetch(`/api/specialists/${id}`, {
+      const response = await apiFetch(`/api/specialists/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -128,7 +129,7 @@ export default function SpecialistEditorPage({
     if (!confirm("Delete this specialist? This cannot be undone.")) return
     setDeleting(true)
     try {
-      const response = await fetch(`/api/specialists/${id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/specialists/${id}`, { method: "DELETE" })
       if (!response.ok && response.status !== 204) {
         throw new Error(`HTTP ${response.status}`)
       }
@@ -214,7 +215,7 @@ export default function SpecialistEditorPage({
               id="model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="mistral-small-latest"
+              placeholder="gpt-4.1-mini"
             />
           ) : (
             <Select value={model} onValueChange={setModel}>

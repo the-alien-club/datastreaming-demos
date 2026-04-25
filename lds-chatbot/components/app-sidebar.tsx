@@ -30,7 +30,10 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const handleSignOut = async () => {
     await authClient.signOut()
-    window.location.href = "/sign-in"
+    // window.location.href is a raw browser navigation that does NOT pass through
+    // Next.js's basePath rewriting, so we have to prepend the basePath manually.
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
+    window.location.href = `${basePath}/sign-in`
   }
 
   return (

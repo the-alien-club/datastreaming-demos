@@ -19,7 +19,7 @@ export const specialists = pgTable("specialists", {
   name: text("name").notNull(),
   description: text("description"),
   systemPrompt: text("system_prompt").notNull(),
-  model: text("model").default("mistral-small-latest"),
+  model: text("model").default("gpt-4.1-mini"),
   mcpIds: text("mcp_ids"),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
@@ -32,7 +32,7 @@ export const agents = pgTable("agents", {
   description: text("description"),
   systemPrompt: text("system_prompt"), // overall system prompt
   steps: text("steps"), // JSON array of {name, prompt} objects
-  model: text("model").default("mistral-small-latest"),
+  model: text("model").default("gpt-4.1-mini"),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
@@ -42,7 +42,7 @@ export const agentSubagents = pgTable("agent_subagents", {
   agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   name: text("name").notNull(), // display name / description for the deep agent
   systemPrompt: text("system_prompt").notNull(),
-  model: text("model").default("mistral-small-latest"),
+  model: text("model").default("gpt-4.1-mini"),
   mcpIds: text("mcp_ids"), // JSON array of MCP config IDs from static file
   datasetId: text("dataset_id"), // if corpus-based, the dataset ID to inject
   nodeId: text("node_id"), // the subagent node ID in the workflow graph

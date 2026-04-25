@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -21,6 +22,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { ArrowLeft, Upload, Loader2, RefreshCw, Link2 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 function timeAgo(ts: string | Date | null | undefined): string {
   if (!ts) return ""
@@ -136,7 +138,7 @@ export default function DatasetDetailPage({
 
   const fetchEntries = useCallback(async () => {
     try {
-      const res = await fetch(`/api/datasets/${id}/entries`)
+      const res = await apiFetch(`/api/datasets/${id}/entries`)
       if (!res.ok) return
       const data = await res.json()
       setEntries(Array.isArray(data) ? data : [])
@@ -148,7 +150,7 @@ export default function DatasetDetailPage({
   }, [id])
 
   useEffect(() => {
-    fetch(`/api/datasets/${id}`)
+    apiFetch(`/api/datasets/${id}`)
       .then((r) => r.json())
       .then((data) => setDataset(data))
       .catch(() => toast.error("Failed to load dataset"))
@@ -186,7 +188,7 @@ export default function DatasetDetailPage({
       const formData = new FormData()
       formData.append("file", file)
       try {
-        const res = await fetch(`/api/datasets/${id}/entries`, {
+        const res = await apiFetch(`/api/datasets/${id}/entries`, {
           method: "POST",
           body: formData,
         })
@@ -210,7 +212,7 @@ export default function DatasetDetailPage({
     setAttachOpen(true)
     if (agents.length === 0) {
       try {
-        const res = await fetch("/api/agents")
+        const res = await apiFetch("/api/agents")
         const data = await res.json()
         setAgents(Array.isArray(data) ? data : [])
       } catch {
@@ -226,7 +228,7 @@ export default function DatasetDetailPage({
     }
     setAttaching(true)
     try {
-      const res = await fetch(`/api/datasets/${id}/attach`, {
+      const res = await apiFetch(`/api/datasets/${id}/attach`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agentId: selectedAgentId }),
@@ -238,7 +240,7 @@ export default function DatasetDetailPage({
       toast.success("Dataset attached to agent as corpus specialist")
       setAttachOpen(false)
       setSelectedAgentId("")
-      const updated = await fetch(`/api/datasets/${id}`).then((r) => r.json())
+      const updated = await apiFetch(`/api/datasets/${id}`).then((r) => r.json())
       setDataset(updated)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to attach")
@@ -370,6 +372,9 @@ export default function DatasetDetailPage({
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Attach to Agent</DialogTitle>
+            <DialogDescription>
+              Choose an agent. A corpus specialist for this dataset will be added to its workflow.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-3">
             <p className="text-sm text-muted-foreground">

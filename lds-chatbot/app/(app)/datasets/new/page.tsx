@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Upload, X, FileText, Loader2, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 type UploadStatus = "pending" | "uploading" | "done" | "error"
 
@@ -73,7 +74,7 @@ export default function NewDatasetPage() {
 
     try {
       // 1. Create dataset
-      const createResponse = await fetch("/api/datasets", {
+      const createResponse = await apiFetch("/api/datasets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), description: description.trim() || undefined }),
@@ -97,7 +98,7 @@ export default function NewDatasetPage() {
         formData.append("file", files[i].file)
 
         try {
-          const uploadResponse = await fetch(`/api/datasets/${datasetId}/entries`, {
+          const uploadResponse = await apiFetch(`/api/datasets/${datasetId}/entries`, {
             method: "POST",
             body: formData,
           })

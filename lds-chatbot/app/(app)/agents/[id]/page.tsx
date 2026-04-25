@@ -17,6 +17,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -35,6 +36,7 @@ import {
   BrainCircuit,
 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 interface AIModel {
   id: number
@@ -88,7 +90,7 @@ interface LibrarySpecialist {
   mcpIds: string | null
 }
 
-const DEFAULT_MODEL = "mistral-small-latest"
+const DEFAULT_MODEL = "gpt-4.1-mini"
 
 // ── Subagent form state ────────────────────────────────────────────────────────
 
@@ -145,10 +147,10 @@ export default function AgentEditorPage({
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/agents/${id}`).then((r) => r.json()),
-      fetch("/api/models").then((r) => r.json()).catch(() => []),
-      fetch("/api/specialists").then((r) => r.json()).catch(() => []),
-      fetch("/api/mcps").then((r) => r.json()).catch(() => []),
+      apiFetch(`/api/agents/${id}`).then((r) => r.json()),
+      apiFetch("/api/models").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/specialists").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
     ])
       .then(([agentData, modelsData, specialistsData, mcpsData]: [AgentRecord, AIModel[], LibrarySpecialist[], McpConfig[]]) => {
         setAgent(agentData)
@@ -182,7 +184,7 @@ export default function AgentEditorPage({
     }
     setSaving(true)
     try {
-      const response = await fetch(`/api/agents/${id}`, {
+      const response = await apiFetch(`/api/agents/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -210,7 +212,7 @@ export default function AgentEditorPage({
     if (!confirm("Delete this agent? This cannot be undone.")) return
     setDeleting(true)
     try {
-      const response = await fetch(`/api/agents/${id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/agents/${id}`, { method: "DELETE" })
       if (!response.ok && response.status !== 204) {
         throw new Error(`HTTP ${response.status}`)
       }
@@ -297,7 +299,7 @@ export default function AgentEditorPage({
 
     setCommittingSubagent(true)
     try {
-      const response = await fetch("/api/specialists", {
+      const response = await apiFetch("/api/specialists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -411,7 +413,7 @@ export default function AgentEditorPage({
               id="model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="mistral-small-latest"
+              placeholder="gpt-4.1-mini"
             />
           ) : (
             <Select value={model} onValueChange={setModel}>
@@ -625,6 +627,9 @@ export default function AgentEditorPage({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Specialist</DialogTitle>
+            <DialogDescription>
+              Pick a saved specialist from your library or create a new one for this agent.
+            </DialogDescription>
           </DialogHeader>
 
           <Tabs
@@ -744,7 +749,7 @@ export default function AgentEditorPage({
                       id="sa-model"
                       value={subagentForm.model}
                       onChange={(e) => setSubagentForm((p) => ({ ...p, model: e.target.value }))}
-                      placeholder="mistral-small-latest"
+                      placeholder="gpt-4.1-mini"
                     />
                   ) : (
                     <Select

@@ -4,6 +4,9 @@ import { use, useEffect, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
+import { apiFetch, apiUrl } from "@/lib/api-fetch"
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
 
 interface ChatPageProps {
   params: Promise<{ id: string }>
@@ -18,7 +21,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
 
   // Load agent name for display
   useEffect(() => {
-    fetch(`/api/agents/${agentId}`)
+    apiFetch(`/api/agents/${agentId}`)
       .then((r) => r.json())
       .then((data: { name?: string }) => {
         if (data?.name) setAgentName(data.name)
@@ -28,7 +31,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
 
   const { messages, setMessages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
-      api: "/api/chat",
+      api: apiUrl("/api/chat"),
       // Inject agentId + conversationId into the request body.
       // The SDK skips its default body assembly when we return a `body`, so
       // we must forward id/messages/trigger/messageId ourselves.
@@ -54,7 +57,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
         const convId = dataPart.data
         conversationIdRef.current = convId
         // Update URL to make it bookmarkable without triggering a full navigation
-        window.history.replaceState(null, "", `/agents/${agentId}/chat/${convId}`)
+        window.history.replaceState(null, "", `${basePath}/agents/${agentId}/chat/${convId}`)
       }
     },
   })
@@ -69,7 +72,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
   function handleNewChat() {
     conversationIdRef.current = null
     setMessages([])
-    window.history.replaceState(null, "", `/agents/${agentId}/chat`)
+    window.history.replaceState(null, "", `${basePath}/agents/${agentId}/chat`)
   }
 
   return (

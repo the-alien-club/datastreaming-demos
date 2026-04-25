@@ -20,7 +20,12 @@ export async function GET(request: NextRequest) {
 
   const token = await resolveAccessToken(session.user.id)
   const models = await getAiModels(token)
-  modelsCache = { data: models, fetchedAt: now }
+  // Defensive client-side filter: the platform's `?modelType=llm` query is
+  // currently ignored by the backend (see QA_SWEEP_2026-04-25.md P1-2), so
+  // the response includes TTS, embedding, image and video models that have
+  // no business in an LLM picker. Filter to LLMs only.
+  const llmsOnly = models.filter((m) => m.modelType === "llm")
+  modelsCache = { data: llmsOnly, fetchedAt: now }
 
-  return Response.json(models)
+  return Response.json(llmsOnly)
 }

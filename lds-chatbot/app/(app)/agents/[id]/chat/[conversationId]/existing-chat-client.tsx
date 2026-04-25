@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
+import { apiUrl } from "@/lib/api-fetch"
 
 interface ExistingChatClientProps {
   agentId: string
@@ -29,7 +30,7 @@ export function ExistingChatClient({
   const { messages, sendMessage, status, error } = useChat({
     messages: initialMessages as UIMessage[],
     transport: new DefaultChatTransport({
-      api: "/api/chat",
+      api: apiUrl("/api/chat"),
       prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
         body: {
           ...body,

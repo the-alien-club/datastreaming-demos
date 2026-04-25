@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Database, Plus, Trash2, Eye, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-fetch"
 
 function timeAgo(epochSeconds: number | null): string {
   if (!epochSeconds) return ""
@@ -47,7 +48,7 @@ export default function DatasetsPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/datasets")
+    apiFetch("/api/datasets")
       .then((r) => r.json())
       .then((data) => setDatasets(Array.isArray(data) ? data : []))
       .catch(() => toast.error("Failed to load datasets"))
@@ -58,7 +59,7 @@ export default function DatasetsPage() {
     if (!confirm(`Delete dataset "${name}"? This cannot be undone.`)) return
     setDeleting(id)
     try {
-      const response = await fetch(`/api/datasets/${id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/datasets/${id}`, { method: "DELETE" })
       if (!response.ok && response.status !== 204) {
         throw new Error(`HTTP ${response.status}`)
       }

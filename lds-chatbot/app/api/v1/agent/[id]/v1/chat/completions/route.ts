@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth"
 import { db, getUserIdFromToken } from "@/lib/db"
-import { agents, conversations } from "@/lib/db/schema"
+import { agents, conversations, messages } from "@/lib/db/schema"
 import { eq, and } from "drizzle-orm"
 import { runWorkflow } from "@/lib/platform/client"
 import { streamJobSSE } from "@/lib/platform/sse"
@@ -85,10 +85,10 @@ async function loadConversation(conversationId: string, agentId: string, userId:
   })
 }
 
-async function createConversation(agentId: string, userId: string) {
+async function createConversation(agentId: string, userId: string, title: string) {
   const [created] = await db
     .insert(conversations)
-    .values({ id: crypto.randomUUID(), agentId, userId, sessionId: null, title: "openai-api" })
+    .values({ id: crypto.randomUUID(), agentId, userId, sessionId: null, title })
     .returning()
   return created
 }
@@ -98,6 +98,29 @@ async function persistSessionId(conversationId: string, sessionId: string) {
     .update(conversations)
     .set({ sessionId, updatedAt: new Date() })
     .where(eq(conversations.id, conversationId))
+}
+
+async function persistUserMessage(conversationId: string, content: string) {
+  await db.insert(messages).values({
+    id: crypto.randomUUID(),
+    conversationId,
+    role: "user",
+    content,
+  })
+}
+
+async function persistAssistantMessage(
+  conversationId: string,
+  content: string,
+  metadata: Record<string, unknown> | null,
+) {
+  await db.insert(messages).values({
+    id: crypto.randomUUID(),
+    conversationId,
+    role: "assistant",
+    content,
+    metadata: metadata ? JSON.stringify(metadata) : null,
+  })
 }
 
 // ── Result helpers ─────────────────────────────────────────────────────────────
@@ -165,7 +188,10 @@ export async function POST(
   const userMessage = [...chatMessages].reverse().find((m) => m.role === "user")?.content ?? ""
   console.log("[openai-compat] extracted userMessage:", JSON.stringify(userMessage))
 
-  // Load existing conversation or create a new one
+  // Load existing conversation or create a new one. Use the first 80 chars of
+  // the user message as the title so the Conversations list isn't a wall of
+  // identical "openai-api" rows.
+  const conversationTitle = userMessage.trim().slice(0, 80) || "API conversation"
   let conversation
   if (body.conversation_id) {
     conversation = await loadConversation(body.conversation_id, agentId, userId)
@@ -173,7 +199,13 @@ export async function POST(
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
     }
   } else {
-    conversation = await createConversation(agentId, userId)
+    conversation = await createConversation(agentId, userId, conversationTitle)
+  }
+
+  // Persist the user message before kicking off the workflow so that even
+  // a crash mid-stream leaves an auditable record of what was asked.
+  if (userMessage) {
+    await persistUserMessage(conversation.id, userMessage)
   }
 
   const job = await runWorkflow(
@@ -201,6 +233,7 @@ export async function POST(
 
           let lastChunkIndex = 0
           let finalResult: Record<string, unknown> | null | undefined = null
+          let assistantContent = ""
 
           for await (const event of streamJobSSE(job.id, accessToken)) {
             const chunks = extractChunks(event)
@@ -212,6 +245,7 @@ export async function POST(
                   chunks[i].choices as Array<{ delta?: { content?: string } }> | undefined
                 )?.[0]?.delta?.content
                 if (content) {
+                  assistantContent += content
                   controller.enqueue(encoder.encode(buildStreamChunk(chunkId, model, { content }, null)))
                 }
               }
@@ -224,10 +258,20 @@ export async function POST(
             }
           }
 
-          const newSessionId = extractAgentOutput(finalResult).sessionId
+          const output = extractAgentOutput(finalResult)
+          // Non-streaming fallback: some workflows only return the answer at
+          // the terminal event with no incremental content chunks.
+          if (!assistantContent && output.answer.content) {
+            assistantContent = output.answer.content
+            controller.enqueue(
+              encoder.encode(buildStreamChunk(chunkId, model, { content: assistantContent }, null)),
+            )
+          }
+          const newSessionId = output.sessionId
           if (newSessionId) {
             await persistSessionId(conversation.id, newSessionId)
           }
+          await persistAssistantMessage(conversation.id, assistantContent, output.answer.metadata)
 
           controller.enqueue(encoder.encode(buildStreamChunk(chunkId, model, {}, "stop")))
           controller.enqueue(encoder.encode("data: [DONE]\n\n"))
@@ -284,10 +328,12 @@ export async function POST(
     }
   }
 
-  const newSessionId = extractAgentOutput(finalResult).sessionId
+  const finalOutput = extractAgentOutput(finalResult)
+  const newSessionId = finalOutput.sessionId
   if (newSessionId) {
     await persistSessionId(conversation.id, newSessionId)
   }
+  await persistAssistantMessage(conversation.id, fullContent, finalOutput.answer.metadata)
 
   return NextResponse.json(
     buildNonStreamResponse(chunkId, model, fullContent, promptTokens, completionTokens, conversation.id)
