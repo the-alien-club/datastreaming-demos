@@ -16,3 +16,6 @@ data:
   BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
   NEXT_PUBLIC_APP_URL: {{ .Values.config.publicAppUrl | quote }}
   NEXT_PUBLIC_BASE_PATH: {{ .Values.config.basePath | quote }}
+  {{- with .Values.config.fetchTrace }}
+  FETCH_TRACE: {{ . | quote }}
+  {{- end }}

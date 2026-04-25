@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot
   pullPolicy: Always
-  tag: "0.1.4"
+  tag: "0.1.5"
 
 imagePullSecrets: []
 
@@ -90,6 +90,9 @@ config:
   betterAuthUrl: https://demo.alien.club
   publicAppUrl: https://demo.alien.club/agents
   basePath: /agents
+  # Set to "1" to print every globalThis.fetch URL+status to stderr — strictly
+  # for debugging better-auth fetch failures. Empty = disabled.
+  fetchTrace: ""
 
 # Scaleway Secret Manager reference for Authentik OAuth credentials.
 secrets:

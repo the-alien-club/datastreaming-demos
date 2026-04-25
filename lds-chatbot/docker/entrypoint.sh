@@ -31,4 +31,20 @@ echo "[entrypoint] Applying better-auth migrations..."
 node /app/node_modules/tsx/dist/cli.mjs /app/scripts/migrate-auth.ts
 
 echo "[entrypoint] Starting Next.js server..."
+
+# Optional fetch tracer for production debugging — set FETCH_TRACE=1 in the
+# Deployment env to log every globalThis.fetch URL + status. No-op when unset.
+if [[ "${FETCH_TRACE:-}" = "1" ]]; then
+  cat > /tmp/fetch-trace.cjs <<'EOF'
+const _orig = globalThis.fetch
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input?.url || (input && input.href) || String(input)
+  process.stderr.write('[FETCH] ' + url + '\n')
+  try { const r = await _orig(input, init); process.stderr.write('[FETCH-OK] ' + r.status + ' ' + url + '\n'); return r }
+  catch (e) { process.stderr.write('[FETCH-ERR] ' + (e && e.cause && e.cause.code || e.message) + ' ' + url + '\n'); throw e }
+}
+EOF
+  exec node --require /tmp/fetch-trace.cjs /app/server.js
+fi
+
 exec node /app/server.js
