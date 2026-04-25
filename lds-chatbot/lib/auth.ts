@@ -12,6 +12,8 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL,
   database: pool,
+  // The default rate limiter trips on sign-in's burst of internal calls.
+  rateLimit: { enabled: false },
   session: {
     cookieCache: {
       enabled: true,
