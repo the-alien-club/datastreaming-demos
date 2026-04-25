@@ -5,7 +5,34 @@ export interface PublicAIModel {
   name: string
   slug: string
   modelType: string
-  provider: { id: number; slug: string; name: string }
+  // Provider used to be returned as an expanded `{ id, slug, name }` object;
+  // the platform now only returns `providerId` plus a few other flat fields,
+  // and the UI should not crash when reading them.
+  providerId?: number | null
+  apiUrl?: string | null
+  description?: string | null
+  // Kept for back-compat in case the platform ever re-expands provider.
+  provider?: { id: number; slug: string; name: string } | null
+}
+
+/**
+ * Best-effort human-readable provider label for an AI model. Falls back to
+ * the apiUrl hostname when the platform doesn't return an expanded `provider`.
+ */
+export function providerLabelFromModel(m: PublicAIModel): string {
+  if (m.provider?.name) return m.provider.name
+  const url = m.apiUrl
+  if (!url) return ""
+  try {
+    const host = new URL(url).hostname
+    if (host.endsWith("openai.com")) return "OpenAI"
+    if (host.endsWith("anthropic.com")) return "Anthropic"
+    if (host.includes("googleapis.com") || host.endsWith("google.com")) return "Google"
+    if (host.endsWith("mistral.ai")) return "Mistral"
+    return host
+  } catch {
+    return ""
+  }
 }
 
 export interface CreateWorkflowBody {

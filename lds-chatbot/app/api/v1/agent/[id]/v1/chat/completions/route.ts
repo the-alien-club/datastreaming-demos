@@ -235,8 +235,12 @@ export async function POST(
           let finalResult: Record<string, unknown> | null | undefined = null
           let assistantContent = ""
 
+          let eventCount = 0
+          let maxChunkCount = 0
           for await (const event of streamJobSSE(job.id, accessToken)) {
+            eventCount++
             const chunks = extractChunks(event)
+            if (chunks.length > maxChunkCount) maxChunkCount = chunks.length
             // Only advance forward — see comment in app/api/chat/route.ts for
             // why `chunks` is non-monotonic across subagent handoffs.
             if (chunks.length > lastChunkIndex) {
@@ -254,6 +258,18 @@ export async function POST(
 
             if (isTerminal(event)) {
               finalResult = event.result as Record<string, unknown> | null | undefined
+              // One-line trace per completed run so empty-content chats are
+              // diagnosable from prod logs without re-deploying with debug.
+              const resultObj = event.result as
+                | { results?: Record<string, unknown> }
+                | null
+                | undefined
+              const resultsKeys = resultObj?.results ? Object.keys(resultObj.results) : []
+              console.log(
+                `[openai-compat] stream job=${job.id} done events=${eventCount} ` +
+                  `maxChunkCount=${maxChunkCount} contentLen=${assistantContent.length} ` +
+                  `terminalStatus=${event.status} resultKeys=[${resultsKeys.join(",")}]`,
+              )
               break
             }
           }
@@ -299,8 +315,12 @@ export async function POST(
   let lastChunkIndex = 0
   let finalResult: Record<string, unknown> | null | undefined = null
 
+  let nsEventCount = 0
+  let nsMaxChunkCount = 0
   for await (const event of streamJobSSE(job.id, accessToken)) {
+    nsEventCount++
     const chunks = extractChunks(event)
+    if (chunks.length > nsMaxChunkCount) nsMaxChunkCount = chunks.length
     // Only advance forward — see comment in app/api/chat/route.ts.
     if (chunks.length > lastChunkIndex) {
       for (let i = lastChunkIndex; i < chunks.length; i++) {
@@ -324,6 +344,14 @@ export async function POST(
       if (!fullContent && output.answer.content) {
         fullContent = output.answer.content
       }
+      const resultsKeys = (event.result as { results?: Record<string, unknown> } | null)?.results
+        ? Object.keys((event.result as { results: Record<string, unknown> }).results)
+        : []
+      console.log(
+        `[openai-compat] non-stream job=${job.id} done events=${nsEventCount} ` +
+        `maxChunkCount=${nsMaxChunkCount} contentLen=${fullContent.length} ` +
+        `terminalStatus=${event.status} resultKeys=[${resultsKeys.join(",")}]`,
+      )
       break
     }
   }

@@ -38,13 +38,10 @@ import {
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 
-interface AIModel {
-  id: number
-  name: string
-  slug: string
-  modelType: string
-  provider: { id: number; slug: string; name: string }
-}
+import type { PublicAIModel } from "@/lib/platform/client"
+import { providerLabelFromModel } from "@/lib/platform/client"
+
+type AIModel = PublicAIModel
 
 interface Step {
   name: string
@@ -424,7 +421,7 @@ export default function AgentEditorPage({
                 {models.map((m) => (
                   <SelectItem key={m.id} value={m.slug}>
                     <span>{m.name}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{m.provider.name}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{providerLabelFromModel(m)}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -764,7 +761,7 @@ export default function AgentEditorPage({
                           <SelectItem key={m.id} value={m.slug}>
                             <span>{m.name}</span>
                             <span className="ml-2 text-xs text-muted-foreground">
-                              {m.provider.name}
+                              {providerLabelFromModel(m)}
                             </span>
                           </SelectItem>
                         ))}
