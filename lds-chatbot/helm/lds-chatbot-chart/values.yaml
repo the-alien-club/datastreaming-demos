@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot
   pullPolicy: Always
-  tag: "0.1.1"
+  tag: "0.1.2"
 
 imagePullSecrets: []
 
@@ -84,8 +84,10 @@ config:
   datalclusterMcpUrl: https://mcp.alien.club/datacluster/mcp
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
-  # basePath is appended because the app is served under istio.path.
-  betterAuthUrl: https://demo.alien.club/agents
+  # better-auth's baseURL is the bare host — basePath is added at the
+  # auth-client/redirectURI layer via NEXT_PUBLIC_BASE_PATH. Combining them
+  # here would double-prefix the auth routes (404).
+  betterAuthUrl: https://demo.alien.club
   publicAppUrl: https://demo.alien.club/agents
   basePath: /agents
 
