@@ -79,9 +79,11 @@ resources:
     memory: 2Gi
 
 config:
-  platformApiUrl: https://api.alien.club
-  clusterId: "77"
-  datalclusterMcpUrl: https://mcp.alien.club/datacluster/mcp
+  # Pointed at alpha while the lds-chatbot platform-side code (workflow engine
+  # changes for this demo) hasn't been promoted to prod yet.
+  platformApiUrl: https://api.alpha.alien.club
+  clusterId: "88"
+  datalclusterMcpUrl: https://mcp-test-lds-1772018329422.mcp.alpha.alien.club/mcp
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
   # better-auth's baseURL is the bare host — basePath is added at the
