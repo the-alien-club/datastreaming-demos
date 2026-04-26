@@ -117,6 +117,22 @@ export async function getWorkflow(id: number, token: string): Promise<unknown> {
   return platformJson<unknown>(`/workflows/${id}`, { method: "GET" }, token)
 }
 
+export async function deleteWorkflow(id: number, token: string): Promise<void> {
+  const response = await fetch(`${PLATFORM_API_URL}/workflows/${id}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "x-oauth-access-token": token,
+    },
+  })
+  // 404 = already gone on the platform; treat as success so the local row can still be removed.
+  if (response.ok || response.status === 404) return
+  const body = await response.text().catch(() => "(no body)")
+  throw new Error(
+    `Platform API error ${response.status} ${response.statusText} on /workflows/${id}: ${body}`
+  )
+}
+
 export async function runWorkflow(
   workflowId: number,
   input: { user_prompt: string; session_id: string | null },

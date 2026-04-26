@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { agents, agentSubagents } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
-import { updateWorkflow } from "@/lib/platform/client"
+import { deleteWorkflow, updateWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { loadEnabledMcpConfigs } from "@/lib/mcps"
@@ -214,6 +214,11 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   if (!existing) {
     return Response.json({ error: "Agent not found" }, { status: 404 })
+  }
+
+  if (existing.workflowId) {
+    const token = await resolveAccessToken(session.user.id)
+    await deleteWorkflow(existing.workflowId, token)
   }
 
   // Cascade delete handled by FK constraint (subagents, conversations)

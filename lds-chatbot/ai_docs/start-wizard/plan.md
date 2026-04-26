@@ -152,6 +152,7 @@ Three rounds of Playwright QA (Authentik OAuth login, then full wizard walkthrou
 
 **Ghost-agent cleanup**
 - If the user closes the wizard mid-flow after step 2 has fired `POST /api/agents`, the orchestrator's `useEffect` unmount cleanup fires `DELETE /api/agents/[id]` so the half-built agent is removed. A `completedRef` short-circuits the cleanup on successful Finish so the real agent is preserved.
+- The DELETE handler now also tears down the platform-side workflow (`deleteWorkflow(workflowId, token)` in `lib/platform/client.ts`). 404 from the platform is treated as success (already gone); other non-2xx propagates so the local row stays for retry rather than leaving the platform inconsistent.
 
 **Cancel**
 - Clicking the wizard's Cancel button closes the dialog cleanly, no console errors
@@ -162,4 +163,3 @@ Three rounds of Playwright QA (Authentik OAuth login, then full wizard walkthrou
 - Drag-and-drop upload zone
 - Draft persistence to localStorage
 - Step-level analytics for dropoff visibility
-- Cleanup also drops the platform-side workflow on ghost-delete — currently `DELETE /api/agents/[id]` only removes the local DB row (cascading subagents/conversations), leaving an orphan workflow on the platform backend
