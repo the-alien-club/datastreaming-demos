@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bot, MessageSquare, Database, LogOut, BrainCircuit, Server } from "lucide-react"
+import { Bot, MessageSquare, Database, LogOut, BrainCircuit, Server, Sparkles } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
+import { useWizardStart } from "@/components/wizards/agents/start/wizard-context"
 
 interface AppSidebarProps {
   user: {
@@ -27,6 +28,7 @@ const navigation = [
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
+  const { openWizard } = useWizardStart()
 
   const handleSignOut = async () => {
     await authClient.signOut()
@@ -42,6 +44,17 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <Link href="/agents" className="text-lg font-semibold">
           LDS Chatbot
         </Link>
+      </div>
+      <Separator />
+      <div className="px-3 py-3">
+        <Button
+          type="button"
+          onClick={openWizard}
+          className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
+        >
+          <Sparkles className="h-4 w-4" />
+          Start
+        </Button>
       </div>
       <Separator />
       <nav className="flex-1 space-y-1 px-2 py-4">

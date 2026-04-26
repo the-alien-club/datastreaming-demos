@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Bot, Plus, MessageSquare, Settings } from "lucide-react"
+import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-context"
 
 export default async function AgentsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -21,6 +22,7 @@ export default async function AgentsPage() {
 
   return (
     <div className="p-6">
+      <AutoOpenIfEmpty agentCount={agentList.length} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Agents</h1>
