@@ -172,3 +172,32 @@ export async function openResponsesStream(
     signal,
   })
 }
+
+/**
+ * Resume an in-progress (or replay a completed) Responses-API stream
+ * via the platform's `GET /agent/:id/responses/:respId?starting_after=<seq>`
+ * endpoint per `responses_v1.md` §5. The platform replays every event
+ * with `sequence_number > startingAfter` and continues live if still in
+ * progress. Returns the raw upstream `Response` so the caller can pipe
+ * its SSE body through `translateResponseStream`.
+ */
+export async function resumeResponsesStream(
+  workflowId: number,
+  responseId: string,
+  startingAfter: number,
+  token: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const url = new URL(
+    `${PLATFORM_API_URL}/agent/${workflowId}/responses/${encodeURIComponent(responseId)}`,
+  )
+  url.searchParams.set("starting_after", String(startingAfter))
+  return fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      [PLATFORM_OAUTH_TOKEN_HEADER]: token,
+      Accept: "text/event-stream",
+    },
+    signal,
+  })
+}

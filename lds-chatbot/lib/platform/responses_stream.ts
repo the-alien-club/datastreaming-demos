@@ -53,6 +53,12 @@
 //   - `response.failed`               → captures the error code/message
 //                                       and closes any open text parts.
 //
+// In addition, every translated event emits a transient
+// `data-streamProgress` part carrying `{responseId, sequenceNumber,
+// terminal}`. The chat client persists this to localStorage so a tab
+// refresh mid-stream can reconnect via
+// `GET /agent/:id/responses/:respId?starting_after=<seq>`.
+//
 // Parts emitted are AI SDK v6 UI message parts; consumers (`chat-ui.tsx`)
 // type-guard them.
 
@@ -253,31 +259,39 @@ class TranslationState {
     switch (event) {
       case "response.created":
         this._handleCreated(payload)
-        return
+        break
       case "response.output_item.added":
         this._handleOutputItemAdded(payload)
-        return
+        break
       case "response.output_item.done":
         this._handleOutputItemDone(payload)
-        return
+        break
       case "response.output_text.delta":
         this._handleTextDelta(payload)
-        return
+        break
       case "response.function_call_arguments.done":
         this._handleFunctionCallDone(payload)
-        return
+        break
       case "response.completed":
         this._handleCompleted(payload)
-        return
+        break
       case "response.failed":
         this._handleFailed(payload)
-        return
+        break
       default:
         // Other events (in_progress, content_part.*, reasoning_*, etc.)
         // are not surfaced in the UI yet — see the module docstring.
         // Ignored intentionally.
-        return
+        break
     }
+
+    // Surface a transient progress beacon for the UI's resume bookkeeping.
+    // Carries the platform `response_id` and the event's `sequence_number`
+    // so the client can persist `(responseId, lastSeq)` to localStorage and
+    // reconnect via `GET /agent/:id/responses/:respId?starting_after=<seq>`
+    // after a refresh. Marked `transient` so it bypasses the message-parts
+    // store and only flows through `useChat({ onData })`.
+    this._emitProgress(event, payload)
   }
 
   /**
@@ -407,6 +421,36 @@ class TranslationState {
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Emit a transient `data-streamProgress` beacon carrying the
+   * `(responseId, sequenceNumber, terminal)` triple. Picked up via
+   * `useChat({ onData })` on the client and persisted to localStorage so
+   * a tab refresh mid-stream can reconnect to the platform's resume
+   * endpoint with `starting_after = sequenceNumber`. Terminal events
+   * (`response.completed`/`response.failed`) flag `terminal: true` so
+   * the client clears the persisted cursor.
+   */
+  private _emitProgress(event: string, payload: Record<string, unknown>): void {
+    if (this._responseId === null) return
+    const seq = payload.sequence_number
+    if (typeof seq !== "number" || !Number.isInteger(seq)) return
+
+    const terminal =
+      event === "response.completed" ||
+      event === "response.failed" ||
+      event === "response.incomplete"
+
+    this._writer.write({
+      type: "data-streamProgress",
+      transient: true,
+      data: {
+        responseId: this._responseId,
+        sequenceNumber: seq,
+        terminal,
+      },
+    } as WriterEvent)
+  }
 
   /**
    * Pull the agent registry off the `response.created` event's
