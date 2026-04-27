@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { BrainCircuit, Plus, Settings } from "lucide-react"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export default async function SpecialistsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -78,7 +79,7 @@ export default async function SpecialistsPage() {
                 <CardContent className="pb-2 flex-1">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant="secondary" className="text-xs">
-                      {specialist.model ?? "gpt-4.1-mini"}
+                      {specialist.model ?? DEFAULT_MODEL_SLUG}
                     </Badge>
                     {mcpIds.map((mcpId) => (
                       <Badge key={mcpId} variant="outline" className="text-xs">

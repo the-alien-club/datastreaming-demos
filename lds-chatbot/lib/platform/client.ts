@@ -1,3 +1,5 @@
+import { PLATFORM_OAUTH_TOKEN_HEADER } from "@/lib/constants"
+
 const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
 
 export interface PublicAIModel {
@@ -63,7 +65,7 @@ async function platformFetch(
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "x-oauth-access-token": token,
+      [PLATFORM_OAUTH_TOKEN_HEADER]: token,
       ...(options.headers as Record<string, string> | undefined),
     },
   })
@@ -122,7 +124,7 @@ export async function deleteWorkflow(id: number, token: string): Promise<void> {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
-      "x-oauth-access-token": token,
+      [PLATFORM_OAUTH_TOKEN_HEADER]: token,
     },
   })
   // 404 = already gone on the platform; treat as success so the local row can still be removed.
@@ -163,7 +165,7 @@ export async function openResponsesStream(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-oauth-access-token": token,
+      [PLATFORM_OAUTH_TOKEN_HEADER]: token,
       Accept: "text/event-stream",
     },
     body: JSON.stringify({ ...body, stream: true }),

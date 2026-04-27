@@ -3,47 +3,37 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
+import { notFound, ok, unauthorized } from "@/lib/api-response"
+import { parseBody, updateMcpBodySchema } from "../../_validators"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session) return unauthorized()
 
   const { id } = await context.params
   const mcp = await db.query.mcps.findFirst({
     where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
   })
-  if (!mcp) return Response.json({ error: "MCP not found" }, { status: 404 })
+  if (!mcp) return notFound("MCP not found")
 
-  return Response.json(mcp)
+  return ok(mcp)
 }
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session) return unauthorized()
 
   const { id } = await context.params
   const existing = await db.query.mcps.findFirst({
     where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
   })
-  if (!existing) return Response.json({ error: "MCP not found" }, { status: 404 })
+  if (!existing) return notFound("MCP not found")
 
-  let body: {
-    name?: string
-    serverUrl?: string
-    transport?: string
-    authToken?: string | null
-    description?: string | null
-    category?: string | null
-    enabled?: boolean
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
+  const parsed = await parseBody(request, updateMcpBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
   await db
     .update(mcps)
@@ -62,18 +52,18 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const updated = await db.query.mcps.findFirst({
     where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
   })
-  return Response.json(updated)
+  return ok(updated)
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session) return unauthorized()
 
   const { id } = await context.params
   const existing = await db.query.mcps.findFirst({
     where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
   })
-  if (!existing) return Response.json({ error: "MCP not found" }, { status: 404 })
+  if (!existing) return notFound("MCP not found")
 
   await db.delete(mcps).where(and(eq(mcps.id, id), eq(mcps.userId, session.user.id)))
   return new Response(null, { status: 204 })

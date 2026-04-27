@@ -20,6 +20,7 @@ import { apiFetch } from "@/lib/api-fetch"
 
 import type { PublicAIModel } from "@/lib/platform/client"
 import { providerLabelFromModel } from "@/lib/platform/client"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type AIModel = PublicAIModel
 
@@ -32,7 +33,7 @@ export default function NewAgentPage() {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
-  const [model, setModel] = useState("gpt-4.1-mini")
+  const [model, setModel] = useState(DEFAULT_MODEL_SLUG)
 
   useEffect(() => {
     apiFetch("/api/models")
@@ -133,7 +134,7 @@ export default function NewAgentPage() {
               id="model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-4.1-mini"
+              placeholder={DEFAULT_MODEL_SLUG}
             />
           ) : (
             <Select value={model} onValueChange={setModel}>

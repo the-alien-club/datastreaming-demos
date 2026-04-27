@@ -7,58 +7,41 @@ import { updateWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { loadEnabledMcpConfigs } from "@/lib/mcps"
+import { ok, notFound, unauthorized, unprocessable, conflict } from "@/lib/api-response"
+import { datasetAttachBodySchema, parseBody } from "../../../_validators"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await context.params
 
-  let body: { agentId: string }
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
+  const parsed = await parseBody(request, datasetAttachBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
-  if (!body.agentId || typeof body.agentId !== "string") {
-    return Response.json({ error: "agentId is required" }, { status: 422 })
-  }
-
-  // 1. Load dataset from local DB (scoped to caller)
+  // 1. Load dataset from local DB (scoped to caller).
   const dataset = await db.query.datasets.findFirst({
     where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
   })
+  if (!dataset) return notFound("Dataset not found")
+  if (!dataset.clusterDatasetId) return unprocessable("Dataset not yet synced with cluster")
 
-  if (!dataset) {
-    return Response.json({ error: "Dataset not found" }, { status: 404 })
-  }
-
-  if (!dataset.clusterDatasetId) {
-    return Response.json({ error: "Dataset not yet synced with cluster" }, { status: 422 })
-  }
-
-  // 2. Load agent from local DB (scoped to caller)
+  // 2. Load agent from local DB (scoped to caller).
   const agent = await db.query.agents.findFirst({
     where: (a, { eq, and }) => and(eq(a.id, body.agentId), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
+  if (!agent) return notFound("Agent not found")
 
-  if (!agent) {
-    return Response.json({ error: "Agent not found" }, { status: 404 })
-  }
-
-  // Guard against duplicate attachments
+  // Guard against duplicate attachments.
   const alreadyAttached = await db.query.agentSubagents.findFirst({
     where: (sa, { and, eq }) => and(eq(sa.agentId, body.agentId), eq(sa.datasetId, id)),
   })
-  if (alreadyAttached) {
-    return Response.json({ error: "Dataset already attached to this agent" }, { status: 409 })
-  }
+  if (alreadyAttached) return conflict("Dataset already attached to this agent")
 
   // 3. Build corpus subagent config
   const corpusSystemPrompt = `You are a document search specialist for the "${dataset.name}" corpus.
@@ -80,7 +63,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
     name: `${dataset.name} Corpus`,
     description: corpusDescription,
     systemPrompt: corpusSystemPrompt,
-    model: agent.model ?? "gpt-4.1-mini",
+    model: agent.model ?? DEFAULT_MODEL_SLUG,
     mcpIds: ["datacluster"],
   }
 
@@ -89,7 +72,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
     name: sa.name,
     description: "",
     systemPrompt: sa.systemPrompt,
-    model: sa.model ?? "gpt-4.1-mini",
+    model: sa.model ?? DEFAULT_MODEL_SLUG,
     mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
   }))
 
@@ -102,13 +85,11 @@ Return relevant excerpts with source references (entry IDs and titles).`
     name: agent.name,
     systemPrompt: agent.systemPrompt ?? "",
     steps,
-    model: agent.model ?? "gpt-4.1-mini",
+    model: agent.model ?? DEFAULT_MODEL_SLUG,
     subagents: allSubagents,
   }, mcpConfigs)
 
-  if (!agent.workflowId) {
-    return Response.json({ error: "Agent has no linked workflow" }, { status: 422 })
-  }
+  if (!agent.workflowId) return unprocessable("Agent has no linked workflow")
   const token = await resolveAccessToken(session.user.id)
   await updateWorkflow(agent.workflowId, { nodes, edges }, token)
 
@@ -132,5 +113,5 @@ Return relevant excerpts with source references (entry IDs and titles).`
     .set({ updatedAt: now })
     .where(eq(agents.id, agent.id))
 
-  return Response.json({ success: true, subagentId }, { status: 201 })
+  return ok({ subagentId }, 201)
 }

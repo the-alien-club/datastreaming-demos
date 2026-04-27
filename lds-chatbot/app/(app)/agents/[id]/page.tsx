@@ -40,6 +40,7 @@ import { apiFetch } from "@/lib/api-fetch"
 
 import type { PublicAIModel } from "@/lib/platform/client"
 import { providerLabelFromModel } from "@/lib/platform/client"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type AIModel = PublicAIModel
 
@@ -87,7 +88,7 @@ interface LibrarySpecialist {
   mcpIds: string | null
 }
 
-const DEFAULT_MODEL = "gpt-4.1-mini"
+const DEFAULT_MODEL = DEFAULT_MODEL_SLUG
 
 // ── Subagent form state ────────────────────────────────────────────────────────
 
@@ -420,7 +421,7 @@ export default function AgentEditorPage({
               id="model"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-4.1-mini"
+              placeholder={DEFAULT_MODEL_SLUG}
             />
           ) : (
             <Select value={model} onValueChange={setModel}>
@@ -756,7 +757,7 @@ export default function AgentEditorPage({
                       id="sa-model"
                       value={subagentForm.model}
                       onChange={(e) => setSubagentForm((p) => ({ ...p, model: e.target.value }))}
-                      placeholder="gpt-4.1-mini"
+                      placeholder={DEFAULT_MODEL_SLUG}
                     />
                   ) : (
                     <Select

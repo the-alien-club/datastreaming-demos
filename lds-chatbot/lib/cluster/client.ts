@@ -1,4 +1,5 @@
 import { Configuration, DatasetsApi, EntriesApi, PipelinesApi } from "@alien/data-api-client"
+import { PLATFORM_OAUTH_TOKEN_HEADER } from "@/lib/constants"
 
 const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
 const CLUSTER_ID = process.env.CLUSTER_ID!
@@ -39,7 +40,7 @@ const debugFetch: typeof fetch = async (url, init) => {
 export function getClusterClient(accessToken: string) {
   const config = new Configuration({
     basePath: `${PLATFORM_API_URL}/clusters/${CLUSTER_ID}/proxy`,
-    headers: { "x-oauth-access-token": accessToken },
+    headers: { [PLATFORM_OAUTH_TOKEN_HEADER]: accessToken },
     ...(DEBUG_CLUSTER_CLIENT ? { fetchApi: debugFetch } : {}),
   })
   return {

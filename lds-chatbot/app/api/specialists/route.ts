@@ -3,47 +3,29 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { specialists } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
+import { ok, unauthorized } from "@/lib/api-response"
+import { parseBody, specialistBodySchema } from "../_validators"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const rows = await db.query.specialists.findMany({
     where: eq(specialists.userId, session.user.id),
     orderBy: [desc(specialists.createdAt)],
   })
 
-  return Response.json(rows)
+  return ok(rows)
 }
 
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
-  let body: {
-    name: string
-    description?: string
-    systemPrompt: string
-    model?: string
-    mcpIds?: string[]
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
-
-  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
-    return Response.json({ error: "name is required" }, { status: 422 })
-  }
-  if (!body.systemPrompt || typeof body.systemPrompt !== "string" || body.systemPrompt.trim() === "") {
-    return Response.json({ error: "systemPrompt is required" }, { status: 422 })
-  }
+  const parsed = await parseBody(request, specialistBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
   const now = new Date()
   const id = crypto.randomUUID()
@@ -54,7 +36,7 @@ export async function POST(request: NextRequest) {
     name: body.name.trim(),
     description: body.description?.trim() ?? null,
     systemPrompt: body.systemPrompt.trim(),
-    model: body.model ?? "gpt-4.1-mini",
+    model: body.model ?? DEFAULT_MODEL_SLUG,
     mcpIds: body.mcpIds && body.mcpIds.length > 0 ? JSON.stringify(body.mcpIds) : null,
     createdAt: now,
     updatedAt: now,
@@ -64,5 +46,5 @@ export async function POST(request: NextRequest) {
     where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
-  return Response.json(created, { status: 201 })
+  return ok(created, 201)
 }

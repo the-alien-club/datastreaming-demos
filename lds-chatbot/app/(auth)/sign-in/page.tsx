@@ -3,12 +3,16 @@
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { OAUTH_PROVIDER_ID } from "@/lib/constants"
 
 export default function SignInPage() {
   const handleSignIn = () => {
+    // basePath is prepended in the auth callback handler — better-auth treats
+    // `callbackURL` as path-relative to the configured baseURL.
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
     authClient.signIn.oauth2({
-      providerId: "authentik",
-      callbackURL: "/agents",
+      providerId: OAUTH_PROVIDER_ID,
+      callbackURL: `${basePath}/agents`,
     })
   }
 

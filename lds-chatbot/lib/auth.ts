@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth"
 import { genericOAuth } from "better-auth/plugins"
 import { pool } from "@/lib/db"
+import { OAUTH_PROVIDER_ID } from "@/lib/constants"
 
 // Server-side only — must NOT use the NEXT_PUBLIC_ prefix or Next.js
 // constant-folds it to the build-time placeholder.
@@ -31,11 +32,11 @@ export const auth = betterAuth({
     genericOAuth({
       config: [
         {
-          providerId: "authentik",
+          providerId: OAUTH_PROVIDER_ID,
           clientId: process.env.AUTHENTIK_CLIENT_ID!,
           clientSecret: process.env.AUTHENTIK_CLIENT_SECRET!,
           discoveryUrl: `${authentikBaseUrl}/application/o/${appSlug}/.well-known/openid-configuration`,
-          redirectURI: `${baseURL}${basePath}/api/auth/oauth2/callback/authentik`,
+          redirectURI: `${baseURL}${basePath}/api/auth/oauth2/callback/${OAUTH_PROVIDER_ID}`,
           scopes: ["openid", "email", "profile", "offline_access"],
           accessType: "offline",
           prompt: "consent",

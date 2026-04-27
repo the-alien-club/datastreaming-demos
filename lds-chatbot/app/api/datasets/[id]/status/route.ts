@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { getClusterClient } from "@/lib/cluster/client"
 import { resolveAccessToken } from "@/lib/auth-helpers"
+import { ok, notFound, unauthorized } from "@/lib/api-response"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -19,22 +20,17 @@ function normalizeStatus(value: unknown): StatusKey | null {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await context.params
 
   const dataset = await db.query.datasets.findFirst({
     where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
   })
-
-  if (!dataset) {
-    return Response.json({ error: "Dataset not found" }, { status: 404 })
-  }
+  if (!dataset) return notFound("Dataset not found")
 
   if (!dataset.clusterDatasetId) {
-    return Response.json({
+    return ok({
       datasetId: id,
       totalEntries: 0,
       byStatus: { pending: 0, uploading: 0, uploaded: 0, processing: 0, processed: 0, error: 0 },
@@ -84,7 +80,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     overall = "empty"
   }
 
-  return Response.json({
+  return ok({
     datasetId: id,
     totalEntries,
     byStatus,

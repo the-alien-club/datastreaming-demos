@@ -3,26 +3,25 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { specialists } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
+import { ok, notFound, unauthorized } from "@/lib/api-response"
+import { parseBody, specialistBodySchema } from "../../_validators"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await params
   const row = await db.query.specialists.findFirst({
     where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
-  if (!row) {
-    return Response.json({ error: "Not found" }, { status: 404 })
-  }
+  if (!row) return notFound()
 
-  return Response.json(row)
+  return ok(row)
 }
 
 export async function PUT(
@@ -30,40 +29,18 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await params
 
-  // Verify ownership before applying any update.
   const existing = await db.query.specialists.findFirst({
     where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
-  if (!existing) {
-    return Response.json({ error: "Not found" }, { status: 404 })
-  }
+  if (!existing) return notFound()
 
-  let body: {
-    name: string
-    description?: string | null
-    systemPrompt: string
-    model?: string
-    mcpIds?: string[]
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
-
-  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
-    return Response.json({ error: "name is required" }, { status: 422 })
-  }
-  if (!body.systemPrompt || typeof body.systemPrompt !== "string" || body.systemPrompt.trim() === "") {
-    return Response.json({ error: "systemPrompt is required" }, { status: 422 })
-  }
+  const parsed = await parseBody(request, specialistBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
   await db
     .update(specialists)
@@ -71,7 +48,7 @@ export async function PUT(
       name: body.name.trim(),
       description: body.description?.trim() ?? null,
       systemPrompt: body.systemPrompt.trim(),
-      model: body.model ?? "gpt-4.1-mini",
+      model: body.model ?? DEFAULT_MODEL_SLUG,
       mcpIds: body.mcpIds && body.mcpIds.length > 0 ? JSON.stringify(body.mcpIds) : null,
       updatedAt: new Date(),
     })
@@ -81,11 +58,9 @@ export async function PUT(
     where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
-  if (!updated) {
-    return Response.json({ error: "Not found" }, { status: 404 })
-  }
+  if (!updated) return notFound()
 
-  return Response.json(updated)
+  return ok(updated)
 }
 
 export async function DELETE(
@@ -93,18 +68,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await params
 
   const existing = await db.query.specialists.findFirst({
     where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
-  if (!existing) {
-    return Response.json({ error: "Not found" }, { status: 404 })
-  }
+  if (!existing) return notFound()
 
   await db
     .delete(specialists)

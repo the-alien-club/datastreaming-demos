@@ -280,14 +280,30 @@ export function ChatUI({
 }: ChatUIProps) {
   const [input, setInput] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Track whether the user is anchored to the bottom. While streaming we
+  // only auto-scroll when they're near the bottom — otherwise we'd drag
+  // them back down on every chunk and they couldn't read previous content.
+  const isNearBottomRef = useRef(true)
 
   const isLoading = status === "submitted" || status === "streaming"
 
-  // Auto-scroll to bottom when messages change or streaming
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget
+    isNearBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }
+
+  // Auto-scroll only when the user is anchored to the bottom. Use
+  // "instant" during streaming (smooth would compound into a janky
+  // continuous animation as deltas arrive 30+ times/sec).
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    if (!isNearBottomRef.current) return
+    messagesEndRef.current?.scrollIntoView({
+      behavior: status === "streaming" ? "instant" : "smooth",
+    })
+  }, [messages, status])
 
   function handleSubmit(e?: FormEvent) {
     e?.preventDefault()
@@ -365,7 +381,11 @@ export function ChatUI({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-6 py-6 space-y-4"
+      >
         {messages.length === 0 && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-16">
             <Bot className="h-12 w-12 mb-4 opacity-30" />

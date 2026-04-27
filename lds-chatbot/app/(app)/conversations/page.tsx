@@ -6,36 +6,7 @@ import { agents, conversations, messages } from "@/lib/db/schema"
 import { eq, sql, desc } from "drizzle-orm"
 import Link from "next/link"
 import { MessageSquare, Bot } from "lucide-react"
-
-function formatRelativeTime(date: Date | number | null): string {
-  if (!date) return ""
-  const d = date instanceof Date ? date : new Date(typeof date === "number" ? date * 1000 : date)
-  const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
-  const diffSec = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSec / 60)
-  const diffHour = Math.floor(diffMin / 60)
-  const diffDay = Math.floor(diffHour / 24)
-
-  if (diffMin < 1) return "just now"
-  if (diffMin < 60) return `${diffMin}m ago`
-  if (diffHour < 24) return `${diffHour}h ago`
-  if (diffDay < 7) return `${diffDay}d ago`
-  return d.toLocaleDateString()
-}
-
-function getDateGroup(date: Date | number | null): string {
-  if (!date) return "Older"
-  const d = date instanceof Date ? date : new Date(typeof date === "number" ? date * 1000 : date)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterday = new Date(today.getTime() - 86400000)
-  const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-
-  if (dDay.getTime() === today.getTime()) return "Today"
-  if (dDay.getTime() === yesterday.getTime()) return "Yesterday"
-  return "Older"
-}
+import { dateGroup, timeAgo } from "@/lib/time"
 
 export default async function ConversationsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -66,7 +37,7 @@ export default async function ConversationsPage() {
   // Group by date
   const groups: Record<string, typeof rows> = { Today: [], Yesterday: [], Older: [] }
   for (const row of rows) {
-    const group = getDateGroup(row.updatedAt)
+    const group = dateGroup(row.updatedAt)
     groups[group].push(row)
   }
 
@@ -120,7 +91,7 @@ export default async function ConversationsPage() {
                         </p>
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0 opacity-60 group-hover:opacity-100">
-                        {formatRelativeTime(row.updatedAt)}
+                        {timeAgo(row.updatedAt)}
                       </span>
                     </Link>
                   ))}

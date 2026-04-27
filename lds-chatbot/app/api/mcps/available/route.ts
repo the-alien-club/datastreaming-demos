@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
 import { and, desc, eq } from "drizzle-orm"
+import { ok, unauthorized } from "@/lib/api-response"
 
 export interface AvailableMcp {
   id: string
@@ -30,7 +31,7 @@ function builtinSlug(id: string): string | null {
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session) return unauthorized()
 
   const rows = await db
     .select()
@@ -50,5 +51,5 @@ export async function GET(request: NextRequest) {
   const otherBuiltin = all.filter((m) => m.source === "builtin" && m.category !== "legal")
   const userMcps = all.filter((m) => m.source === "user")
 
-  return Response.json({ legal, otherBuiltin, userMcps })
+  return ok({ legal, otherBuiltin, userMcps })
 }

@@ -7,14 +7,15 @@ import { deleteWorkflow, updateWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { loadEnabledMcpConfigs } from "@/lib/mcps"
+import { ok, notFound, unauthorized, unprocessable } from "@/lib/api-response"
+import { parseBody, updateAgentBodySchema } from "../../_validators"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await context.params
 
@@ -24,22 +25,49 @@ export async function GET(request: NextRequest, context: RouteContext) {
   })
 
   if (!agent) {
-    // 404 (not 403) on missing-or-not-owned: don't disclose existence of other
-    // users' resources to a potential attacker probing for IDs.
-    return Response.json({ error: "Agent not found" }, { status: 404 })
+    // 404 (not 403) on missing-or-not-owned: don't disclose existence of
+    // other users' resources to a potential attacker probing for IDs.
+    return notFound("Agent not found")
   }
 
-  return Response.json({
+  return ok({
     ...agent,
     starterPrompts: agent.starterPrompts ? JSON.parse(agent.starterPrompts) : [],
   })
 }
 
+// Reusable coercion: a field may arrive as either a parsed JSON value
+// (typical UI flow) or a JSON-encoded string (clients that round-trip
+// the GET response, where these fields are stored as JSON text in
+// Postgres). Validators upstream allow both shapes; we normalise here.
+function toJsonArray<T>(value: unknown, fieldName: string): T[] {
+  if (value === undefined || value === null) return []
+  if (Array.isArray(value)) return value as T[]
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed === "") return []
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      throw new Error(`${fieldName} must be an array or valid JSON array string`)
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${fieldName} must be an array`)
+    }
+    return parsed as T[]
+  }
+  throw new Error(`${fieldName} must be an array (got: ${typeof value})`)
+}
+
+// Track datasetId alongside the workflow-graph SubagentConfig so we can
+// preserve corpus attachments on round-trip writes (the graph builder
+// doesn't need datasetId — but the persistence layer does).
+type SubagentConfigWithDataset = SubagentConfig & { datasetId: string | null }
+
 export async function PUT(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await context.params
 
@@ -48,96 +76,44 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     with: { subagents: true },
   })
 
-  if (!existing) {
-    return Response.json({ error: "Agent not found" }, { status: 404 })
-  }
+  if (!existing) return notFound("Agent not found")
 
-  // Body may arrive with `steps` and `subagents[].mcpIds` as either:
-  //   - already-parsed arrays (the typical UI flow), or
-  //   - JSON-encoded strings (a client that round-trips the GET response,
-  //     where these fields are stored as JSON text in Postgres).
-  // We coerce to arrays here and validate; never trust `.map()` on raw input.
-  let body: {
-    name?: string
-    description?: string
-    systemPrompt?: string
-    steps?: { name: string; prompt: string }[] | string
-    model?: string
-    subagents?: (Omit<SubagentConfig, "mcpIds"> & { mcpIds: string[] | string })[]
-    starterPrompts?: string[] | string
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
-
-  function coerceArray<T>(value: unknown, fieldName: string): T[] {
-    if (value === undefined || value === null) return []
-    if (Array.isArray(value)) return value as T[]
-    if (typeof value === "string") {
-      const trimmed = value.trim()
-      if (trimmed === "") return []
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(trimmed)
-      } catch {
-        throw new Error(
-          `${fieldName} must be an array or valid JSON array string`,
-        )
-      }
-      if (!Array.isArray(parsed)) {
-        throw new Error(`${fieldName} must be an array`)
-      }
-      return parsed as T[]
-    }
-    throw new Error(`${fieldName} must be an array (got: ${typeof value})`)
-  }
+  const parsed = await parseBody(request, updateAgentBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
   let parsedSteps: { name: string; prompt: string }[]
   try {
     parsedSteps = body.steps !== undefined
-      ? coerceArray<{ name: string; prompt: string }>(body.steps, "steps")
+      ? toJsonArray<{ name: string; prompt: string }>(body.steps, "steps")
       : (existing.steps ? JSON.parse(existing.steps) : [])
   } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : "Invalid steps" },
-      { status: 400 },
-    )
+    return unprocessable(err instanceof Error ? err.message : "Invalid steps")
   }
 
   let parsedStarterPrompts: string[] | null
   try {
     if (body.starterPrompts !== undefined) {
-      const arr = coerceArray<string>(body.starterPrompts, "starterPrompts")
+      const arr = toJsonArray<string>(body.starterPrompts, "starterPrompts")
         .filter((p): p is string => typeof p === "string" && p.trim() !== "")
       parsedStarterPrompts = arr.length > 0 ? arr : null
     } else {
       parsedStarterPrompts = existing.starterPrompts ? JSON.parse(existing.starterPrompts) : null
     }
   } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : "Invalid starterPrompts" },
-      { status: 400 },
-    )
+    return unprocessable(err instanceof Error ? err.message : "Invalid starterPrompts")
   }
 
   const name = body.name?.trim() ?? existing.name
   const description = "description" in body ? (body.description ?? null) : existing.description
   const systemPrompt = body.systemPrompt ?? existing.systemPrompt ?? ""
   const steps = parsedSteps
-  const model = body.model ?? existing.model ?? "gpt-4.1-mini"
-
-  // Track datasetId alongside the workflow-graph SubagentConfig so we can
-  // preserve corpus attachments on round-trip writes (the graph builder
-  // doesn't need datasetId — but the persistence layer does).
-  type SubagentConfigWithDataset = SubagentConfig & { datasetId: string | null }
+  const model = body.model ?? existing.model ?? DEFAULT_MODEL_SLUG
 
   let subagentConfigs: SubagentConfigWithDataset[]
   try {
     if (body.subagents !== undefined) {
-      const rawSubagents = coerceArray<{
+      const rawSubagents = toJsonArray<{
         name: string
         description?: string
         systemPrompt: string
@@ -150,7 +126,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         description: sa.description ?? "",
         systemPrompt: sa.systemPrompt,
         model: sa.model,
-        mcpIds: coerceArray<string>(sa.mcpIds, `subagents[${idx}].mcpIds`),
+        mcpIds: toJsonArray<string>(sa.mcpIds, `subagents[${idx}].mcpIds`),
         datasetId: sa.datasetId ?? null,
       }))
     } else {
@@ -158,19 +134,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         name: sa.name,
         description: "",
         systemPrompt: sa.systemPrompt,
-        model: sa.model ?? "gpt-4.1-mini",
+        model: sa.model ?? DEFAULT_MODEL_SLUG,
         mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
         datasetId: sa.datasetId ?? null,
       }))
     }
   } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : "Invalid subagents" },
-      { status: 400 },
-    )
+    return unprocessable(err instanceof Error ? err.message : "Invalid subagents")
   }
 
-  // Rebuild workflow graph from merged config
+  // Rebuild workflow graph from merged config.
   const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name,
@@ -182,16 +155,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const token = await resolveAccessToken(session.user.id)
 
-  // Patch workflow on platform
+  // Patch workflow on platform.
   if (!existing.workflowId) {
-    return Response.json({ error: "Agent has no linked workflow" }, { status: 422 })
+    return unprocessable("Agent has no linked workflow")
   }
   await updateWorkflow(existing.workflowId, { nodes, edges, name: `LDS Agent: ${name}` }, token)
 
   const now = new Date()
 
-  // Update agent row (scoped by userId — defence in depth even though we
-  // already 404'd on the load above).
   await db
     .update(agents)
     .set({
@@ -205,7 +176,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     })
     .where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
 
-  // Replace subagents: delete all then re-insert
+  // Replace subagents: delete all then re-insert with datasetId preserved.
   if (body.subagents !== undefined) {
     await db.delete(agentSubagents).where(eq(agentSubagents.agentId, id))
 
@@ -231,10 +202,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   })
 
   if (!updated) {
-    return Response.json({ error: "Agent not found after update" }, { status: 500 })
+    return Response.json({ error: { message: "Agent not found after update" } }, { status: 500 })
   }
 
-  return Response.json({
+  return ok({
     ...updated,
     starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [],
   })
@@ -242,9 +213,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const { id } = await context.params
 
@@ -252,16 +221,14 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
   })
 
-  if (!existing) {
-    return Response.json({ error: "Agent not found" }, { status: 404 })
-  }
+  if (!existing) return notFound("Agent not found")
 
   if (existing.workflowId) {
     const token = await resolveAccessToken(session.user.id)
     await deleteWorkflow(existing.workflowId, token)
   }
 
-  // Cascade delete handled by FK constraint (subagents, conversations)
+  // Cascade delete handled by FK constraint (subagents, conversations).
   await db.delete(agents).where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
 
   return new Response(null, { status: 204 })

@@ -17,6 +17,7 @@ import { db } from "@/lib/db"
 import { agents, conversations, messages } from "@/lib/db/schema"
 import { openResponsesStream } from "@/lib/platform/client"
 import { translateResponseStream } from "@/lib/platform/responses_stream"
+import { badRequest, conflict, notFound, unauthorized } from "@/lib/api-response"
 
 export const dynamic = "force-dynamic"
 
@@ -37,7 +38,7 @@ function extractUserMessage(body: ChatRequestBody): string {
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return new Response("Unauthorized", { status: 401 })
+  if (!session) return unauthorized()
 
   const accessToken = await resolveAccessToken(session.user.id)
 
@@ -45,21 +46,21 @@ export async function POST(request: Request): Promise<Response> {
   try {
     body = (await request.json()) as ChatRequestBody
   } catch {
-    return new Response("Invalid JSON body", { status: 400 })
+    return badRequest("Invalid JSON body")
   }
 
-  if (!body.agentId) return new Response("agentId required", { status: 400 })
+  if (!body.agentId) return badRequest("agentId required")
 
   const agent = await db.query.agents.findFirst({
     where: and(eq(agents.id, body.agentId), eq(agents.userId, session.user.id)),
   })
-  if (!agent) return new Response("Agent not found", { status: 404 })
+  if (!agent) return notFound("Agent not found")
   if (agent.workflowId === null) {
-    return new Response("Agent has no platform workflow yet — finish configuring it first", { status: 409 })
+    return conflict("Agent has no platform workflow yet — finish configuring it first")
   }
 
   const userMessage = extractUserMessage(body)
-  if (!userMessage) return new Response("No user message text found in request", { status: 400 })
+  if (!userMessage) return badRequest("No user message text found in request")
 
   const existingConversation = body.conversationId
     ? await db.query.conversations.findFirst({
@@ -67,7 +68,7 @@ export async function POST(request: Request): Promise<Response> {
       })
     : null
   if (body.conversationId && !existingConversation) {
-    return new Response("Conversation not found", { status: 404 })
+    return notFound("Conversation not found")
   }
 
   const conversationId = body.conversationId ?? crypto.randomUUID()

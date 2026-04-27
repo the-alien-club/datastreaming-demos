@@ -8,19 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Database, Plus, Trash2, Eye, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
-
-function timeAgo(epochSeconds: number | null): string {
-  if (!epochSeconds) return ""
-  const ms = Date.now() - epochSeconds * 1000
-  const secs = Math.floor(ms / 1000)
-  if (secs < 60) return "just now"
-  const mins = Math.floor(secs / 60)
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
+import { timeAgo } from "@/lib/time"
 
 interface DatasetRecord {
   id: string

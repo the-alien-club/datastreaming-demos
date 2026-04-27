@@ -5,12 +5,13 @@ import { datasets, agentSubagents } from "@/lib/db/schema"
 import { sql, desc, eq } from "drizzle-orm"
 import { getClusterClient } from "@/lib/cluster/client"
 import { resolveAccessToken } from "@/lib/auth-helpers"
+import { ok, unauthorized } from "@/lib/api-response"
+import { createDatasetBodySchema, parseBody } from "../_validators"
+import { DEFAULT_DATASET_PIPELINE_PRESET } from "@/lib/constants"
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const rows = await db
     .select({
@@ -29,25 +30,16 @@ export async function GET(request: NextRequest) {
     .groupBy(datasets.id)
     .orderBy(desc(datasets.createdAt))
 
-  return Response.json(rows)
+  return ok(rows)
 }
 
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
-  let body: { name: string; description?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
-
-  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
-    return Response.json({ error: "name is required" }, { status: 422 })
-  }
+  const parsed = await parseBody(request, createDatasetBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
   const name = body.name.trim()
   const description = body.description?.trim() ?? ""
@@ -74,10 +66,10 @@ export async function POST(request: NextRequest) {
     },
   })
 
-  // 2. Apply the general_purpose pipeline preset
+  // 2. Apply the configured pipeline preset.
   await client.pipelines.applyPresetApiV1PipelinesDatasetsDatasetIdApplyPresetPost({
     datasetId: clusterDataset.id,
-    presetName: "general_purpose",
+    presetName: DEFAULT_DATASET_PIPELINE_PRESET,
   })
 
   // 3. Save to local DB
@@ -99,5 +91,5 @@ export async function POST(request: NextRequest) {
     where: (d, { eq, and }) => and(eq(d.id, datasetId), eq(d.userId, session.user.id)),
   })
 
-  return Response.json(created, { status: 201 })
+  return ok(created, 201)
 }

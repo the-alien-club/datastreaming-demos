@@ -7,12 +7,13 @@ import { createWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { loadEnabledMcpConfigs } from "@/lib/mcps"
+import { ok, unauthorized } from "@/lib/api-response"
+import { createAgentBodySchema, parseBody } from "../_validators"
+import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
   const rows = await db.query.agents.findMany({
     where: eq(agents.userId, session.user.id),
@@ -20,43 +21,31 @@ export async function GET(request: NextRequest) {
     with: { subagents: true },
   })
 
-  return Response.json(rows)
+  return ok(rows)
 }
 
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  if (!session) return unauthorized()
 
-  let body: {
-    name: string
-    description?: string
-    systemPrompt?: string
-    steps?: { name: string; prompt: string }[]
-    model?: string
-    subagents?: SubagentConfig[]
-    starterPrompts?: string[]
-  }
-
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
-  }
-
-  if (!body.name || typeof body.name !== "string" || body.name.trim() === "") {
-    return Response.json({ error: "name is required" }, { status: 422 })
-  }
+  const parsed = await parseBody(request, createAgentBodySchema)
+  if (parsed instanceof Response) return parsed
+  const body = parsed
 
   const name = body.name.trim()
   const description = body.description ?? null
-  const systemPrompt = body.systemPrompt ?? ""
-  const steps = body.steps ?? []
-  const model = body.model ?? "gpt-4.1-mini"
-  const subagentConfigs: SubagentConfig[] = body.subagents ?? []
-  const starterPrompts = Array.isArray(body.starterPrompts)
-    ? body.starterPrompts.filter((p): p is string => typeof p === "string" && p.trim() !== "")
+  const systemPrompt = body.systemPrompt
+  const steps = body.steps
+  const model = body.model ?? DEFAULT_MODEL_SLUG
+  const subagentConfigs: SubagentConfig[] = body.subagents.map((sa) => ({
+    name: sa.name,
+    description: sa.description ?? "",
+    systemPrompt: sa.systemPrompt,
+    model: sa.model,
+    mcpIds: sa.mcpIds,
+  }))
+  const starterPrompts = body.starterPrompts && body.starterPrompts.length > 0
+    ? body.starterPrompts
     : null
 
   // Build workflow graph
@@ -95,31 +84,32 @@ export async function POST(request: NextRequest) {
     description,
     systemPrompt,
     steps: JSON.stringify(steps),
-    starterPrompts: starterPrompts && starterPrompts.length > 0 ? JSON.stringify(starterPrompts) : null,
+    starterPrompts: starterPrompts ? JSON.stringify(starterPrompts) : null,
     model,
     createdAt: now,
     updatedAt: now,
   })
 
-  // Persist subagents
-  if (subagentConfigs.length > 0) {
+  // Persist subagents (datasetId preserved if the caller passed one)
+  if (body.subagents.length > 0) {
     await db.insert(agentSubagents).values(
-      subagentConfigs.map((sa) => ({
+      body.subagents.map((sa) => ({
         id: crypto.randomUUID(),
         agentId,
         name: sa.name,
         systemPrompt: sa.systemPrompt,
         model: sa.model,
         mcpIds: JSON.stringify(sa.mcpIds),
+        datasetId: sa.datasetId ?? null,
         createdAt: now,
       }))
     )
   }
 
   const created = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, agentId),
+    where: (a, { eq, and }) => and(eq(a.id, agentId), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
-  return Response.json(created, { status: 201 })
+  return ok(created, 201)
 }

@@ -11,8 +11,12 @@ import {
   Sparkles,
   Wrench,
 } from "lucide-react"
+import { WIZARD_DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
-export const DEFAULT_AGENT_MODEL = "claude-sonnet-4-6"
+// The wizard intentionally defaults to Sonnet (not the app-wide
+// `DEFAULT_MODEL_SLUG`): Sonnet onboards more naturally for a first-time
+// user. Don't unify these — see `lib/constants.ts`.
+export const DEFAULT_AGENT_MODEL = WIZARD_DEFAULT_MODEL_SLUG
 
 export type WizardAgentTemplate = {
   id: string

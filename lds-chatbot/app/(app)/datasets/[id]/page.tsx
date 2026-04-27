@@ -23,18 +23,7 @@ import { Label } from "@/components/ui/label"
 import { ArrowLeft, Upload, Loader2, RefreshCw, Link2 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
-
-function timeAgo(ts: string | Date | null | undefined): string {
-  if (!ts) return ""
-  const ms = Date.now() - new Date(ts).getTime()
-  const secs = Math.floor(ms / 1000)
-  if (secs < 60) return "just now"
-  const mins = Math.floor(secs / 60)
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
+import { timeAgo } from "@/lib/time"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
