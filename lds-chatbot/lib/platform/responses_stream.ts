@@ -29,8 +29,17 @@
 //                                       activity.
 //
 //   - `response.output_text.delta`    → opens a text part (lazily, scoped
-//                                       to the producing agent) and writes
-//                                       a `text-delta` for each token.
+//                                       to the producing output item) and
+//                                       writes a `text-delta` for each
+//                                       token. Each Responses-API output
+//                                       item gets its OWN AI SDK text part,
+//                                       so the parent agent's text and
+//                                       each subagent's text render as
+//                                       separate bubbles instead of
+//                                       interleaving into one stream.
+//
+//   - `response.output_item.done`     → closes the per-item text part
+//                                       (writes the matching `text-end`).
 //
 //   - `response.function_call_arguments.done`
 //                                     → emits `data-toolCall` so the UI
@@ -206,8 +215,15 @@ class TranslationState {
   private readonly _writer: StreamWriter
   private readonly _conversationId: string
 
-  /** Open text part id — null when no part is active. */
-  private _textPartId: string | null = null
+  /**
+   * Open text parts, keyed by the Responses-API output item id. Each
+   * `output_text.delta` event carries the `item_id` of the message it
+   * belongs to (per the OpenAI Responses spec); we route every delta
+   * to a part scoped to that item so the parent agent's text and each
+   * subagent's text render as separate bubbles instead of interleaving.
+   * Closed by `output_item.done` (per-item) and by `finish()` (catch-all).
+   */
+  private readonly _textPartIds: Map<string, string> = new Map()
   /** Full text accumulated for Postgres persistence. */
   private _fullText: string = ""
   /** Subagents we've already opened panels for, by agent_id. */
@@ -232,39 +248,43 @@ class TranslationState {
 
   handleEvent(event: string, data: unknown): void {
     if (typeof data !== "object" || data === null) return
+    const payload = data as Record<string, unknown>
 
     switch (event) {
       case "response.created":
-        this._handleCreated(data as Record<string, unknown>)
+        this._handleCreated(payload)
         return
       case "response.output_item.added":
-        this._handleOutputItemAdded(data as Record<string, unknown>)
+        this._handleOutputItemAdded(payload)
+        return
+      case "response.output_item.done":
+        this._handleOutputItemDone(payload)
         return
       case "response.output_text.delta":
-        this._handleTextDelta(data as Record<string, unknown>)
+        this._handleTextDelta(payload)
         return
       case "response.function_call_arguments.done":
-        this._handleFunctionCallDone(data as Record<string, unknown>)
+        this._handleFunctionCallDone(payload)
         return
       case "response.completed":
-        this._handleCompleted(data as Record<string, unknown>)
+        this._handleCompleted(payload)
         return
       case "response.failed":
-        this._handleFailed(data as Record<string, unknown>)
+        this._handleFailed(payload)
         return
       default:
-        // Other events (in_progress, content_part.*, output_item.done,
-        // reasoning_*, etc.) are not surfaced in the UI yet — see the
-        // module docstring. Ignored intentionally.
+        // Other events (in_progress, content_part.*, reasoning_*, etc.)
+        // are not surfaced in the UI yet — see the module docstring.
+        // Ignored intentionally.
         return
     }
   }
 
   /**
-   * Close any open text part. Always safe to call multiple times.
+   * Close any open text parts. Always safe to call multiple times.
    */
   finish(): void {
-    this._closeTextPart()
+    this._closeAllTextParts()
   }
 
   result(): TranslatedResponseResult {
@@ -313,7 +333,6 @@ class TranslationState {
     // registry is best-effort under the 512-char metadata cap).
     const displayName = entry?.name ?? agentId
 
-    this._closeTextPart()
     this._writer.write({
       type: "data-subagent",
       data: {
@@ -327,10 +346,26 @@ class TranslationState {
     this._announcedSubagents.add(agentId)
   }
 
+  private _handleOutputItemDone(data: Record<string, unknown>): void {
+    // Close the per-item text part on `output_item.done`. The matching
+    // `text-end` writes are how the AI SDK seals each text part — without
+    // them the consumer keeps the part marked "streaming" forever.
+    const item = data.item as Record<string, unknown> | undefined
+    const itemId = typeof item?.id === "string" ? item.id : undefined
+    if (!itemId) return
+    this._closeTextPart(itemId)
+  }
+
   private _handleTextDelta(data: Record<string, unknown>): void {
     const delta = data.delta
     if (typeof delta !== "string" || delta.length === 0) return
-    this._writeTextDelta(delta)
+    // The Responses spec guarantees `item_id` on every output_text.delta
+    // (§3, ResponseTextDeltaEvent). We key text parts off this so each
+    // output item gets its own AI SDK text part — main agent and
+    // subagents don't interleave.
+    const itemId = typeof data.item_id === "string" ? data.item_id : null
+    if (itemId === null) return
+    this._writeTextDelta(itemId, delta)
   }
 
   private _handleFunctionCallDone(data: Record<string, unknown>): void {
@@ -348,7 +383,6 @@ class TranslationState {
       }
     }
 
-    this._closeTextPart()
     this._writer.write({
       type: "data-toolCall",
       data: { id: itemId, name, args },
@@ -359,7 +393,7 @@ class TranslationState {
     const responseObj = data.response as ResponseObject | undefined
     if (responseObj?.id) this._responseId = responseObj.id
     if (responseObj?.usage) this._usage = responseObj.usage as Record<string, unknown>
-    this._closeTextPart()
+    this._closeAllTextParts()
   }
 
   private _handleFailed(data: Record<string, unknown>): void {
@@ -369,7 +403,7 @@ class TranslationState {
       code: typeof err?.code === "string" ? err.code : "server_error",
       message: typeof err?.message === "string" ? err.message : "Unknown error",
     }
-    this._closeTextPart()
+    this._closeAllTextParts()
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
@@ -421,22 +455,42 @@ class TranslationState {
     }
   }
 
-  private _writeTextDelta(delta: string): void {
-    if (this._textPartId === null) {
-      this._textPartId = crypto.randomUUID()
-      this._writer.write({ type: "text-start", id: this._textPartId } as WriterEvent)
+  private _writeTextDelta(itemId: string, delta: string): void {
+    let partId = this._textPartIds.get(itemId)
+    if (partId === undefined) {
+      partId = crypto.randomUUID()
+      this._textPartIds.set(itemId, partId)
+      this._writer.write({ type: "text-start", id: partId } as WriterEvent)
     }
     this._writer.write({
       type: "text-delta",
-      id: this._textPartId,
+      id: partId,
       delta,
     } as WriterEvent)
     this._fullText += delta
   }
 
-  private _closeTextPart(): void {
-    if (this._textPartId === null) return
-    this._writer.write({ type: "text-end", id: this._textPartId } as WriterEvent)
-    this._textPartId = null
+  /**
+   * Close the text part scoped to a single output item. No-op when the
+   * item never produced any text (e.g. function-call items, or items
+   * whose `output_item.done` arrives before any deltas).
+   */
+  private _closeTextPart(itemId: string): void {
+    const partId = this._textPartIds.get(itemId)
+    if (partId === undefined) return
+    this._writer.write({ type: "text-end", id: partId } as WriterEvent)
+    this._textPartIds.delete(itemId)
+  }
+
+  /**
+   * Close every still-open text part. Called from `finish()` and on
+   * terminal events as a safety net for streams that drop without
+   * matching `output_item.done` events.
+   */
+  private _closeAllTextParts(): void {
+    for (const partId of this._textPartIds.values()) {
+      this._writer.write({ type: "text-end", id: partId } as WriterEvent)
+    }
+    this._textPartIds.clear()
   }
 }
