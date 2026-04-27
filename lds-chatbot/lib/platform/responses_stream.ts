@@ -111,7 +111,10 @@ export function platformProvider(
   return createOpenAI({
     baseURL: opts.baseURL,
     apiKey: "unused",
-    headers: { "x-oauth-access-token": opts.accessToken },
+    headers: {
+      "authorization": `Bearer ${opts.accessToken}`,
+      "x-oauth-access-token": opts.accessToken,
+    },
   })
 }
 
