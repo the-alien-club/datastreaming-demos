@@ -9,7 +9,6 @@ import { resolveAccessToken } from "@/lib/auth-helpers"
 import { loadEnabledMcpConfigs } from "@/lib/mcps"
 import { ok, notFound, unauthorized, unprocessable } from "@/lib/api-response"
 import { parseBody, updateAgentBodySchema } from "../../_validators"
-import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -36,30 +35,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
   })
 }
 
-// Reusable coercion: a field may arrive as either a parsed JSON value
-// (typical UI flow) or a JSON-encoded string (clients that round-trip
-// the GET response, where these fields are stored as JSON text in
-// Postgres). Validators upstream allow both shapes; we normalise here.
-function toJsonArray<T>(value: unknown, fieldName: string): T[] {
-  if (value === undefined || value === null) return []
-  if (Array.isArray(value)) return value as T[]
-  if (typeof value === "string") {
-    const trimmed = value.trim()
-    if (trimmed === "") return []
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(trimmed)
-    } catch {
-      throw new Error(`${fieldName} must be an array or valid JSON array string`)
-    }
-    if (!Array.isArray(parsed)) {
-      throw new Error(`${fieldName} must be an array`)
-    }
-    return parsed as T[]
-  }
-  throw new Error(`${fieldName} must be an array (got: ${typeof value})`)
-}
-
 // Track datasetId alongside the workflow-graph SubagentConfig so we can
 // preserve corpus attachments on round-trip writes (the graph builder
 // doesn't need datasetId — but the persistence layer does).
@@ -78,72 +53,44 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   if (!existing) return notFound("Agent not found")
 
+  // PUT is full-replace. The validator enforces that name, model,
+  // systemPrompt, steps, and subagents are all present and well-shaped;
+  // a stringified array (`steps: "[]"`) or a missing `subagents` field
+  // is rejected at parse time with 400 + zod issues. No defensive
+  // coercion in this handler — that masked client bugs and silently
+  // wiped subagents on incomplete payloads.
   const parsed = await parseBody(request, updateAgentBodySchema)
   if (parsed instanceof Response) return parsed
   const body = parsed
 
-  let parsedSteps: { name: string; prompt: string }[]
-  try {
-    parsedSteps = body.steps !== undefined
-      ? toJsonArray<{ name: string; prompt: string }>(body.steps, "steps")
-      : (existing.steps ? JSON.parse(existing.steps) : [])
-  } catch (err) {
-    return unprocessable(err instanceof Error ? err.message : "Invalid steps")
-  }
-
-  let parsedStarterPrompts: string[] | null
-  try {
-    if (body.starterPrompts !== undefined) {
-      const arr = toJsonArray<string>(body.starterPrompts, "starterPrompts")
-        .filter((p): p is string => typeof p === "string" && p.trim() !== "")
-      parsedStarterPrompts = arr.length > 0 ? arr : null
-    } else {
-      parsedStarterPrompts = existing.starterPrompts ? JSON.parse(existing.starterPrompts) : null
-    }
-  } catch (err) {
-    return unprocessable(err instanceof Error ? err.message : "Invalid starterPrompts")
-  }
-
-  const name = body.name?.trim() ?? existing.name
+  const name = body.name.trim()
   const description = "description" in body ? (body.description ?? null) : existing.description
-  const systemPrompt = body.systemPrompt ?? existing.systemPrompt ?? ""
-  const steps = parsedSteps
-  const model = body.model ?? existing.model ?? DEFAULT_MODEL_SLUG
+  const systemPrompt = body.systemPrompt
+  const steps = body.steps
+  const model = body.model
+  // `starterPrompts` is the one optional field — the edit form doesn't
+  // always include it, and the create flow seeds them separately. If
+  // omitted, preserve existing; if provided, replace (filtering blanks).
+  const parsedStarterPrompts: string[] | null =
+    body.starterPrompts !== undefined
+      ? (() => {
+          const cleaned = body.starterPrompts.filter((p) => p.trim() !== "")
+          return cleaned.length > 0 ? cleaned : null
+        })()
+      : existing.starterPrompts
+        ? (JSON.parse(existing.starterPrompts) as string[])
+        : null
 
-  let subagentConfigs: SubagentConfigWithDataset[]
-  try {
-    if (body.subagents !== undefined) {
-      const rawSubagents = toJsonArray<{
-        name: string
-        description?: string
-        systemPrompt: string
-        model: string
-        mcpIds: string[] | string
-        datasetId?: string | null
-      }>(body.subagents, "subagents")
-      subagentConfigs = rawSubagents.map((sa, idx) => ({
-        name: sa.name,
-        description: sa.description ?? "",
-        systemPrompt: sa.systemPrompt,
-        model: sa.model,
-        mcpIds: toJsonArray<string>(sa.mcpIds, `subagents[${idx}].mcpIds`),
-        datasetId: sa.datasetId ?? null,
-      }))
-    } else {
-      subagentConfigs = existing.subagents.map((sa) => ({
-        name: sa.name,
-        description: "",
-        systemPrompt: sa.systemPrompt,
-        model: sa.model ?? DEFAULT_MODEL_SLUG,
-        mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
-        datasetId: sa.datasetId ?? null,
-      }))
-    }
-  } catch (err) {
-    return unprocessable(err instanceof Error ? err.message : "Invalid subagents")
-  }
+  const subagentConfigs: SubagentConfigWithDataset[] = body.subagents.map((sa) => ({
+    name: sa.name,
+    description: sa.description ?? "",
+    systemPrompt: sa.systemPrompt,
+    model: sa.model,
+    mcpIds: sa.mcpIds,
+    datasetId: sa.datasetId ?? null,
+  }))
 
-  // Rebuild workflow graph from merged config.
+  // Rebuild workflow graph from the full-replace payload.
   const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name,
@@ -176,24 +123,21 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     })
     .where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
 
-  // Replace subagents: delete all then re-insert with datasetId preserved.
-  if (body.subagents !== undefined) {
-    await db.delete(agentSubagents).where(eq(agentSubagents.agentId, id))
-
-    if (subagentConfigs.length > 0) {
-      await db.insert(agentSubagents).values(
-        subagentConfigs.map((sa) => ({
-          id: crypto.randomUUID(),
-          agentId: id,
-          name: sa.name,
-          systemPrompt: sa.systemPrompt,
-          model: sa.model,
-          mcpIds: JSON.stringify(sa.mcpIds),
-          datasetId: sa.datasetId,
-          createdAt: now,
-        }))
-      )
-    }
+  // Replace subagents wholesale: delete-then-insert with datasetId preserved.
+  await db.delete(agentSubagents).where(eq(agentSubagents.agentId, id))
+  if (subagentConfigs.length > 0) {
+    await db.insert(agentSubagents).values(
+      subagentConfigs.map((sa) => ({
+        id: crypto.randomUUID(),
+        agentId: id,
+        name: sa.name,
+        systemPrompt: sa.systemPrompt,
+        model: sa.model,
+        mcpIds: JSON.stringify(sa.mcpIds),
+        datasetId: sa.datasetId,
+        createdAt: now,
+      })),
+    )
   }
 
   const updated = await db.query.agents.findFirst({

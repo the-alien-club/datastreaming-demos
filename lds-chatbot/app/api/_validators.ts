@@ -8,7 +8,7 @@
 // into the result without going through here.
 
 import { z } from "zod"
-import { badRequest, unprocessable } from "@/lib/api-response"
+import { badRequest } from "@/lib/api-response"
 
 const ID = z.string().trim().min(1, "must be non-empty")
 const NAME = z.string().trim().min(1, "must be non-empty").max(120, "max 120 chars")
@@ -66,26 +66,32 @@ export const createAgentBodySchema = z.object({
   starterPrompts: z.array(STARTER_PROMPT).optional(),
 })
 
+// PUT is full-replace: the request body must carry the complete agent
+// shape. Required fields stay required; optional metadata stays optional.
+//
+// Why no defensive coercion (no `string | array` unions, no fallback to
+// existing DB state for missing arrays):
+//   - A client that ships `steps: "[]"` (string) has a bug; silently
+//     coercing to `[]` masks it. Reject with 400 so the bug surfaces.
+//   - A client that omits `subagents` from a PUT and previously had a
+//     populated subagent list will, under "PUT means full-replace",
+//     wipe them. Requiring the field forces the client to be explicit
+//     ("yes, I want zero subagents" → `subagents: []`; "I want to keep
+//     them" → echo them back).
+//
+// See lds-chatbot/internal-docs/QA_VERIFY_2026-04-26.md "Two real
+// findings" for the live-test traces that motivated this contract.
+//
+// `description` and `starterPrompts` remain optional because the
+// existing edit form does not always include them in the payload.
 export const updateAgentBodySchema = z.object({
-  name: NAME.optional(),
+  name: NAME,
   description: SHORT_TEXT.nullable().optional(),
-  systemPrompt: LONG_TEXT.optional(),
-  // `steps` may arrive as a bare array (typical) or a JSON-encoded string
-  // (a client that round-trips the GET response, where these fields are
-  // stored as JSON text in Postgres). Same for nested mcpIds.
-  steps: z.union([z.array(stepSchema), z.string()]).optional(),
-  starterPrompts: z.union([z.array(STARTER_PROMPT), z.string()]).optional(),
-  model: z.string().trim().min(1).max(120).optional(),
-  subagents: z
-    .union([
-      z.array(
-        subagentConfigSchema.extend({
-          mcpIds: z.union([z.array(ID), z.string()]),
-        }),
-      ),
-      z.string(),
-    ])
-    .optional(),
+  systemPrompt: LONG_TEXT,
+  steps: z.array(stepSchema),
+  starterPrompts: z.array(STARTER_PROMPT).optional(),
+  model: z.string().trim().min(1).max(120),
+  subagents: z.array(subagentConfigSchema),
 })
 
 export const subagentCreateBodySchema = subagentConfigSchema
@@ -159,7 +165,11 @@ export async function parseBody<T extends z.ZodTypeAny>(
   }
   const result = schema.safeParse(raw)
   if (!result.success) {
-    return unprocessable("Validation failed", result.error.flatten())
+    // 400 (not 422) for shape errors: the body is malformed at the
+    // schema level. We use the same status across every internal route
+    // for consistency — the frontend reads `error` + optional `issues`
+    // regardless of whether the failure is missing-field or wrong-type.
+    return badRequest("Validation failed", result.error.flatten())
   }
   return result.data
 }
