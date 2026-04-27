@@ -2,8 +2,10 @@ replicaCount: 1
 
 image:
   repository: rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot
-  pullPolicy: Always
-  tag: "0.1.15"
+  # IfNotPresent — image tags are immutable numeric versions, so re-pulling
+  # on every pod start is wasted bandwidth + slower restarts (D-P1.4).
+  pullPolicy: IfNotPresent
+  tag: "0.2.0"
 
 imagePullSecrets: []
 
@@ -34,11 +36,18 @@ istio:
 
   virtualService:
     enabled: true
-    timeout: 60s
+    # 0s = no timeout. The chat endpoint streams SSE for the duration of the
+    # underlying workflow run; a finite timeout chops long answers mid-stream.
+    timeout: 0s
+    # POST /api/chat creates a conversation row and triggers a platform
+    # workflow run before any byte is streamed back — retries on `5xx` or
+    # `reset` would duplicate that side-effect. Limit retries to true
+    # transport-layer issues (refused / hard connection failures); the chat
+    # path is non-idempotent and shouldn't replay otherwise.
     retries:
-      attempts: 3
-      perTryTimeout: 20s
-      retryOn: 5xx,reset,connect-failure,refused-stream
+      attempts: 2
+      perTryTimeout: 0s
+      retryOn: connect-failure,refused-stream
 
   certificate:
     # Only needed when gateway.create is true.

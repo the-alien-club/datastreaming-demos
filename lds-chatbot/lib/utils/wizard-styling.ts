@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils"
  * @returns Tailwind class string for the connector element.
  */
 export function wizardStepConnectorClass(isFirst: boolean, isLast: boolean, isCompleted: boolean): string {
-    if (isFirst || isLast) return "flex-1 h-px invisible"
-    return cn("flex-1 h-px", isCompleted ? "bg-primary" : "bg-border")
+  if (isFirst || isLast) return "flex-1 h-px invisible"
+  return cn("flex-1 h-px", isCompleted ? "bg-primary" : "bg-border")
 }
 
 /**
@@ -20,7 +20,7 @@ export function wizardStepConnectorClass(isFirst: boolean, isLast: boolean, isCo
  * @returns Tailwind class string for the circle element.
  */
 export function wizardStepCircleIndicatorClass(isCompleted: boolean, isCurrent: boolean): string {
-    if (isCompleted) return "bg-primary border-primary text-primary-foreground"
-    if (isCurrent) return "border-primary text-primary bg-background"
-    return "border-border text-muted-foreground bg-background"
+  if (isCompleted) return "bg-primary border-primary text-primary-foreground"
+  if (isCurrent) return "border-primary text-primary bg-background"
+  return "border-border text-muted-foreground bg-background"
 }

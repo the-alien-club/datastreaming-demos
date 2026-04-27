@@ -57,7 +57,11 @@ COPY --from=builder --chown=node:node /app/lib/db/migrations ./lib/db/migrations
 COPY --from=builder --chown=node:node /app/lib/auth.ts ./lib/auth.ts
 COPY --from=builder --chown=node:node /app/lib/db/index.ts ./lib/db/index.ts
 COPY --from=builder --chown=node:node /app/lib/db/schema.ts ./lib/db/schema.ts
-COPY --from=builder --chown=node:node /app/scripts ./scripts
+COPY --from=builder --chown=node:node /app/lib/constants.ts ./lib/constants.ts
+# Only the scripts the entrypoint actually runs — keep dev-only debug
+# utilities (debug-sse.mjs, seed-mcps.mjs) out of the runtime image.
+COPY --from=builder --chown=node:node /app/scripts/migrate-db.mjs ./scripts/migrate-db.mjs
+COPY --from=builder --chown=node:node /app/scripts/migrate-auth.ts ./scripts/migrate-auth.ts
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 

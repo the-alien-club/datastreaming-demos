@@ -47,26 +47,26 @@ function McpDialog({
   onSaved: (mcp: McpRecord) => void
 }) {
   const isNew = "isNew" in initial
-  const [form, setForm] = useState<FormState>({ ...EMPTY_FORM })
+  // Initial state derives from props directly — the parent re-keys this
+  // dialog when switching between "new" and "edit", so we always mount
+  // fresh and don't need an effect to reset state.
+  const [form, setForm] = useState<FormState>(() =>
+    isNew
+      ? { ...EMPTY_FORM }
+      : (() => {
+          const m = initial as McpRecord
+          return {
+            name: m.name,
+            serverUrl: m.serverUrl,
+            transport: m.transport ?? "streamable_http",
+            authToken: m.authToken ?? "",
+            description: m.description ?? "",
+            category: m.category ?? "",
+            enabled: m.enabled ?? true,
+          }
+        })(),
+  )
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    if (isNew) {
-      setForm({ ...EMPTY_FORM })
-    } else {
-      const m = initial as McpRecord
-      setForm({
-        name: m.name,
-        serverUrl: m.serverUrl,
-        transport: m.transport ?? "streamable_http",
-        authToken: m.authToken ?? "",
-        description: m.description ?? "",
-        category: m.category ?? "",
-        enabled: m.enabled ?? true,
-      })
-    }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -393,6 +393,10 @@ export default function McpsPage() {
 
       {dialog && (
         <McpDialog
+          // Re-key on open transition so the dialog remounts (and reloads its
+          // form state) when switching from "new" to "edit existing", instead
+          // of relying on a setState-in-effect dance.
+          key={"isNew" in dialog ? "new" : dialog.id}
           open={true}
           initial={dialog}
           onClose={() => setDialog(null)}

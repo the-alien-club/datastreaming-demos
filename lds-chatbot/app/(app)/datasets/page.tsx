@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Database, Plus, Trash2, Eye, Loader2 } from "lucide-react"
@@ -30,7 +29,6 @@ function StatusBadge({ status }: { status: string | null }) {
 }
 
 export default function DatasetsPage() {
-  const router = useRouter()
   const [datasets, setDatasets] = useState<DatasetRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)

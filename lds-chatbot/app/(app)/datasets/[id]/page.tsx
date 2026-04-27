@@ -125,27 +125,48 @@ export default function DatasetDetailPage({
 
   // ── Data fetchers ────────────────────────────────────────────────────────────
 
-  const fetchEntries = useCallback(async () => {
+  // Refetch entries from the cluster proxy. Returns the parsed array so
+  // callers can chain on it; state updates happen here (we always resolve
+  // — errors are swallowed because polling intentionally stays running).
+  const fetchEntries = useCallback(async (): Promise<ClusterEntry[]> => {
     try {
       const res = await apiFetch(`/api/datasets/${id}/entries`)
-      if (!res.ok) return
+      if (!res.ok) return []
       const data = await res.json()
-      setEntries(Array.isArray(data) ? data : [])
+      const arr: ClusterEntry[] = Array.isArray(data) ? data : []
+      setEntries(arr)
+      return arr
     } catch {
-      // silently ignore polling errors
+      // Polling errors are non-fatal — keep the existing list visible.
+      return []
     } finally {
       setLoadingEntries(false)
     }
   }, [id])
 
   useEffect(() => {
-    apiFetch(`/api/datasets/${id}`)
-      .then((r) => r.json())
-      .then((data) => setDataset(data))
-      .catch(() => toast.error("Failed to load dataset"))
-      .finally(() => setLoadingDataset(false))
+    let cancelled = false
 
-    fetchEntries()
+    void (async () => {
+      try {
+        const res = await apiFetch(`/api/datasets/${id}`)
+        const data = await res.json()
+        if (!cancelled) setDataset(data)
+      } catch {
+        if (!cancelled) toast.error("Failed to load dataset")
+      } finally {
+        if (!cancelled) setLoadingDataset(false)
+      }
+    })()
+
+    /* eslint-disable-next-line react-hooks/set-state-in-effect -- entries
+       are loaded asynchronously via the SDK; setEntries inside fetchEntries
+       runs after render completes, not synchronously. */
+    void fetchEntries()
+
+    return () => {
+      cancelled = true
+    }
   }, [id, fetchEntries])
 
   // Polling: restart when entries change

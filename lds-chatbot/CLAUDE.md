@@ -18,7 +18,7 @@ Concretely: a Next.js 16 web app where users create AI agents backed by the Alie
 | UI | React 19, TailwindCSS v4, shadcn/ui |
 | Auth | better-auth + Authentik OAuth2/OIDC |
 | AI SDK | Vercel AI SDK v6 (`ai` + `@ai-sdk/react`) |
-| Local DB | SQLite + Drizzle ORM (file: `sqlite.db`) |
+| Local DB | Postgres 16 + Drizzle ORM (`pg` driver) |
 | Platform | Alien Backend (AdonisJS) — workflow engine |
 | Data Layer | Alien Data Cluster via `@alien/data-api-client` |
 
@@ -40,7 +40,7 @@ getWorkflow(id, token)             // GET /workflows/:id
 getAiModels(token)                 // GET /ai-models?select=public&modelType=llm
 ```
 
-All requests carry the user's Authentik OAuth token in `x-oauth-access-token`. The chatbot is a thin client — it constructs the workflow graph locally and persists execution state in SQLite; the platform does the heavy lifting.
+All requests carry the user's Authentik OAuth token in `x-oauth-access-token`. The chatbot is a thin client — it constructs the workflow graph locally and persists execution state in Postgres; the platform does the heavy lifting.
 
 Chat turns no longer go through `/workflows/:id/run` + the legacy `/jobs/:id/stream` SSE; they go through the platform's OpenAI Responses-API-compatible endpoint at `POST /agent/:workflowId/responses` (see below).
 
@@ -140,7 +140,7 @@ Used by the frontend's `useChat` hook (Vercel AI SDK v6). Forwards the turn to t
 
 Flow:
 1. Auth check → resolve Authentik access token
-2. Load agent → load or create conversation in SQLite
+2. Load agent → load or create conversation in Postgres
 3. Save user message to DB
 4. `POST /agent/:workflowId/responses` on the platform with `stream: true`, `previous_response_id: conversation.sessionId`
 5. Translate Responses SSE events through `lib/platform/responses_stream.ts` → AI SDK UI parts
@@ -172,7 +172,7 @@ When attaching a dataset to an agent, the UI auto-generates a subagent node whos
 
 ## Local Database Schema (`lib/db/schema.ts`)
 
-All state is in a local SQLite file (`sqlite.db`). Drizzle ORM with file-based migrations.
+All state is in a local Postgres database. Drizzle ORM manages the schema; migrations in `lib/db/migrations/`. `docker-compose.yml` brings up a single Postgres 16 container for local dev (port 5435); the Helm chart provisions a per-deployment Postgres StatefulSet for production.
 
 | Table | Purpose |
 |---|---|

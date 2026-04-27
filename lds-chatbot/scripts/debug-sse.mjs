@@ -25,10 +25,11 @@
 //     node scripts/debug-sse.mjs
 //   (re-opens GET /agent/<WORKFLOW_ID>/responses/<RESPONSE_ID>?starting_after=<STARTING_AFTER>)
 //
-// Where to get ACCESS_TOKEN:
-//   In the browser on the running chatbot, DevTools → Network → any /api/chat
-//   request → Request Headers. The Next.js route reads the token from your
-//   Authentik session.
+// ACCESS_TOKEN should be a valid Authentik OAuth access token issued for the
+// user you want to call the platform as. Use `kubectl exec` into a dev pod
+// and call `auth.api.getAccessToken()`, or grab one via your Authentik admin.
+// Do NOT paste tokens into shared logs or chat — they grant full platform
+// access for that user until expiry.
 
 import { writeFileSync, appendFileSync } from "node:fs"
 

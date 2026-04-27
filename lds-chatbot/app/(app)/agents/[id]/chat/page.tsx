@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useEffect, useRef, useState } from "react"
+import { use, useEffect, useMemo, useRef, useState } from "react"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
@@ -15,12 +15,15 @@ interface ChatPageProps {
 export default function NewChatPage({ params }: ChatPageProps) {
   const { id: agentId } = use(params)
 
-  // Track the conversation id assigned by the server after the first message
+  // Track the conversation id assigned by the server after the first message.
+  // Held in a ref because we mutate it from `onData` (an event handler) and
+  // read it lazily inside `prepareSendMessagesRequest` (also an event-handler
+  // path — invoked by the transport, never during render).
   const conversationIdRef = useRef<string | null>(null)
   const [agentName, setAgentName] = useState<string | undefined>(undefined)
   const [starterPrompts, setStarterPrompts] = useState<string[]>([])
 
-  // Load agent metadata (name, starter prompts) for display
+  // Load agent metadata (name, starter prompts) for display.
   useEffect(() => {
     apiFetch(`/api/agents/${agentId}`)
       .then((r) => r.json())
@@ -31,26 +34,37 @@ export default function NewChatPage({ params }: ChatPageProps) {
       .catch(() => undefined)
   }, [agentId])
 
-  const { messages, setMessages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({
-      api: apiUrl("/api/chat"),
-      // Inject agentId + conversationId into the request body.
-      // The SDK skips its default body assembly when we return a `body`, so
-      // we must forward id/messages/trigger/messageId ourselves.
-      prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
-        body: {
-          ...body,
-          id,
-          messages,
-          trigger,
-          messageId,
-          agentId,
-          conversationId: conversationIdRef.current ?? undefined,
-        },
+  // Memoise transport so React's `useChat` doesn't churn its internal state
+  // on every render. The closure captures `conversationIdRef` once, but
+  // `prepareSendMessagesRequest` only fires from the transport's send path
+  // (an event-handler context) — accessing `.current` there is correct.
+  /* eslint-disable react-hooks/refs -- prepareSendMessagesRequest is invoked
+     by the transport at send time, never during render. The lint rule can't
+     prove that statically; the access is intentional and safe. */
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: apiUrl("/api/chat"),
+        prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
+          body: {
+            ...body,
+            id,
+            messages,
+            trigger,
+            messageId,
+            agentId,
+            conversationId: conversationIdRef.current ?? undefined,
+          },
+        }),
       }),
-    }),
+    [agentId],
+  )
+  /* eslint-enable react-hooks/refs */
+
+  const { messages, setMessages, sendMessage, status, error } = useChat({
+    transport,
     onData: (dataPart) => {
-      // Receive conversationId from the server stream
+      // Receive conversationId from the server stream.
       if (
         dataPart.type === "data-conversationId" &&
         typeof dataPart.data === "string" &&
@@ -58,7 +72,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
       ) {
         const convId = dataPart.data
         conversationIdRef.current = convId
-        // Update URL to make it bookmarkable without triggering a full navigation
+        // Update URL to make it bookmarkable without triggering a full navigation.
         window.history.replaceState(null, "", `${basePath}/agents/${agentId}/chat/${convId}`)
       }
     },

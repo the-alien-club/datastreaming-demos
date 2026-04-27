@@ -208,7 +208,7 @@ class TranslationState {
 
   /** Open text part id — null when no part is active. */
   private _textPartId: string | null = null
-  /** Full text accumulated for SQLite persistence. */
+  /** Full text accumulated for Postgres persistence. */
   private _fullText: string = ""
   /** Subagents we've already opened panels for, by agent_id. */
   private readonly _announcedSubagents: Set<string> = new Set()

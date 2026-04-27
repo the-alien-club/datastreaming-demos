@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
@@ -25,24 +25,32 @@ export function ExistingChatClient({
   initialMessages,
 }: ExistingChatClientProps) {
   const router = useRouter()
-  const conversationIdRef = useRef<string>(conversationId)
+
+  // Memoise the transport against the stable (agentId, conversationId) pair
+  // — React's `useChat` recreates internal state when the transport identity
+  // changes, so building it inline on every render churns the chat session.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: apiUrl("/api/chat"),
+        prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
+          body: {
+            ...body,
+            id,
+            messages,
+            trigger,
+            messageId,
+            agentId,
+            conversationId,
+          },
+        }),
+      }),
+    [agentId, conversationId],
+  )
 
   const { messages, sendMessage, status, error } = useChat({
     messages: initialMessages as UIMessage[],
-    transport: new DefaultChatTransport({
-      api: apiUrl("/api/chat"),
-      prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
-        body: {
-          ...body,
-          id,
-          messages,
-          trigger,
-          messageId,
-          agentId,
-          conversationId: conversationIdRef.current,
-        },
-      }),
-    }),
+    transport,
   })
 
   function handleSend(text: string) {

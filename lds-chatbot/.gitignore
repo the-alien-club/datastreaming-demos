@@ -48,3 +48,8 @@ sqlite.db-journal
 
 # registry credentials
 .npmrc
+
+# Internal QA / review reports — kept on disk for handoff but not shipped to
+# clients via the repo. Move to ai-memories/ if you want them tracked
+# elsewhere.
+/internal-docs/
