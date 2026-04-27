@@ -389,16 +389,18 @@ export const CodeBlockContent = ({
     [code, language, rawTokens]
   );
 
-  // Async highlighting result (populated after shiki loads)
+  // Async highlighting result (populated after shiki loads).
+  // prevCode/prevLanguage track the last rendered input so stale tokens
+  // are cleared in the same render pass when props change — the
+  // recommended React pattern for storing info from previous renders
+  // (avoids accessing ref.current during render).
   const [asyncTokens, setAsyncTokens] = useState<TokenizedCode | null>(null);
-  const asyncKeyRef = useRef({ code, language });
+  const [prevCode, setPrevCode] = useState(code);
+  const [prevLanguage, setPrevLanguage] = useState(language);
 
-  // Invalidate stale async tokens synchronously during render
-  if (
-    asyncKeyRef.current.code !== code ||
-    asyncKeyRef.current.language !== language
-  ) {
-    asyncKeyRef.current = { code, language };
+  if (prevCode !== code || prevLanguage !== language) {
+    setPrevCode(code);
+    setPrevLanguage(language);
     setAsyncTokens(null);
   }
 
