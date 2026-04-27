@@ -36,18 +36,17 @@ istio:
 
   virtualService:
     enabled: true
-    # 0s = no timeout. The chat endpoint streams SSE for the duration of the
-    # underlying workflow run; a finite timeout chops long answers mid-stream.
-    timeout: 0s
-    # POST /api/chat creates a conversation row and triggers a platform
-    # workflow run before any byte is streamed back — retries on `5xx` or
-    # `reset` would duplicate that side-effect. Limit retries to true
-    # transport-layer issues (refused / hard connection failures); the chat
-    # path is non-idempotent and shouldn't replay otherwise.
-    retries:
-      attempts: 2
-      perTryTimeout: 0s
-      retryOn: connect-failure,refused-stream
+    # Both fields intentionally null — Istio rejects "0s" outright (must be
+    # > 1ms), but treats an absent field as "no limit / no retries", which
+    # is exactly what we want:
+    #
+    #   - `timeout`: chat streams SSE for the duration of the underlying
+    #     workflow run; a finite timeout chops long answers mid-stream.
+    #   - `retries`: POST /api/chat creates a conversation row and triggers
+    #     a platform workflow run before any byte streams back — automatic
+    #     retries would duplicate that side-effect. The path is non-idempotent.
+    timeout: null
+    retries: null
 
   certificate:
     # Only needed when gateway.create is true.
