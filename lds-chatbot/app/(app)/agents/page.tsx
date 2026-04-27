@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge"
 import { Bot, Plus, MessageSquare, Settings } from "lucide-react"
 import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-context"
+import { DeleteCardAction } from "@/components/delete-card-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export default async function AgentsPage() {
@@ -104,6 +105,11 @@ export default async function AgentsPage() {
                       Edit
                     </Link>
                   </Button>
+                  <DeleteCardAction
+                    resource="agent"
+                    name={agent.name}
+                    endpoint={`/api/agents/${agent.id}`}
+                  />
                 </CardFooter>
               </Card>
             )

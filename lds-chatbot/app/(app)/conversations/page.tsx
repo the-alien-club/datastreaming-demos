@@ -7,6 +7,7 @@ import { eq, sql, desc } from "drizzle-orm"
 import Link from "next/link"
 import { MessageSquare, Bot } from "lucide-react"
 import { dateGroup, timeAgo } from "@/lib/time"
+import { DeleteCardAction } from "@/components/delete-card-action"
 
 export default async function ConversationsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -69,31 +70,48 @@ export default async function ConversationsPage() {
                 </h2>
                 <div className="space-y-1">
                   {groupRows.map((row) => (
-                    <Link
+                    // Wrapper is a div, not a Link, so the trash button can
+                    // live as a sibling without nesting interactives. The
+                    // Link covers the textual area; the trash sits next to
+                    // the timestamp and uses the `ghost-link` variant which
+                    // stops click propagation so opening the dialog never
+                    // navigates to the chat.
+                    <div
                       key={row.id}
-                      href={`/agents/${row.agentId}/chat/${row.id}`}
                       className="flex items-center gap-4 rounded-lg px-4 py-3 hover:bg-muted/50 transition-colors group"
                     >
-                      <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-                        <Bot className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {row.title ?? "Untitled conversation"}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">
-                          {row.agentName ?? "Unknown agent"}
-                          {row.messageCount > 0 && (
-                            <span className="ml-2 opacity-60">
-                              · {row.messageCount} message{row.messageCount !== 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <span className="text-xs text-muted-foreground shrink-0 opacity-60 group-hover:opacity-100">
-                        {timeAgo(row.updatedAt)}
-                      </span>
-                    </Link>
+                      <Link
+                        href={`/agents/${row.agentId}/chat/${row.id}`}
+                        className="flex items-center gap-4 flex-1 min-w-0"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center shrink-0">
+                          <Bot className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {row.title ?? "Untitled conversation"}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">
+                            {row.agentName ?? "Unknown agent"}
+                            {row.messageCount > 0 && (
+                              <span className="ml-2 opacity-60">
+                                · {row.messageCount} message{row.messageCount !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0 opacity-60 group-hover:opacity-100">
+                          {timeAgo(row.updatedAt)}
+                        </span>
+                      </Link>
+                      <DeleteCardAction
+                        resource="conversation"
+                        name={row.title ?? "Untitled conversation"}
+                        endpoint={`/api/conversations/${row.id}`}
+                        variant="ghost-link"
+                        className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                      />
+                    </div>
                   ))}
                 </div>
               </div>

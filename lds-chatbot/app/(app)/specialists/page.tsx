@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { BrainCircuit, Plus, Settings } from "lucide-react"
+import { DeleteCardAction } from "@/components/delete-card-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export default async function SpecialistsPage() {
@@ -89,13 +90,18 @@ export default async function SpecialistsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">Created {createdAt}</p>
                 </CardContent>
-                <CardFooter className="pt-2">
-                  <Button asChild variant="outline" size="sm" className="w-full">
+                <CardFooter className="pt-2 gap-2">
+                  <Button asChild variant="outline" size="sm" className="flex-1">
                     <Link href={`/specialists/${specialist.id}`}>
                       <Settings className="h-3.5 w-3.5 mr-1.5" />
                       Edit
                     </Link>
                   </Button>
+                  <DeleteCardAction
+                    resource="specialist"
+                    name={specialist.name}
+                    endpoint={`/api/specialists/${specialist.id}`}
+                  />
                 </CardFooter>
               </Card>
             )
