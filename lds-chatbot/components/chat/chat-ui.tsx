@@ -1,13 +1,53 @@
 "use client"
 
-import { memo, useEffect, useRef, useState, type KeyboardEvent, type FormEvent } from "react"
+import {
+  memo,
+  useState,
+  type KeyboardEvent,
+  type FormEvent,
+} from "react"
 import type { UIMessage } from "ai"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { SendHorizonal, SquarePen, Bot, UsersRound, Wrench, Sparkles } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation"
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message"
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from "@/components/ai-elements/tool"
+import {
+  Reasoning,
+  ReasoningTrigger,
+  ReasoningContent,
+} from "@/components/ai-elements/reasoning"
+import {
+  ChainOfThought,
+  ChainOfThoughtHeader,
+  ChainOfThoughtContent,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought"
+import { Shimmer } from "@/components/ai-elements/shimmer"
+import {
+  Bot,
+  SendHorizonal,
+  SquarePen,
+  Sparkles,
+  UsersRound,
+  WrenchIcon,
+} from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -37,11 +77,19 @@ interface SubagentData {
   dispatchedByToolCallId: string | null
 }
 
-// Part type guards — data parts carry `type: "data-<name>"` and a `data` payload.
+// ── Part type guards ───────────────────────────────────────────────────────────
+
 type AnyPart = { type: string } & Record<string, unknown>
 
 function isTextPart(p: AnyPart): p is AnyPart & { text: string } {
   return p.type === "text" && typeof (p as { text?: unknown }).text === "string"
+}
+
+function isReasoningPart(p: AnyPart): p is AnyPart & { text: string } {
+  return (
+    p.type === "reasoning" &&
+    typeof (p as { text?: unknown }).text === "string"
+  )
 }
 
 function isToolCallPart(p: AnyPart): p is AnyPart & { data: ToolCallData } {
@@ -83,39 +131,142 @@ function subagentDescription(args: unknown): string | null {
 
 // ── Typing indicator ───────────────────────────────────────────────────────────
 
-function ThinkingDots() {
-  return (
-    <span className="flex gap-1 py-1">
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
-    </span>
-  )
-}
-
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-3">
-      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
         <Bot className="h-4 w-4 text-muted-foreground" />
       </div>
-      <div className="rounded-xl rounded-tl-none bg-card border px-4 py-3 w-fit">
-        <ThinkingDots />
+      <div className="rounded-xl rounded-tl-none border bg-card px-4 py-3">
+        <Shimmer as="span" duration={1.5}>
+          Thinking...
+        </Shimmer>
       </div>
     </div>
   )
 }
 
-// ── Tool-call blocks ───────────────────────────────────────────────────────────
+// ── Subagent chain-of-thought panel ───────────────────────────────────────────
 
-function SubagentBlock({ description }: { description: string | null }) {
+interface SubagentPanelProps {
+  name: string
+  // Tool-call parts that belong to this subagent activation (gathered later)
+  toolCalls: Array<{ name: string; args: unknown }>
+  // Text parts emitted by this subagent
+  textParts: string[]
+  isStreaming: boolean
+}
+
+const SubagentPanel = memo(function SubagentPanel({
+  name,
+  toolCalls,
+  textParts,
+  isStreaming,
+}: SubagentPanelProps) {
+  const text = textParts.join("\n\n")
+  return (
+    <ChainOfThought>
+      <ChainOfThoughtHeader>
+        <span className="flex items-center gap-2">
+          <UsersRound className="h-4 w-4" />
+          {isStreaming ? (
+            <Shimmer as="span" duration={1.5}>
+              {name}
+            </Shimmer>
+          ) : (
+            <span>{name}</span>
+          )}
+        </span>
+      </ChainOfThoughtHeader>
+
+      <ChainOfThoughtContent>
+        {toolCalls.map((tc, i) => (
+          <ChainOfThoughtStep
+            key={`tc-${i}`}
+            icon={WrenchIcon}
+            label={
+              <span className="font-mono text-xs">{cleanToolName(tc.name)}</span>
+            }
+            description={
+              tc.args
+                ? (() => {
+                    const entries = Object.entries(
+                      tc.args as Record<string, unknown>
+                    )
+                      .filter(([, v]) => v !== undefined && v !== null && v !== "")
+                      .slice(0, 3)
+                    return entries.length > 0
+                      ? entries
+                          .map(([k, v]) => {
+                            const s =
+                              typeof v === "string" ? v : JSON.stringify(v)
+                            return `${k}: ${s.length > 50 ? `${s.slice(0, 50)}…` : s}`
+                          })
+                          .join(" · ")
+                      : undefined
+                  })()
+                : undefined
+            }
+            status={isStreaming ? "active" : "complete"}
+          />
+        ))}
+
+        {text && (
+          <div className="rounded-md border-l-2 border-violet-500/60 bg-violet-500/5 pl-3 pr-2 py-2 text-sm text-muted-foreground">
+            <MessageResponse>{text}</MessageResponse>
+          </div>
+        )}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
+  )
+})
+
+// ── Tool call card ─────────────────────────────────────────────────────────────
+
+interface ToolCallCardProps {
+  name: string
+  args: unknown
+}
+
+const ToolCallCard = memo(function ToolCallCard({
+  name,
+  args,
+}: ToolCallCardProps) {
+  const pretty = cleanToolName(name)
+  // Build a synthetic ToolUIPart-compatible state to reuse ToolHeader badge.
+  // We only receive a data-toolCall event (no result part from this stream),
+  // so treat it as "input-available" (running).
+  const toolInput =
+    args && typeof args === "object"
+      ? (args as Record<string, unknown>)
+      : {}
+
+  return (
+    <Tool defaultOpen={false}>
+      <ToolHeader
+        type={"dynamic-tool" as const}
+        state="input-available"
+        toolName={pretty}
+        title={pretty}
+      />
+      <ToolContent>
+        <ToolInput input={toolInput} />
+        <ToolOutput output={undefined} errorText={undefined} />
+      </ToolContent>
+    </Tool>
+  )
+})
+
+// ── Subagent "task" dispatch block ─────────────────────────────────────────────
+
+function SubagentDispatchBlock({ description }: { description: string | null }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-900 dark:text-violet-200">
-      <UsersRound className="h-4 w-4 mt-0.5 shrink-0 text-violet-600 dark:text-violet-400" />
+      <UsersRound className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
       <div className="min-w-0 flex-1">
         <div className="font-medium">Delegating to subagent</div>
         {description && (
-          <div className="text-xs opacity-80 mt-0.5 whitespace-pre-wrap wrap-break-word line-clamp-3">
+          <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs opacity-80">
             {description}
           </div>
         )}
@@ -124,153 +275,175 @@ function SubagentBlock({ description }: { description: string | null }) {
   )
 }
 
-function SubagentPanel({ name }: { name: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-900 dark:text-violet-200">
-      <UsersRound className="h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
-      <span className="font-medium">Subagent active:</span>
-      <span className="font-mono break-all">{name}</span>
-    </div>
-  )
-}
+// ── Message bubble (assistant) ─────────────────────────────────────────────────
 
-function ToolCallChip({ name, args }: { name: string; args: unknown }) {
-  const pretty = cleanToolName(name)
-  const argSummary = (() => {
-    if (!args || typeof args !== "object") return null
-    const entries = Object.entries(args as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined && v !== null && v !== "")
-      .slice(0, 3)
-    if (entries.length === 0) return null
-    return entries
-      .map(([k, v]) => {
-        const s = typeof v === "string" ? v : JSON.stringify(v)
-        const clipped = s.length > 40 ? `${s.slice(0, 40)}…` : s
-        return `${k}: ${clipped}`
-      })
-      .join(", ")
-  })()
-
-  return (
-    <div className="inline-flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-900 dark:text-amber-200 max-w-full">
-      <Wrench className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-      <div className="min-w-0 flex-1">
-        <span className="font-mono font-medium break-all">{pretty}</span>
-        {argSummary && (
-          <span className="block opacity-70 mt-0.5 break-all">{argSummary}</span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── Message bubble ─────────────────────────────────────────────────────────────
-
-interface MessageBubbleProps {
+interface AssistantBubbleProps {
   message: UIMessage
-  // Render an inline "thinking" dots indicator at the end of this bubble —
-  // used between a tool call and the next text chunk to signal the agent
-  // is still working inside the same message.
-  showThinking?: boolean
+  isLast: boolean
+  isStreaming: boolean
 }
 
-// Tailwind `prose` overrides applied to every assistant text bubble. The
-// default plugin spacing is too tight for an inline chat bubble:
-// paragraphs, headings, lists, and blockquotes crash into each other.
-// Loosen with explicit child-selector classes so dark mode still inherits
-// the prose-invert palette.
-const PROSE_BUBBLE_CLASSES =
-  "prose prose-sm dark:prose-invert max-w-none " +
-  "prose-pre:rounded-lg prose-code:before:content-none prose-code:after:content-none " +
-  "[&_p]:my-3 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
-  "[&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:mt-5 [&_h3]:mb-2 " +
-  "[&_h4]:mt-4 [&_h4]:mb-2 " +
-  "[&_ul]:my-3 [&_ol]:my-3 [&_li]:my-1 [&_li>p]:my-1 " +
-  "[&_blockquote]:my-3 [&_pre]:my-4 " +
-  "[&_:first-child]:mt-0 [&_:last-child]:mb-0"
-
-const MessageBubble = memo(function MessageBubble({
+/**
+ * Groups message parts into logical sections for rendering. The algorithm
+ * walks the parts array once and accumulates:
+ *  - contiguous text chunks into a single MessageResponse
+ *  - reasoning parts into a Reasoning block
+ *  - data-toolCall parts into ToolCallCard components (unless they are
+ *    "task" tool calls, which become SubagentDispatchBlock)
+ *  - data-subagent announcements open a SubagentPanel that collects the
+ *    tool calls and text that follow until the next data-subagent or end
+ */
+const AssistantBubble = memo(function AssistantBubble({
   message,
-  showThinking = false,
-}: MessageBubbleProps) {
-  const isUser = message.role === "user"
+  isLast,
+  isStreaming,
+}: AssistantBubbleProps) {
   const parts = (message.parts ?? []) as AnyPart[]
 
-  if (isUser) {
-    const text = parts.filter(isTextPart).map((p) => p.text).join("")
-    if (!text) return null
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[75%] rounded-xl rounded-tr-none bg-primary text-primary-foreground px-4 py-2.5 text-sm whitespace-pre-wrap wrap-break-word">
-          {text}
-        </div>
-      </div>
-    )
+  // ── Collect reasoning parts for a single collapsed Reasoning block ──────────
+  const reasoningText = parts
+    .filter(isReasoningPart)
+    .map((p) => p.text)
+    .join("\n\n")
+
+  // ── Walk parts once to build a render-list ──────────────────────────────────
+  type Section =
+    | { kind: "text"; text: string }
+    | { kind: "toolCall"; name: string; args: unknown }
+    | { kind: "taskDispatch"; description: string | null }
+    | { kind: "subagent"; name: string; toolCalls: Array<{ name: string; args: unknown }>; textParts: string[] }
+
+  const sections: Section[] = []
+
+  let currentSubagent: (Section & { kind: "subagent" }) | null = null
+
+  function flush() {
+    if (currentSubagent) {
+      sections.push(currentSubagent)
+      currentSubagent = null
+    }
   }
 
-  // Assistant: render parts in order so tool calls appear inline with text.
-  const rendered: React.ReactNode[] = []
-  parts.forEach((part, idx) => {
-    if (isTextPart(part)) {
-      if (!part.text) return
-      // Markdown renders live during streaming. react-markdown re-parses
-      // the accumulated text on each delta, which is fine for the
-      // ~kilobyte-sized assistant turns this chat sees; if a future
-      // workload pushes it into multi-thousand-line outputs we'll
-      // memoize. Partial markdown (mid-token like `**bo`) renders
-      // briefly ugly but tolerable — chasing prettiness here means
-      // delaying the user's first read by seconds.
-      rendered.push(
-        <div
-          key={`t-${idx}`}
-          className={cn(
-            "rounded-xl rounded-tl-none bg-card border px-4 py-2.5 text-sm wrap-break-word",
-            PROSE_BUBBLE_CLASSES,
-          )}
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
-        </div>
-      )
-      return
+  for (const part of parts) {
+    if (isReasoningPart(part)) {
+      // Reasoning is shown in a dedicated block at the top; skip here.
+      continue
     }
+
+    if (isSubagentPart(part)) {
+      flush()
+      currentSubagent = {
+        kind: "subagent",
+        name: part.data.name,
+        toolCalls: [],
+        textParts: [],
+      }
+      continue
+    }
+
     if (isToolCallPart(part)) {
       const { name, args } = part.data
-      if (name === "task") {
-        rendered.push(
-          <SubagentBlock key={`s-${idx}`} description={subagentDescription(args)} />
-        )
-      } else {
-        rendered.push(<ToolCallChip key={`c-${idx}`} name={name} args={args} />)
-      }
-      return
-    }
-    if (isSubagentPart(part)) {
-      rendered.push(<SubagentPanel key={`sp-${idx}`} name={part.data.name} />)
-      return
-    }
-    // Unknown part types (e.g. data-conversationId) are intentionally ignored.
-  })
 
-  if (showThinking) {
-    rendered.push(
-      <div
-        key="thinking"
-        className="rounded-xl rounded-tl-none bg-card border px-4 py-2.5 w-fit"
-      >
-        <ThinkingDots />
-      </div>
-    )
+      if (name === "task") {
+        // The "task" pseudo-tool is the platform's subagent-dispatch call.
+        if (currentSubagent) {
+          // Treat as context for the subagent we're building.
+          currentSubagent.toolCalls.push({ name, args })
+        } else {
+          flush()
+          sections.push({ kind: "taskDispatch", description: subagentDescription(args) })
+        }
+        continue
+      }
+
+      if (currentSubagent) {
+        currentSubagent.toolCalls.push({ name, args })
+      } else {
+        flush()
+        sections.push({ kind: "toolCall", name, args })
+      }
+      continue
+    }
+
+    if (isTextPart(part) && part.text) {
+      if (currentSubagent) {
+        currentSubagent.textParts.push(part.text)
+      } else {
+        // Merge with previous text section if possible.
+        const last = sections[sections.length - 1]
+        if (last?.kind === "text") {
+          last.text += part.text
+        } else {
+          flush()
+          sections.push({ kind: "text", text: part.text })
+        }
+      }
+    }
   }
 
-  if (rendered.length === 0) return null
+  // Flush any open subagent.
+  flush()
+
+  if (sections.length === 0 && !reasoningText) return null
 
   return (
-    <div className="flex items-start gap-3">
-      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-        <Bot className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <div className="flex flex-col gap-2 max-w-[75%] min-w-0">{rendered}</div>
-    </div>
+    <Message from="assistant">
+      <MessageContent>
+        {/* Reasoning — always first, collapsed by default after streaming */}
+        {reasoningText && (
+          <Reasoning isStreaming={isLast && isStreaming}>
+            <ReasoningTrigger />
+            <ReasoningContent>{reasoningText}</ReasoningContent>
+          </Reasoning>
+        )}
+
+        {sections.map((section, idx) => {
+          switch (section.kind) {
+            case "text":
+              return (
+                <MessageResponse key={`t-${idx}`}>
+                  {section.text}
+                </MessageResponse>
+              )
+
+            case "toolCall":
+              return (
+                <ToolCallCard
+                  key={`tc-${idx}`}
+                  name={section.name}
+                  args={section.args}
+                />
+              )
+
+            case "taskDispatch":
+              return (
+                <SubagentDispatchBlock
+                  key={`td-${idx}`}
+                  description={section.description}
+                />
+              )
+
+            case "subagent":
+              return (
+                <SubagentPanel
+                  key={`sa-${idx}`}
+                  name={section.name}
+                  toolCalls={section.toolCalls}
+                  textParts={section.textParts}
+                  isStreaming={isLast && isStreaming}
+                />
+              )
+          }
+        })}
+
+        {/* Inline "still working" shimmer at the end of an in-progress turn */}
+        {isLast && isStreaming && sections.length > 0 && (
+          <Shimmer as="p" className="text-xs text-muted-foreground" duration={1.5}>
+            Working...
+          </Shimmer>
+        )}
+      </MessageContent>
+    </Message>
   )
 })
 
@@ -288,31 +461,18 @@ export function ChatUI({
   onNewChat,
 }: ChatUIProps) {
   const [input, setInput] = useState("")
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // Track whether the user is anchored to the bottom. While streaming we
-  // only auto-scroll when they're near the bottom — otherwise we'd drag
-  // them back down on every chunk and they couldn't read previous content.
-  const isNearBottomRef = useRef(true)
-
   const isLoading = status === "submitted" || status === "streaming"
+  const lastMessage = messages[messages.length - 1]
 
-  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
-    const el = e.currentTarget
-    isNearBottomRef.current =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 80
-  }
+  // Standalone "thinking" bubble: no assistant content exists yet.
+  const showStandaloneIndicator =
+    isLoading && (!lastMessage || lastMessage.role === "user")
 
-  // Auto-scroll only when the user is anchored to the bottom. Use
-  // "instant" during streaming (smooth would compound into a janky
-  // continuous animation as deltas arrive 30+ times/sec).
-  useEffect(() => {
-    if (!isNearBottomRef.current) return
-    messagesEndRef.current?.scrollIntoView({
-      behavior: status === "streaming" ? "instant" : "smooth",
-    })
-  }, [messages, status])
+  const showStarterPrompts =
+    messages.length === 0 &&
+    !isLoading &&
+    Array.isArray(starterPrompts) &&
+    starterPrompts.length > 0
 
   function handleSubmit(e?: FormEvent) {
     e?.preventDefault()
@@ -320,10 +480,6 @@ export function ChatUI({
     if (!trimmed || isLoading) return
     onSend(trimmed)
     setInput("")
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
-    }
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -335,7 +491,6 @@ export function ChatUI({
 
   function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value)
-    // Auto-resize
     const el = e.target
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
@@ -343,88 +498,66 @@ export function ChatUI({
 
   function handleStarterPromptClick(prompt: string) {
     setInput(prompt)
-    const el = textareaRef.current
-    if (el) {
-      el.focus()
-      // Place cursor at end and resize to fit pasted text
-      el.setSelectionRange(prompt.length, prompt.length)
-      el.style.height = "auto"
-      el.style.height = `${Math.min(el.scrollHeight, 200)}px`
-    }
   }
 
-  const showStarterPrompts =
-    messages.length === 0 &&
-    !isLoading &&
-    Array.isArray(starterPrompts) &&
-    starterPrompts.length > 0
-
-  // The agent is "working" for the entire `submitted`→`streaming` window. The
-  // dots stay visible that whole time and only disappear when the turn is
-  // complete (`status` becomes `ready` / `error`).
-  const lastMessage = messages[messages.length - 1]
-
-  // Standalone "thinking" bubble: no assistant content exists yet.
-  const showStandaloneIndicator =
-    isLoading && (!lastMessage || lastMessage.role === "user")
-
-  // Inline dots at the end of the in-progress assistant bubble — keeps the
-  // "still working" signal attached to the answer even while text is streaming
-  // or between a tool call and the next chunk.
-  const inlineThinkingIdx =
-    isLoading && lastMessage?.role === "assistant" ? messages.length - 1 : -1
-
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
-        <h1 className="text-lg font-semibold truncate">
+      <div className="flex shrink-0 items-center justify-between border-b px-6 py-4">
+        <h1 className="truncate text-lg font-semibold">
           {agentName ?? "Chat"}
         </h1>
         {onNewChat && (
           <Button variant="outline" size="sm" onClick={onNewChat}>
-            <SquarePen className="h-3.5 w-3.5 mr-1.5" />
+            <SquarePen className="mr-1.5 h-3.5 w-3.5" />
             New chat
           </Button>
         )}
       </div>
 
-      {/* Messages */}
-      <div
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-6 py-6 space-y-4"
-      >
-        {messages.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-16">
-            <Bot className="h-12 w-12 mb-4 opacity-30" />
-            <p className="text-base font-medium">
-              {agentName ? `Chat with ${agentName}` : "Start a conversation"}
-            </p>
-            <p className="text-sm mt-1 opacity-70">
-              Ask anything — the agent will respond below.
-            </p>
-          </div>
-        )}
+      {/* Messages — Conversation handles sticky-bottom scrolling */}
+      <Conversation className="flex-1">
+        <ConversationContent>
+          {messages.length === 0 && !isLoading && (
+            <ConversationEmptyState
+              icon={<Bot className="h-12 w-12 opacity-30" />}
+              title={agentName ? `Chat with ${agentName}` : "Start a conversation"}
+              description="Ask anything — the agent will respond below."
+            />
+          )}
 
-        {messages.map((message, idx) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            showThinking={idx === inlineThinkingIdx}
-          />
-        ))}
+          {messages.map((message, idx) => {
+            if (message.role === "user") {
+              const parts = (message.parts ?? []) as AnyPart[]
+              const text = parts.filter(isTextPart).map((p) => p.text).join("")
+              if (!text) return null
+              return (
+                <Message key={message.id} from="user">
+                  <MessageContent>{text}</MessageContent>
+                </Message>
+              )
+            }
 
-        {showStandaloneIndicator && <TypingIndicator />}
+            return (
+              <AssistantBubble
+                key={message.id}
+                message={message}
+                isLast={idx === messages.length - 1}
+                isStreaming={isLoading}
+              />
+            )
+          })}
 
-        {status === "error" && error && (
-          <div className="text-sm text-destructive px-4 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
-            Error: {error.message}
-          </div>
-        )}
+          {showStandaloneIndicator && <TypingIndicator />}
 
-        <div ref={messagesEndRef} />
-      </div>
+          {status === "error" && error && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+              Error: {error.message}
+            </div>
+          )}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
 
       {/* Input area */}
       <div className="shrink-0 border-t px-6 py-4">
@@ -433,14 +566,14 @@ export function ChatUI({
             className="mb-3 flex flex-wrap items-center gap-2"
             data-testid="starter-prompts"
           >
-            <Sparkles className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             {starterPrompts!.map((prompt) => (
               <Button
                 key={prompt}
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-auto whitespace-normal text-left text-xs leading-snug py-1.5 px-2.5"
+                className="h-auto whitespace-normal py-1.5 px-2.5 text-left text-xs leading-snug"
                 onClick={() => handleStarterPromptClick(prompt)}
               >
                 {prompt}
@@ -448,16 +581,16 @@ export function ChatUI({
             ))}
           </div>
         )}
+
         <form onSubmit={handleSubmit} className="flex items-end gap-3">
           <Textarea
-            ref={textareaRef}
             value={input}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             placeholder="Message the agent… (Enter to send, Shift+Enter for newline)"
             className={cn(
-              "flex-1 min-h-11 max-h-50 resize-none overflow-y-auto",
-              "text-sm leading-relaxed"
+              "flex-1 min-h-11 max-h-[200px] resize-none overflow-y-auto",
+              "text-sm leading-relaxed",
             )}
             disabled={isLoading}
             rows={1}
