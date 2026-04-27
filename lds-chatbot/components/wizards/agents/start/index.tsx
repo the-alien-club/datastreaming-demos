@@ -105,6 +105,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
         canProceed={() => trimmedName.length >= 3}
         onBeforeNext={async () => {
           if (state.agentId) return true
+          const tpl = WIZARD_AGENT_TEMPLATES.find((t) => t.id === state.templateId)
           try {
             const response = await apiFetch("/api/agents", {
               method: "POST",
@@ -116,6 +117,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
                 model: state.model,
                 steps: [],
                 subagents: [],
+                starterPrompts: tpl?.starterPrompts ?? [],
               }),
             })
             if (!response.ok) {

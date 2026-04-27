@@ -32,6 +32,7 @@ export const agents = pgTable("agents", {
   description: text("description"),
   systemPrompt: text("system_prompt"), // overall system prompt
   steps: text("steps"), // JSON array of {name, prompt} objects
+  starterPrompts: text("starter_prompts"), // JSON array of strings — chip-style suggestions for empty conversations
   model: text("model").default("gpt-4.1-mini"),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),

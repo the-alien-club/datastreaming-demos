@@ -27,7 +27,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "Agent not found" }, { status: 404 })
   }
 
-  return Response.json(agent)
+  return Response.json({
+    ...agent,
+    starterPrompts: agent.starterPrompts ? JSON.parse(agent.starterPrompts) : [],
+  })
 }
 
 export async function PUT(request: NextRequest, context: RouteContext) {
@@ -59,6 +62,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     steps?: { name: string; prompt: string }[] | string
     model?: string
     subagents?: (Omit<SubagentConfig, "mcpIds"> & { mcpIds: string[] | string })[]
+    starterPrompts?: string[] | string
   }
 
   try {
@@ -97,6 +101,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : "Invalid steps" },
+      { status: 400 },
+    )
+  }
+
+  let parsedStarterPrompts: string[] | null
+  try {
+    if (body.starterPrompts !== undefined) {
+      const arr = coerceArray<string>(body.starterPrompts, "starterPrompts")
+        .filter((p): p is string => typeof p === "string" && p.trim() !== "")
+      parsedStarterPrompts = arr.length > 0 ? arr : null
+    } else {
+      parsedStarterPrompts = existing.starterPrompts ? JSON.parse(existing.starterPrompts) : null
+    }
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Invalid starterPrompts" },
       { status: 400 },
     )
   }
@@ -168,6 +188,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       description,
       systemPrompt,
       steps: JSON.stringify(steps),
+      starterPrompts: parsedStarterPrompts ? JSON.stringify(parsedStarterPrompts) : null,
       model,
       updatedAt: now,
     })
@@ -197,7 +218,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     with: { subagents: true },
   })
 
-  return Response.json(updated)
+  if (!updated) {
+    return Response.json({ error: "Agent not found after update" }, { status: 500 })
+  }
+
+  return Response.json({
+    ...updated,
+    starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [],
+  })
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {

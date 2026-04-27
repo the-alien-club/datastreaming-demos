@@ -18,13 +18,15 @@ export default function NewChatPage({ params }: ChatPageProps) {
   // Track the conversation id assigned by the server after the first message
   const conversationIdRef = useRef<string | null>(null)
   const [agentName, setAgentName] = useState<string | undefined>(undefined)
+  const [starterPrompts, setStarterPrompts] = useState<string[]>([])
 
-  // Load agent name for display
+  // Load agent metadata (name, starter prompts) for display
   useEffect(() => {
     apiFetch(`/api/agents/${agentId}`)
       .then((r) => r.json())
-      .then((data: { name?: string }) => {
+      .then((data: { name?: string; starterPrompts?: string[] }) => {
         if (data?.name) setAgentName(data.name)
+        if (Array.isArray(data?.starterPrompts)) setStarterPrompts(data.starterPrompts)
       })
       .catch(() => undefined)
   }, [agentId])
@@ -82,6 +84,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
       messages={messages as UIMessage[]}
       status={status}
       error={error}
+      starterPrompts={starterPrompts}
       onSend={handleSend}
       onNewChat={handleNewChat}
     />

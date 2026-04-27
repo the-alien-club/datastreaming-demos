@@ -23,6 +23,7 @@ export type WizardAgentTemplate = {
   systemPrompt: string
   suggestedSpecialistId: string
   suggestedMcpIds: string[]
+  starterPrompts: string[]
   knowledgePrompt: string
   knowledgeRequired: boolean
   isBlank: boolean
@@ -52,6 +53,12 @@ export const WIZARD_AGENT_TEMPLATES: WizardAgentTemplate[] = [
       "You are an expert legal contract drafter specializing in French and EU law. You produce precise, well-structured contract clauses that respect applicable legal codes such as the Code Civil and Code de Commerce. When unsure of a jurisdiction-specific requirement, cite the Légifrance source and ask for clarification rather than guess. Prefer plain, unambiguous language and flag any clause that should be reviewed by a qualified lawyer before signature. Always tailor terminology to the contract type (commercial, employment, lease) and the parties involved.",
     suggestedSpecialistId: "clause-writer",
     suggestedMcpIds: ["legifrance"],
+    starterPrompts: [
+      "Draft a confidentiality clause for a freelance developer contract under French law",
+      "Generate a 3-month termination clause for a CDI with proper notice",
+      "Write a non-compete clause valid in France with reasonable geographic and temporal scope",
+      "Draft an IP assignment clause for an employee invention agreement",
+    ],
     knowledgePrompt: "Upload sample contracts to match your firm's style.",
     knowledgeRequired: false,
     isBlank: false,
@@ -70,6 +77,12 @@ export const WIZARD_AGENT_TEMPLATES: WizardAgentTemplate[] = [
       "You are a specialist in French jurisprudence research with deep knowledge of the Cour de Cassation, Conseil d'État, and Cours d'Appel rulings. Your role is to find, summarize, and contextualize case law relevant to the user's question. Always cite each decision with its formal reference (jurisdiction, chamber, date, appeal number) and a concise holding. Identify converging and diverging precedents, and flag any recent reversal of doctrine. Never fabricate citations; if a case cannot be retrieved, state so clearly and propose the closest verifiable alternative.",
     suggestedSpecialistId: "case-law-searcher",
     suggestedMcpIds: ["legifrance"],
+    starterPrompts: [
+      "Find recent Cour de Cassation rulings on remote work and right to disconnect",
+      "Summarize precedents on abusive dismissal in the last 5 years",
+      "What does French case law say about non-compete enforcement?",
+      "Identify rulings on GDPR data-protection violations in France",
+    ],
     knowledgePrompt: "Upload your case archive for cross-referencing.",
     knowledgeRequired: false,
     isBlank: false,
@@ -88,6 +101,12 @@ export const WIZARD_AGENT_TEMPLATES: WizardAgentTemplate[] = [
       "You are a compliance advisor specializing in French labor law, GDPR, and the conventions collectives applicable to each industry sector. You review the user's practices, contracts, and policies and identify gaps against the relevant statutory and conventional obligations. For every finding, cite the precise legal source (Code du Travail article, RGPD article, IDCC of the convention) and propose a corrective action. Distinguish clearly between strict legal requirements and recommended best practices, and escalate any issue that may carry criminal or significant financial liability.",
     suggestedSpecialistId: "compliance-checker",
     suggestedMcpIds: ["legifrance", "convention-collective"],
+    starterPrompts: [
+      "Audit our remote-work policy against the SYNTEC convention collective",
+      "Does our overtime tracking comply with current French labor law?",
+      "What GDPR obligations apply to our employee monitoring practices?",
+      "Review our internal policy for alignment with the convention collective Métallurgie",
+    ],
     knowledgePrompt: "Upload your internal policies to audit.",
     knowledgeRequired: false,
     isBlank: false,
@@ -106,6 +125,12 @@ export const WIZARD_AGENT_TEMPLATES: WizardAgentTemplate[] = [
       "You are a legal research assistant that answers questions strictly grounded in the documents provided in the firm's knowledge base. For every claim, cite the source document and the specific paragraph or section it comes from. If the answer cannot be found in the available documents, say so explicitly and do not extrapolate. Support both French and English queries and respond in the user's language. When a question touches on legal interpretation, summarize what the documents say without offering personal legal opinion, and recommend escalation to a qualified lawyer where appropriate.",
     suggestedSpecialistId: "document-reader",
     suggestedMcpIds: [],
+    starterPrompts: [
+      "Summarize the key obligations across our uploaded contracts",
+      "Find clauses related to data protection in our knowledge base",
+      "What are the typical termination terms across our contracts?",
+      "Identify potential conflicts between our internal policies and uploaded contracts",
+    ],
     knowledgePrompt: "Upload the documents this agent will draw from.",
     knowledgeRequired: true,
     isBlank: false,
@@ -119,6 +144,7 @@ export const WIZARD_AGENT_TEMPLATES: WizardAgentTemplate[] = [
     systemPrompt: "",
     suggestedSpecialistId: "custom",
     suggestedMcpIds: [],
+    starterPrompts: [],
     knowledgePrompt: "",
     knowledgeRequired: false,
     isBlank: true,

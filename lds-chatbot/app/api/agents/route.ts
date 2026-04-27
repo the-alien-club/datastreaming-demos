@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     steps?: { name: string; prompt: string }[]
     model?: string
     subagents?: SubagentConfig[]
+    starterPrompts?: string[]
   }
 
   try {
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
   const steps = body.steps ?? []
   const model = body.model ?? "gpt-4.1-mini"
   const subagentConfigs: SubagentConfig[] = body.subagents ?? []
+  const starterPrompts = Array.isArray(body.starterPrompts)
+    ? body.starterPrompts.filter((p): p is string => typeof p === "string" && p.trim() !== "")
+    : null
 
   // Build workflow graph
   const mcpConfigs = await loadEnabledMcpConfigs()
@@ -89,6 +93,7 @@ export async function POST(request: NextRequest) {
     description,
     systemPrompt,
     steps: JSON.stringify(steps),
+    starterPrompts: starterPrompts && starterPrompts.length > 0 ? JSON.stringify(starterPrompts) : null,
     model,
     createdAt: now,
     updatedAt: now,

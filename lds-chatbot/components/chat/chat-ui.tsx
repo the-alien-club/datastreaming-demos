@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { SendHorizonal, SquarePen, Bot, UsersRound, Wrench } from "lucide-react"
+import { SendHorizonal, SquarePen, Bot, UsersRound, Wrench, Sparkles } from "lucide-react"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,7 @@ export interface ChatUIProps {
   status: "submitted" | "streaming" | "ready" | "error"
   error?: Error
   conversationId?: string
+  starterPrompts?: string[]
   onSend: (text: string) => void
   onNewChat?: () => void
 }
@@ -273,6 +274,7 @@ export function ChatUI({
   status,
   error,
   conversationId: _conversationId,
+  starterPrompts,
   onSend,
   onNewChat,
 }: ChatUIProps) {
@@ -313,6 +315,24 @@ export function ChatUI({
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
   }
+
+  function handleStarterPromptClick(prompt: string) {
+    setInput(prompt)
+    const el = textareaRef.current
+    if (el) {
+      el.focus()
+      // Place cursor at end and resize to fit pasted text
+      el.setSelectionRange(prompt.length, prompt.length)
+      el.style.height = "auto"
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    }
+  }
+
+  const showStarterPrompts =
+    messages.length === 0 &&
+    !isLoading &&
+    Array.isArray(starterPrompts) &&
+    starterPrompts.length > 0
 
   // The agent is "working" for the entire `submitted`→`streaming` window. The
   // dots stay visible that whole time and only disappear when the turn is
@@ -384,6 +404,26 @@ export function ChatUI({
 
       {/* Input area */}
       <div className="shrink-0 border-t px-6 py-4">
+        {showStarterPrompts && (
+          <div
+            className="mb-3 flex flex-wrap items-center gap-2"
+            data-testid="starter-prompts"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            {starterPrompts!.map((prompt) => (
+              <Button
+                key={prompt}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-auto whitespace-normal text-left text-xs leading-snug py-1.5 px-2.5"
+                onClick={() => handleStarterPromptClick(prompt)}
+              >
+                {prompt}
+              </Button>
+            ))}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex items-end gap-3">
           <Textarea
             ref={textareaRef}
