@@ -136,3 +136,35 @@ export async function deleteWorkflow(id: number, token: string): Promise<void> {
 export async function getAiModels(token: string): Promise<PublicAIModel[]> {
   return platformJson<PublicAIModel[]>("/ai-models?select=public&modelType=llm", { method: "GET" }, token)
 }
+
+export interface OpenResponsesStreamBody {
+  model: string
+  input: string
+  previous_response_id?: string
+}
+
+/**
+ * Open a streaming connection to the platform's OpenAI Responses-API
+ * endpoint for a given agent workflow. Returns the raw upstream
+ * `Response` so the caller can pipe its SSE body through a translator.
+ *
+ * Throws on transport errors. Returns a non-OK Response (with a body)
+ * for the caller to surface upstream HTTP failures verbatim — the
+ * platform's error envelope is more useful to clients than a generic
+ * 502 string would be.
+ */
+export async function openResponsesStream(
+  workflowId: number,
+  body: OpenResponsesStreamBody,
+  token: string,
+): Promise<Response> {
+  return fetch(`${PLATFORM_API_URL}/agent/${workflowId}/responses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-oauth-access-token": token,
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({ ...body, stream: true }),
+  })
+}
