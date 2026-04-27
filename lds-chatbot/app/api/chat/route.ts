@@ -10,7 +10,7 @@
 // All translation logic lives in `lib/platform/responses_stream.ts`.
 
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { db } from "@/lib/db"
@@ -50,7 +50,9 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!body.agentId) return new Response("agentId required", { status: 400 })
 
-  const agent = await db.query.agents.findFirst({ where: eq(agents.id, body.agentId) })
+  const agent = await db.query.agents.findFirst({
+    where: and(eq(agents.id, body.agentId), eq(agents.userId, session.user.id)),
+  })
   if (!agent) return new Response("Agent not found", { status: 404 })
   if (agent.workflowId === null) {
     return new Response("Agent has no platform workflow yet — finish configuring it first", { status: 409 })
@@ -60,8 +62,13 @@ export async function POST(request: Request): Promise<Response> {
   if (!userMessage) return new Response("No user message text found in request", { status: 400 })
 
   const existingConversation = body.conversationId
-    ? await db.query.conversations.findFirst({ where: eq(conversations.id, body.conversationId) })
+    ? await db.query.conversations.findFirst({
+        where: and(eq(conversations.id, body.conversationId), eq(conversations.userId, session.user.id)),
+      })
     : null
+  if (body.conversationId && !existingConversation) {
+    return new Response("Conversation not found", { status: 404 })
+  }
 
   const conversationId = body.conversationId ?? crypto.randomUUID()
 
@@ -82,6 +89,13 @@ export async function POST(request: Request): Promise<Response> {
     content: userMessage,
   })
 
+  // Wire the request's abort signal through to both the upstream fetch and
+  // the SSE consumer loop. When the client closes the tab mid-stream the
+  // platform connection is cancelled instead of being held open until the
+  // workflow finishes. We also persist whatever assistant text streamed
+  // before the abort so partial answers aren't silently lost.
+  const signal = request.signal
+
   // `previous_response_id` carries the prior turn's response_id so the
   // agent runtime resumes its session memory (responses_v1.md §7).
   const upstream = await openResponsesStream(
@@ -92,6 +106,7 @@ export async function POST(request: Request): Promise<Response> {
       previous_response_id: existingConversation?.sessionId ?? undefined,
     },
     accessToken,
+    signal,
   )
 
   if (!upstream.ok || !upstream.body) {
@@ -101,8 +116,10 @@ export async function POST(request: Request): Promise<Response> {
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      const result = await translateResponseStream(upstream.body!, { writer, conversationId })
+      const result = await translateResponseStream(upstream.body!, { writer, conversationId, signal })
 
+      // Persist whatever streamed — even if the client aborted mid-stream
+      // we keep the partial answer so the conversation history is intact.
       await db.insert(messages).values({
         id: crypto.randomUUID(),
         conversationId,

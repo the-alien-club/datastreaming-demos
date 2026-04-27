@@ -29,9 +29,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "agentId is required" }, { status: 422 })
   }
 
-  // 1. Load dataset from local DB
+  // 1. Load dataset from local DB (scoped to caller)
   const dataset = await db.query.datasets.findFirst({
-    where: (d, { eq }) => eq(d.id, id),
+    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
   })
 
   if (!dataset) {
@@ -42,9 +42,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return Response.json({ error: "Dataset not yet synced with cluster" }, { status: 422 })
   }
 
-  // 2. Load agent from local DB
+  // 2. Load agent from local DB (scoped to caller)
   const agent = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, body.agentId),
+    where: (a, { eq, and }) => and(eq(a.id, body.agentId), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
@@ -97,7 +97,7 @@ Return relevant excerpts with source references (entry IDs and titles).`
 
   // 5. Rebuild workflow graph and PATCH it to the platform
   const steps = agent.steps ? JSON.parse(agent.steps) : []
-  const mcpConfigs = await loadEnabledMcpConfigs()
+  const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name: agent.name,
     systemPrompt: agent.systemPrompt ?? "",

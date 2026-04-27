@@ -4,7 +4,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { specialists, mcps } from "@/lib/db/schema"
-import { desc } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -15,8 +15,11 @@ export default async function SpecialistsPage() {
   if (!session) redirect("/sign-in")
 
   const [specialistList, mcpRows] = await Promise.all([
-    db.query.specialists.findMany({ orderBy: [desc(specialists.createdAt)] }),
-    db.select({ id: mcps.id, name: mcps.name }).from(mcps),
+    db.query.specialists.findMany({
+      where: eq(specialists.userId, session.user.id),
+      orderBy: [desc(specialists.createdAt)],
+    }),
+    db.select({ id: mcps.id, name: mcps.name }).from(mcps).where(eq(mcps.userId, session.user.id)),
   ])
   const mcpNames = new Map(mcpRows.map((m) => [m.id, m.name]))
 

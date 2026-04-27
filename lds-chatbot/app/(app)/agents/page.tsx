@@ -4,7 +4,7 @@ import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { db } from "@/lib/db"
 import { agents } from "@/lib/db/schema"
-import { desc } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +16,7 @@ export default async function AgentsPage() {
   if (!session) redirect("/sign-in")
 
   const agentList = await db.query.agents.findMany({
+    where: eq(agents.userId, session.user.id),
     orderBy: [desc(agents.createdAt)],
     with: { subagents: true },
   })

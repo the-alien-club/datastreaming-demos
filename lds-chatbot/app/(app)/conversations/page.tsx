@@ -53,6 +53,7 @@ export default async function ConversationsPage() {
     .from(conversations)
     .leftJoin(agents, eq(conversations.agentId, agents.id))
     .leftJoin(messages, eq(messages.conversationId, conversations.id))
+    .where(eq(conversations.userId, session.user.id))
     .groupBy(
       conversations.id,
       conversations.agentId,

@@ -87,6 +87,11 @@ export interface TranslatedResponseResult {
 export interface TranslateOptions {
   writer: StreamWriter
   conversationId: string
+  /** Forward the request's abort signal so we can stop reading the upstream
+   *  body when the client closes the tab mid-stream. The caller's fetch
+   *  should be opened with the same signal so the upstream socket is also
+   *  cancelled — the reader cancel here only releases our consumer side. */
+  signal?: AbortSignal
 }
 
 /**
@@ -106,8 +111,21 @@ export async function translateResponseStream(
 
   const state = new TranslationState(opts)
 
+  // If the caller aborts (client disconnect mid-stream), cancel the reader
+  // so the `await reader.read()` resolves immediately and we exit the loop.
+  // The fetch initiated upstream by the caller should also have been opened
+  // with the same signal — that's what actually closes the upstream socket.
+  const onAbort = () => {
+    reader.cancel(opts.signal?.reason ?? new Error("aborted")).catch(() => {})
+  }
+  if (opts.signal) {
+    if (opts.signal.aborted) onAbort()
+    else opts.signal.addEventListener("abort", onAbort, { once: true })
+  }
+
   try {
     while (true) {
+      if (opts.signal?.aborted) break
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
@@ -127,6 +145,7 @@ export async function translateResponseStream(
       }
     }
   } finally {
+    if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
     reader.releaseLock()
     state.finish()
   }

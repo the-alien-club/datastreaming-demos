@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { specialists } from "@/lib/db/schema"
-import { desc } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   const rows = await db.query.specialists.findMany({
+    where: eq(specialists.userId, session.user.id),
     orderBy: [desc(specialists.createdAt)],
   })
 
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
 
   await db.insert(specialists).values({
     id,
+    userId: session.user.id,
     name: body.name.trim(),
     description: body.description?.trim() ?? null,
     systemPrompt: body.systemPrompt.trim(),
@@ -59,7 +61,7 @@ export async function POST(request: NextRequest) {
   })
 
   const created = await db.query.specialists.findFirst({
-    where: (s, { eq }) => eq(s.id, id),
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
   return Response.json(created, { status: 201 })

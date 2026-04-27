@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { specialists } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +15,7 @@ export async function GET(
 
   const { id } = await params
   const row = await db.query.specialists.findFirst({
-    where: (s, { eq }) => eq(s.id, id),
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
   if (!row) {
@@ -35,6 +35,14 @@ export async function PUT(
   }
 
   const { id } = await params
+
+  // Verify ownership before applying any update.
+  const existing = await db.query.specialists.findFirst({
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
+  })
+  if (!existing) {
+    return Response.json({ error: "Not found" }, { status: 404 })
+  }
 
   let body: {
     name: string
@@ -67,10 +75,10 @@ export async function PUT(
       mcpIds: body.mcpIds && body.mcpIds.length > 0 ? JSON.stringify(body.mcpIds) : null,
       updatedAt: new Date(),
     })
-    .where(eq(specialists.id, id))
+    .where(and(eq(specialists.id, id), eq(specialists.userId, session.user.id)))
 
   const updated = await db.query.specialists.findFirst({
-    where: (s, { eq }) => eq(s.id, id),
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
   if (!updated) {
@@ -91,7 +99,16 @@ export async function DELETE(
 
   const { id } = await params
 
-  await db.delete(specialists).where(eq(specialists.id, id))
+  const existing = await db.query.specialists.findFirst({
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
+  })
+  if (!existing) {
+    return Response.json({ error: "Not found" }, { status: 404 })
+  }
+
+  await db
+    .delete(specialists)
+    .where(and(eq(specialists.id, id), eq(specialists.userId, session.user.id)))
 
   return new Response(null, { status: 204 })
 }

@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { conversations, messages } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { conversations } from "@/lib/db/schema"
+import { and, eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -18,7 +18,7 @@ export async function GET(
   const { id } = await params
 
   const conversation = await db.query.conversations.findFirst({
-    where: eq(conversations.id, id),
+    where: (c, { eq, and }) => and(eq(c.id, id), eq(c.userId, session.user.id)),
     with: {
       messages: {
         orderBy: (m, { asc }) => [asc(m.createdAt)],
@@ -44,8 +44,17 @@ export async function DELETE(
 
   const { id } = await params
 
-  // Messages cascade-delete via FK constraint
-  await db.delete(conversations).where(eq(conversations.id, id))
+  const existing = await db.query.conversations.findFirst({
+    where: (c, { eq, and }) => and(eq(c.id, id), eq(c.userId, session.user.id)),
+  })
+  if (!existing) {
+    return new Response("Not found", { status: 404 })
+  }
+
+  // Messages cascade-delete via FK constraint.
+  await db
+    .delete(conversations)
+    .where(and(eq(conversations.id, id), eq(conversations.userId, session.user.id)))
 
   return new Response(null, { status: 204 })
 }

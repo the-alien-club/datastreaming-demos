@@ -3,7 +3,7 @@ import { headers } from "next/headers"
 import { redirect, notFound } from "next/navigation"
 import { db } from "@/lib/db"
 import { agents, conversations } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { ExistingChatClient } from "./existing-chat-client"
 
 interface ExistingChatPageProps {
@@ -16,13 +16,15 @@ export default async function ExistingChatPage({ params }: ExistingChatPageProps
 
   const { id: agentId, conversationId } = await params
 
-  // Load agent
-  const agent = await db.query.agents.findFirst({ where: eq(agents.id, agentId) })
+  // Load agent (scoped to caller).
+  const agent = await db.query.agents.findFirst({
+    where: and(eq(agents.id, agentId), eq(agents.userId, session.user.id)),
+  })
   if (!agent) notFound()
 
-  // Load conversation with messages
+  // Load conversation with messages (scoped to caller).
   const conversation = await db.query.conversations.findFirst({
-    where: eq(conversations.id, conversationId),
+    where: and(eq(conversations.id, conversationId), eq(conversations.userId, session.user.id)),
     with: {
       messages: {
         orderBy: (m, { asc }) => [asc(m.createdAt)],

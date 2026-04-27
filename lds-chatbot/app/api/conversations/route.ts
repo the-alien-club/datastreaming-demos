@@ -12,7 +12,7 @@ export async function GET(request: Request): Promise<Response> {
     return new Response("Unauthorized", { status: 401 })
   }
 
-  // Fetch all conversations with agent info and message counts
+  // Fetch the caller's conversations with agent info and message counts.
   const rows = await db
     .select({
       id: conversations.id,
@@ -27,6 +27,7 @@ export async function GET(request: Request): Promise<Response> {
     .from(conversations)
     .leftJoin(agents, eq(conversations.agentId, agents.id))
     .leftJoin(messages, eq(messages.conversationId, conversations.id))
+    .where(eq(conversations.userId, session.user.id))
     .groupBy(
       conversations.id,
       conversations.agentId,

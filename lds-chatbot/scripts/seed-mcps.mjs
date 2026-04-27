@@ -2,20 +2,18 @@
 // `mcps` table so existing demo deployments don't lose their built-in legal
 // MCPs when the static-config loader is retired.
 //
-// Idempotent: ON CONFLICT (id) DO UPDATE — re-running keeps URLs / metadata
-// in sync with the source of truth (this file). Tokens stay public per the
-// project's intentional posture; if you want them gone, rotate at the
-// provider and update the constants below.
+// Idempotent. Seeds one row per (built-in id, user) pair: every user that
+// exists in the better-auth `user` table gets the full set of built-in MCPs.
+// On conflict (id already present for that user), the existing row's
+// metadata is refreshed.
 //
 // Usage (against the local dev DB):
 //   docker compose up -d
 //   DATABASE_URL=postgres://postgres:postgres@localhost:5435/lds_chatbot \
 //     node scripts/seed-mcps.mjs
 //
-// Usage (against the prod DB via kubectl exec, run from the postgres pod):
-//   kubectl --context platform-prod -n demo-lds-chatbot \
-//     cp scripts/seed-mcps.mjs demo-lds-chatbot-prod-postgres-0:/tmp/seed.mjs
-//   ... or pipe SQL directly (see seed-mcps.sql sibling if generated).
+// Usage (against the prod DB via kubectl exec — see seed-mcps.sql sibling
+// for a SQL-only variant when piping through `psql -f`).
 
 import pg from "pg"
 
@@ -25,7 +23,7 @@ import pg from "pg"
 // If you need to rotate, update the URL here AND re-run the seeder.
 const SEED_MCPS = [
   {
-    id: "legifrance",
+    slug: "legifrance",
     name: "Légifrance",
     serverUrl:
       "https://mcp.openlegi.fr/legifrance/mcp?token=af110fc295684c0bc558ed34cb7ab126b6af1c1774aa132bf7cbe03739e1092b",
@@ -34,7 +32,7 @@ const SEED_MCPS = [
     category: "legal",
   },
   {
-    id: "convention-collective",
+    slug: "convention-collective",
     name: "Conventions Collectives",
     serverUrl:
       "https://kali-mcp.super-novia.io/mcp?api_key=mcpf_BR4wu70C_S_K4fdFfwb0z5Hq76G7Kz_q",
@@ -53,30 +51,47 @@ if (!connectionString) {
 const pool = new pg.Pool({ connectionString })
 
 try {
-  for (const mcp of SEED_MCPS) {
-    await pool.query(
-      `INSERT INTO mcps (id, name, server_url, transport, description, category, enabled, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-       ON CONFLICT (id) DO UPDATE
-       SET name = EXCLUDED.name,
-           server_url = EXCLUDED.server_url,
-           transport = EXCLUDED.transport,
-           description = EXCLUDED.description,
-           category = EXCLUDED.category,
-           enabled = true,
-           updated_at = NOW()`,
-      [
-        mcp.id,
-        mcp.name,
-        mcp.serverUrl,
-        mcp.transport,
-        mcp.description ?? null,
-        mcp.category ?? null,
-      ],
-    )
-    console.log(`[seed-mcps] upserted '${mcp.id}' (${mcp.name})`)
+  const { rows: users } = await pool.query(`SELECT id FROM "user" ORDER BY id`)
+  if (users.length === 0) {
+    console.warn("[seed-mcps] no users found — nothing to seed.")
+    process.exit(0)
   }
-  console.log(`[seed-mcps] done — ${SEED_MCPS.length} row(s) processed.`)
+
+  let inserted = 0
+  let updated = 0
+  for (const user of users) {
+    for (const mcp of SEED_MCPS) {
+      const id = `${mcp.slug}:${user.id}`
+      const result = await pool.query(
+        `INSERT INTO mcps (id, user_id, name, server_url, transport, description, category, enabled, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW())
+         ON CONFLICT (id) DO UPDATE
+         SET name = EXCLUDED.name,
+             server_url = EXCLUDED.server_url,
+             transport = EXCLUDED.transport,
+             description = EXCLUDED.description,
+             category = EXCLUDED.category,
+             enabled = true,
+             updated_at = NOW()
+         RETURNING (xmax = 0) AS inserted`,
+        [
+          id,
+          user.id,
+          mcp.name,
+          mcp.serverUrl,
+          mcp.transport,
+          mcp.description ?? null,
+          mcp.category ?? null,
+        ],
+      )
+      if (result.rows[0]?.inserted) inserted += 1
+      else updated += 1
+    }
+  }
+
+  console.log(
+    `[seed-mcps] done — ${SEED_MCPS.length} MCP(s) × ${users.length} user(s); ${inserted} inserted, ${updated} updated.`,
+  )
 } finally {
   await pool.end()
 }

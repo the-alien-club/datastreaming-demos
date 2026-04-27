@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { agents, agentSubagents } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { deleteWorkflow, updateWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
@@ -19,11 +19,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const agent = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
   if (!agent) {
+    // 404 (not 403) on missing-or-not-owned: don't disclose existence of other
+    // users' resources to a potential attacker probing for IDs.
     return Response.json({ error: "Agent not found" }, { status: 404 })
   }
 
@@ -42,7 +44,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const existing = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
@@ -169,7 +171,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   // Rebuild workflow graph from merged config
-  const mcpConfigs = await loadEnabledMcpConfigs()
+  const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name,
     systemPrompt,
@@ -188,7 +190,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const now = new Date()
 
-  // Update agent row
+  // Update agent row (scoped by userId — defence in depth even though we
+  // already 404'd on the load above).
   await db
     .update(agents)
     .set({
@@ -200,7 +203,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       model,
       updatedAt: now,
     })
-    .where(eq(agents.id, id))
+    .where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
 
   // Replace subagents: delete all then re-insert
   if (body.subagents !== undefined) {
@@ -223,7 +226,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   const updated = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
@@ -246,7 +249,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const existing = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
   })
 
   if (!existing) {
@@ -259,7 +262,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   }
 
   // Cascade delete handled by FK constraint (subagents, conversations)
-  await db.delete(agents).where(eq(agents.id, id))
+  await db.delete(agents).where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
 
   return new Response(null, { status: 204 })
 }

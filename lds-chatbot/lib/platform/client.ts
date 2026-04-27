@@ -157,6 +157,7 @@ export async function openResponsesStream(
   workflowId: number,
   body: OpenResponsesStreamBody,
   token: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
   return fetch(`${PLATFORM_API_URL}/agent/${workflowId}/responses`, {
     method: "POST",
@@ -166,5 +167,6 @@ export async function openResponsesStream(
       Accept: "text/event-stream",
     },
     body: JSON.stringify({ ...body, stream: true }),
+    signal,
   })
 }

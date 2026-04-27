@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     })
     .from(datasets)
     .leftJoin(agentSubagents, eq(agentSubagents.datasetId, datasets.id))
+    .where(eq(datasets.userId, session.user.id))
     .groupBy(datasets.id)
     .orderBy(desc(datasets.createdAt))
 
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
 
   await db.insert(datasets).values({
     id: datasetId,
+    userId: session.user.id,
     clusterDatasetId: clusterDataset.id,
     name,
     description: description || null,
@@ -94,7 +96,7 @@ export async function POST(request: NextRequest) {
   })
 
   const created = await db.query.datasets.findFirst({
-    where: (d, { eq }) => eq(d.id, datasetId),
+    where: (d, { eq, and }) => and(eq(d.id, datasetId), eq(d.userId, session.user.id)),
   })
 
   return Response.json(created, { status: 201 })

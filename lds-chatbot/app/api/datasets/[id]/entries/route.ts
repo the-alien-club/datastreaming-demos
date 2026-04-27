@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const dataset = await db.query.datasets.findFirst({
-    where: (d, { eq }) => eq(d.id, id),
+    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
   })
 
   if (!dataset) {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const dataset = await db.query.datasets.findFirst({
-    where: (d, { eq }) => eq(d.id, id),
+    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
   })
 
   if (!dataset) {

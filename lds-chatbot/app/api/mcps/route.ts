@@ -2,13 +2,17 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
-import { desc } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
-  const rows = await db.select().from(mcps).orderBy(desc(mcps.createdAt))
+  const rows = await db
+    .select()
+    .from(mcps)
+    .where(eq(mcps.userId, session.user.id))
+    .orderBy(desc(mcps.createdAt))
   return Response.json(rows)
 }
 
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
 
   await db.insert(mcps).values({
     id,
+    userId: session.user.id,
     name: body.name.trim(),
     serverUrl: body.serverUrl.trim(),
     transport: body.transport ?? "streamable_http",

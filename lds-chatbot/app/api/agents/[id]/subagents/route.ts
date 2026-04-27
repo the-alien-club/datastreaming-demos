@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const existing = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   // Rebuild graph
   const steps = existing.steps ? JSON.parse(existing.steps) : []
-  const mcpConfigs = await loadEnabledMcpConfigs()
+  const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name: existing.name,
     systemPrompt: existing.systemPrompt ?? "",
@@ -110,7 +110,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const existing = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
     with: { subagents: true },
   })
 
@@ -146,7 +146,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }))
 
   const steps = existing.steps ? JSON.parse(existing.steps) : []
-  const mcpConfigs = await loadEnabledMcpConfigs()
+  const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name: existing.name,
     systemPrompt: existing.systemPrompt ?? "",

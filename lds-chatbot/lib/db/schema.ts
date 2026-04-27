@@ -3,6 +3,7 @@ import { relations } from "drizzle-orm"
 
 export const mcps = pgTable("mcps", {
   id: text("id").primaryKey(), // uuid or slug (e.g. 'datacluster')
+  userId: text("user_id").notNull(), // better-auth user id; FK enforced by migration ON DELETE CASCADE
   name: text("name").notNull(),
   serverUrl: text("server_url").notNull(),
   transport: text("transport").default("streamable_http"),
@@ -16,6 +17,7 @@ export const mcps = pgTable("mcps", {
 
 export const specialists = pgTable("specialists", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull(), // better-auth user id; FK enforced by migration ON DELETE CASCADE
   name: text("name").notNull(),
   description: text("description"),
   systemPrompt: text("system_prompt").notNull(),
@@ -27,6 +29,7 @@ export const specialists = pgTable("specialists", {
 
 export const agents = pgTable("agents", {
   id: text("id").primaryKey(), // uuid
+  userId: text("user_id").notNull(), // better-auth user id; FK enforced by migration ON DELETE CASCADE
   workflowId: integer("workflow_id"), // platform backend workflow ID (null if creation pending/failed)
   name: text("name").notNull(),
   description: text("description"),
@@ -45,15 +48,17 @@ export const agentSubagents = pgTable("agent_subagents", {
   systemPrompt: text("system_prompt").notNull(),
   model: text("model").default("gpt-4.1-mini"),
   mcpIds: text("mcp_ids"), // JSON array of MCP config IDs from static file
-  datasetId: text("dataset_id"), // if corpus-based, the dataset ID to inject
-  nodeId: text("node_id"), // the subagent node ID in the workflow graph
+  // FK to datasets.id with ON DELETE SET NULL — preserves the subagent row
+  // when its dataset is deleted; the corpus link silently breaks but the
+  // workflow keeps running so a user can re-attach a different dataset.
+  datasetId: text("dataset_id").references(() => datasets.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 
 export const conversations = pgTable("conversations", {
   id: text("id").primaryKey(), // uuid
   agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
-  userId: text("user_id"), // better-auth user id; null for legacy rows
+  userId: text("user_id").notNull(), // better-auth user id; FK enforced by migration ON DELETE CASCADE
   sessionId: text("session_id"), // platform session_id for multi-turn
   title: text("title"),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
@@ -71,6 +76,7 @@ export const messages = pgTable("messages", {
 
 export const datasets = pgTable("datasets", {
   id: text("id").primaryKey(), // uuid
+  userId: text("user_id").notNull(), // better-auth user id; FK enforced by migration ON DELETE CASCADE
   clusterDatasetId: integer("cluster_dataset_id"), // data cluster dataset ID
   name: text("name").notNull(),
   description: text("description"),

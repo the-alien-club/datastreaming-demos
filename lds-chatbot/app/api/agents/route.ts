@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { agents, agentSubagents } from "@/lib/db/schema"
-import { desc } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { createWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   const rows = await db.query.agents.findMany({
+    where: eq(agents.userId, session.user.id),
     orderBy: [desc(agents.createdAt)],
     with: { subagents: true },
   })
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     : null
 
   // Build workflow graph
-  const mcpConfigs = await loadEnabledMcpConfigs()
+  const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
   const { nodes, edges } = buildAgentWorkflow({
     name,
     systemPrompt,
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
 
   await db.insert(agents).values({
     id: agentId,
+    userId: session.user.id,
     workflowId: workflowResponse.id,
     name,
     description,
