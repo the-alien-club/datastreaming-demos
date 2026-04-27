@@ -133,21 +133,6 @@ export async function deleteWorkflow(id: number, token: string): Promise<void> {
   )
 }
 
-export async function runWorkflow(
-  workflowId: number,
-  input: { user_prompt: string; session_id: string | null },
-  token: string
-): Promise<{ id: number }> {
-  return platformJson<{ id: number }>(
-    `/workflows/${workflowId}/run`,
-    {
-      method: "POST",
-      body: JSON.stringify({ input }),
-    },
-    token
-  )
-}
-
 export async function getAiModels(token: string): Promise<PublicAIModel[]> {
   return platformJson<PublicAIModel[]>("/ai-models?select=public&modelType=llm", { method: "GET" }, token)
 }

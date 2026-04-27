@@ -28,6 +28,14 @@ interface ToolCallData {
   args: unknown
 }
 
+interface SubagentData {
+  agentId: string
+  name: string
+  kind: "main" | "subagent" | "tool"
+  parentId: string | null
+  dispatchedByToolCallId: string | null
+}
+
 // Part type guards — data parts carry `type: "data-<name>"` and a `data` payload.
 type AnyPart = { type: string } & Record<string, unknown>
 
@@ -41,6 +49,17 @@ function isToolCallPart(p: AnyPart): p is AnyPart & { data: ToolCallData } {
   return (
     !!data &&
     typeof data === "object" &&
+    typeof (data as { name?: unknown }).name === "string"
+  )
+}
+
+function isSubagentPart(p: AnyPart): p is AnyPart & { data: SubagentData } {
+  if (p.type !== "data-subagent") return false
+  const data = (p as { data?: unknown }).data
+  return (
+    !!data &&
+    typeof data === "object" &&
+    typeof (data as { agentId?: unknown }).agentId === "string" &&
     typeof (data as { name?: unknown }).name === "string"
   )
 }
@@ -100,6 +119,16 @@ function SubagentBlock({ description }: { description: string | null }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function SubagentPanel({ name }: { name: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-900 dark:text-violet-200">
+      <UsersRound className="h-3.5 w-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
+      <span className="font-medium">Subagent active:</span>
+      <span className="font-mono break-all">{name}</span>
     </div>
   )
 }
@@ -203,6 +232,10 @@ const MessageBubble = memo(function MessageBubble({
       } else {
         rendered.push(<ToolCallChip key={`c-${idx}`} name={name} args={args} />)
       }
+      return
+    }
+    if (isSubagentPart(part)) {
+      rendered.push(<SubagentPanel key={`sp-${idx}`} name={part.data.name} />)
       return
     }
     // Unknown part types (e.g. data-conversationId) are intentionally ignored.

@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-// Reproduce and dissect the "SSE terminated" failure without going through
-// Next.js or the chat UI. Calls the platform directly and prints, for every
-// event:
+// Reproduce and dissect a streaming response without going through Next.js
+// or the chat UI. Calls the platform's OpenAI Responses-API-compatible
+// endpoint directly and prints, for every event:
 //   - time since start
-//   - event type / status
-//   - total chunk count in result.stream.agent.chunks (and delta since last)
-//   - THIS event's JSON size
+//   - SSE event type (e.g. response.output_text.delta)
+//   - sequence_number (resume cursor)
+//   - this event's JSON size
 //   - cumulative bytes read from socket
 //   - gap since previous event
 //
-// On termination it reports whether a clean "done" arrived and, on error, the
-// undici cause + code so we can distinguish a graceful close from a socket
-// reset. Raw events are appended to /tmp/sse-debug-<ts>.ndjson for post-mortem.
+// On termination it reports whether a clean response.completed arrived
+// and, on error, the undici cause + code so we can distinguish a graceful
+// close from a socket reset. Raw events are appended to
+// /tmp/sse-debug-<ts>.ndjson for post-mortem.
 //
 // Usage:
 //   PLATFORM_API_URL=https://api.alpha.alien.club \
@@ -19,22 +20,27 @@
 //   WORKFLOW_ID=62 \
 //     node scripts/debug-sse.mjs "Draft an NDA between ACME and Beta"
 //
+// Resume test:
+//   RESPONSE_ID=resp_abc... STARTING_AFTER=42 \
+//     node scripts/debug-sse.mjs
+//   (re-opens GET /agent/<WORKFLOW_ID>/responses/<RESPONSE_ID>?starting_after=<STARTING_AFTER>)
+//
 // Where to get ACCESS_TOKEN:
 //   In the browser on the running chatbot, DevTools → Network → any /api/chat
 //   request → Request Headers. The Next.js route reads the token from your
-//   Authentik session; the simplest grab is to add a temporary
-//   `console.log(accessToken)` in app/api/chat/route.ts and send one message,
-//   then paste it here. (Revert the log after.)
+//   Authentik session.
 
 import { writeFileSync, appendFileSync } from "node:fs"
 
 const PLATFORM_API_URL = process.env.PLATFORM_API_URL
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN
 const WORKFLOW_ID = process.env.WORKFLOW_ID ?? "62"
-const SESSION_ID = process.env.SESSION_ID ?? null
+const PREVIOUS_RESPONSE_ID = process.env.PREVIOUS_RESPONSE_ID ?? null
+const RESUME_RESPONSE_ID = process.env.RESPONSE_ID ?? null
+const STARTING_AFTER = process.env.STARTING_AFTER ?? null
 const PROMPT =
   process.argv.slice(2).join(" ") ||
-  "Draft a standard mutual NDA between ACME Corp and Beta LLC, include typical carve-outs and a 3-year term."
+  "Quelle est la durée légale de la période d'essai pour un cadre en convention SYNTEC ?"
 
 if (!PLATFORM_API_URL || !ACCESS_TOKEN) {
   console.error("Missing env: PLATFORM_API_URL and ACCESS_TOKEN are required")
@@ -56,48 +62,77 @@ const pad = (s, w, right = false) => {
   return right ? s.padStart(w) : s.padEnd(w)
 }
 
-async function runJob() {
-  const url = `${PLATFORM_API_URL}/workflows/${WORKFLOW_ID}/run`
+async function openStream() {
+  if (RESUME_RESPONSE_ID) {
+    const qs = STARTING_AFTER ? `?starting_after=${STARTING_AFTER}` : ""
+    const url = `${PLATFORM_API_URL}/agent/${WORKFLOW_ID}/responses/${RESUME_RESPONSE_ID}${qs}`
+    console.log(`[${elapsed()}] GET ${url}`)
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "x-oauth-access-token": ACCESS_TOKEN,
+        Accept: "text/event-stream",
+      },
+    })
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => "(no body)")
+      throw new Error(`GET → ${res.status} ${res.statusText}: ${body}`)
+    }
+    return res
+  }
+
+  const url = `${PLATFORM_API_URL}/agent/${WORKFLOW_ID}/responses`
+  console.log(`[${elapsed()}] POST ${url}`)
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-oauth-access-token": ACCESS_TOKEN,
+      Accept: "text/event-stream",
     },
     body: JSON.stringify({
-      input: { user_prompt: PROMPT, session_id: SESSION_ID },
+      model: "agent",
+      input: PROMPT,
+      stream: true,
+      previous_response_id: PREVIOUS_RESPONSE_ID ?? undefined,
     }),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => "(no body)")
-    throw new Error(`POST /workflows/${WORKFLOW_ID}/run → ${res.status} ${res.statusText}: ${body}`)
-  }
-  const json = await res.json()
-  const id = json?.data?.id ?? json?.id
-  if (typeof id !== "number") throw new Error(`bad run response: ${JSON.stringify(json).slice(0, 200)}`)
-  return id
-}
-
-async function streamJob(jobId) {
-  console.log(`[${elapsed()}] opening SSE for job ${jobId}`)
-  const res = await fetch(`${PLATFORM_API_URL}/jobs/${jobId}/stream`, {
-    method: "GET",
-    headers: {
-      "x-oauth-access-token": ACCESS_TOKEN,
-      Accept: "text/event-stream",
-      "Cache-Control": "no-cache",
-    },
   })
   if (!res.ok || !res.body) {
     const body = await res.text().catch(() => "(no body)")
-    throw new Error(`GET /jobs/${jobId}/stream → ${res.status} ${res.statusText}: ${body}`)
+    throw new Error(`POST → ${res.status} ${res.statusText}: ${body}`)
   }
+  return res
+}
 
+function parseFrame(block) {
+  let event = ""
+  const dataLines = []
+  for (const line of block.split("\n")) {
+    if (line.startsWith(":") || line.length === 0) continue
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim()
+      continue
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).replace(/^ /, ""))
+    }
+  }
+  if (!event || dataLines.length === 0) return null
+  const dataStr = dataLines.join("\n")
+  try {
+    return { event, data: JSON.parse(dataStr), raw: dataStr }
+  } catch {
+    return { event, data: null, raw: dataStr }
+  }
+}
+
+async function streamResponse() {
+  const res = await openStream()
   console.log(`[${elapsed()}] SSE connected`)
   console.log(
-    `${pad("time", 8)} | ${pad("type", 8)} | ${pad("status", 11)} | ${pad("chunks", 7, true)} | ${pad("Δ", 4, true)} | ${pad("event", 8, true)} | ${pad("cum", 9, true)} | gap`
+    `${pad("time", 8)} | ${pad("event", 42)} | ${pad("seq", 5, true)} | ${pad("size", 8, true)} | ${pad("cum", 9, true)} | gap`,
   )
-  console.log("".padEnd(90, "-"))
+  console.log("".padEnd(96, "-"))
 
   const reader = res.body.getReader()
   const dec = new TextDecoder()
@@ -105,9 +140,8 @@ async function streamJob(jobId) {
   let totalBytes = 0
   let events = 0
   let lastEventAt = Date.now()
-  let lastChunks = 0
-  let doneSeen = false
-  let lastStatus = null
+  let terminalSeen = null
+  let responseId = null
 
   try {
     while (true) {
@@ -121,50 +155,42 @@ async function streamJob(jobId) {
 
       for (const block of blocks) {
         if (!block.trim()) continue
-        const dataLine = block.split("\n").find((l) => l.startsWith("data: "))
-        if (!dataLine) continue
-        const jsonStr = dataLine.slice(6).trim()
-        if (!jsonStr || jsonStr === "[DONE]") continue
+        const parsed = parseFrame(block)
+        if (!parsed) continue
 
         const now = Date.now()
         const gap = now - lastEventAt
         lastEventAt = now
-        const eventSize = Buffer.byteLength(jsonStr, "utf8")
+        const eventSize = Buffer.byteLength(parsed.raw, "utf8")
         events++
-        appendFileSync(RAW_LOG, jsonStr + "\n")
+        appendFileSync(RAW_LOG, JSON.stringify({ event: parsed.event, data: parsed.data }) + "\n")
 
-        let parsed
-        try {
-          parsed = JSON.parse(jsonStr)
-        } catch {
-          console.log(`${elapsed()} | <unparseable> ${fmtBytes(eventSize)}`)
-          continue
-        }
-
-        const type = parsed.type ?? "?"
-        const status = parsed.status ?? "?"
-        lastStatus = status
-        const chunks = parsed.result?.stream?.agent?.chunks?.length ?? 0
-        const delta = chunks - lastChunks
-        lastChunks = chunks
+        const seq = parsed.data?.sequence_number ?? "-"
+        if (parsed.event === "response.created") responseId = parsed.data?.response?.id ?? null
 
         console.log(
-          `${pad(elapsed(), 8)} | ${pad(type, 8)} | ${pad(status, 11)} | ${pad(chunks, 7, true)} | ${pad(delta ? "+" + delta : "", 4, true)} | ${pad(fmtBytes(eventSize), 8, true)} | ${pad(fmtBytes(totalBytes), 9, true)} | +${gap}ms`
+          `${pad(elapsed(), 8)} | ${pad(parsed.event, 42)} | ${pad(seq, 5, true)} | ${pad(fmtBytes(eventSize), 8, true)} | ${pad(fmtBytes(totalBytes), 9, true)} | +${gap}ms`,
         )
 
-        if (type === "done") doneSeen = true
+        if (
+          parsed.event === "response.completed" ||
+          parsed.event === "response.failed" ||
+          parsed.event === "response.incomplete"
+        ) {
+          terminalSeen = parsed.event
+        }
       }
     }
   } catch (err) {
-    printOutcome({ err, events, totalBytes, lastChunks, lastStatus, doneSeen })
+    printOutcome({ err, events, totalBytes, terminalSeen, responseId })
     process.exitCode = 1
     return
   }
 
-  printOutcome({ err: null, events, totalBytes, lastChunks, lastStatus, doneSeen })
+  printOutcome({ err: null, events, totalBytes, terminalSeen, responseId })
 }
 
-function printOutcome({ err, events, totalBytes, lastChunks, lastStatus, doneSeen }) {
+function printOutcome({ err, events, totalBytes, terminalSeen, responseId }) {
   console.log("")
   if (err) {
     console.log(`[${elapsed()}] STREAM ERRORED`)
@@ -182,17 +208,14 @@ function printOutcome({ err, events, totalBytes, lastChunks, lastStatus, doneSee
   }
   console.log(`  events:     ${events}`)
   console.log(`  bytesTotal: ${fmtBytes(totalBytes)} (${totalBytes})`)
-  console.log(`  chunks:     ${lastChunks}`)
-  console.log(`  lastStatus: ${lastStatus}`)
-  console.log(`  doneSeen:   ${doneSeen}`)
+  console.log(`  terminal:   ${terminalSeen ?? "<none>"}`)
+  console.log(`  responseId: ${responseId ?? "<none>"}`)
   console.log(`  raw log:    ${RAW_LOG}`)
 }
 
 async function main() {
   try {
-    const jobId = await runJob()
-    console.log(`[${elapsed()}] job started: ${jobId}`)
-    await streamJob(jobId)
+    await streamResponse()
   } catch (err) {
     console.error("fatal:", err)
     process.exit(1)

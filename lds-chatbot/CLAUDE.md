@@ -30,20 +30,31 @@ The Alien Backend has a **workflow engine**: you can create, update, and run wor
 
 ### Platform API client (`lib/platform/client.ts`)
 
-Four operations:
+Three operations for agent lifecycle (workflow CRUD + AI-model discovery):
 
 ```ts
 createWorkflow(body, token)        // POST /workflows
 updateWorkflow(id, body, token)    // PATCH /workflows/:id
-runWorkflow(workflowId, input, token) // POST /workflows/:id/run → { id: jobId }
+deleteWorkflow(id, token)          // DELETE /workflows/:id
+getWorkflow(id, token)             // GET /workflows/:id
 getAiModels(token)                 // GET /ai-models?select=public&modelType=llm
 ```
 
 All requests carry the user's Authentik OAuth token in `x-oauth-access-token`. The chatbot is a thin client — it constructs the workflow graph locally and persists execution state in SQLite; the platform does the heavy lifting.
 
-### Streaming job results (`lib/platform/sse.ts`)
+Chat turns no longer go through `/workflows/:id/run` + the legacy `/jobs/:id/stream` SSE; they go through the platform's OpenAI Responses-API-compatible endpoint at `POST /agent/:workflowId/responses` (see below).
 
-After `runWorkflow` returns a job ID, we open an SSE connection to `GET /workflows/jobs/:id/sse`. The platform streams events; each event carries the cumulative `result.stream.agent.chunks` array (standard OpenAI chunk objects). We diff successive events (tracking `lastChunkIndex`) to forward only new deltas.
+### Streaming chat turns (Responses API)
+
+The `/api/chat` route calls `POST /agent/:workflowId/responses` on the platform with `stream: true` and forwards the resulting OpenAI-Responses-API SSE stream through `lib/platform/responses_stream.ts`, which translates events to AI SDK v6 UI message parts:
+
+- `response.output_text.delta` → `text-delta`
+- non-root `response.output_item.added` (item.id encodes agent identity per the spec) → `data-subagent` panel announcement
+- `response.function_call_arguments.done` → `data-toolCall`
+- `response.created` → captures `response_id` for next-turn `previous_response_id`
+- `response.completed` / `response.failed` → captures usage / error
+
+The spec lives in `web-app/packages/backend/lib/streaming/specs/responses_v1.md`.
 
 ---
 
@@ -103,29 +114,19 @@ When the user edits an agent (name, prompt, steps, subagents, MCP tools):
 
 ---
 
-## OpenAI-Compatible API
+## OpenAI-Compatible APIs
 
-Every agent is exposed at:
+The chatbot itself no longer hosts an OpenAI-compatible API surface — external consumers point directly at the platform backend. Every agent is exposed at:
 
 ```
-POST /api/v1/agent/:agentId/v1/chat/completions
+POST https://api.alpha.alien.club/agent/:workflowId/chat/completions
+POST https://api.alpha.alien.club/agent/:workflowId/responses
+GET  https://api.alpha.alien.club/agent/:workflowId/responses/:respId
 ```
 
-This is a **drop-in OpenAI replacement**. Accepts standard OpenAI request format:
+`chat/completions` is OpenAI Chat Completions stream-conformant (no native resume). `responses` is OpenAI Responses-API stream-conformant with native `sequence_number`-based resume via the GET endpoint. Specs live in `web-app/packages/backend/lib/streaming/specs/`.
 
-```json
-{
-  "messages": [{ "role": "user", "content": "What does this paper say?" }],
-  "model": "agent",
-  "stream": true
-}
-```
-
-Returns standard OpenAI SSE chunks (streaming) or a `chat.completion` object (non-streaming), including `usage.prompt_tokens` / `completion_tokens` extracted from platform metadata.
-
-Auth: `Authorization: Bearer <platform-token>` or falls back to session-based Authentik token.
-
-This lets clients plug their existing tooling (LangChain, OpenWebUI, custom scripts) directly into the demo agent without any code changes on their side.
+Clients plug their existing tooling (OpenAI SDK, LangChain `ChatOpenAI`, AI SDK 5+ `streamText`, etc.) into either endpoint without code changes.
 
 ---
 
@@ -135,17 +136,17 @@ This lets clients plug their existing tooling (LangChain, OpenWebUI, custom scri
 POST /api/chat
 ```
 
-Used by the frontend's `useChat` hook (Vercel AI SDK v6). Wraps the same underlying workflow execution but uses the `createUIMessageStream` / `createUIMessageStreamResponse` format, which supports typed data chunks (`data-conversationId`) for client-side routing.
+Used by the frontend's `useChat` hook (Vercel AI SDK v6). Forwards the turn to the platform's Responses API endpoint and translates the SSE event stream to AI SDK UI message parts.
 
 Flow:
 1. Auth check → resolve Authentik access token
 2. Load agent → load or create conversation in SQLite
 3. Save user message to DB
-4. `runWorkflow(agent.workflowId, { user_prompt, session_id }, token)` → job ID
-5. Stream SSE from `streamJobSSE`, forward `text-delta` events
-6. On completion: persist assistant message, update `conversation.sessionId` for next turn
+4. `POST /agent/:workflowId/responses` on the platform with `stream: true`, `previous_response_id: conversation.sessionId`
+5. Translate Responses SSE events through `lib/platform/responses_stream.ts` → AI SDK UI parts
+6. On `response.completed`: persist assistant message; persist the new `response_id` as `conversation.sessionId` so the next turn passes it as `previous_response_id`
 
-The `session_id` is the platform's multi-turn memory handle — stored in the `conversations` table and threaded through on every subsequent turn for the same conversation.
+The `sessionId` column on `conversations` now stores the platform-assigned `response_id` of the latest turn (not the legacy workflow `session_id`); the platform's response store maps `previous_response_id` to the underlying agent runtime session for memory continuity.
 
 ---
 
@@ -222,13 +223,12 @@ Migrations live in `drizzle/` and are generated with `npm run db:generate` after
 | Path | Responsibility |
 |---|---|
 | `lib/platform/workflows.ts` | Workflow graph builder — all node and edge construction |
-| `lib/platform/client.ts` | Platform API client — create/update/run workflow, get models |
-| `lib/platform/sse.ts` | SSE streaming generator for job results |
+| `lib/platform/client.ts` | Platform API client — workflow CRUD, AI-model lookup |
+| `lib/platform/responses_stream.ts` | OpenAI Responses-API SSE → AI SDK UI message parts translator |
 | `lib/db/schema.ts` | Drizzle table definitions |
 | `lib/auth.ts` | better-auth session config |
 | `lib/auth-helpers.ts` | Access token resolution |
 | `lib/mcps/config.json` | Static MCP server registry |
-| `app/api/chat/route.ts` | Internal chat endpoint (Vercel AI SDK streaming) |
-| `app/api/v1/agent/[id]/v1/chat/completions/route.ts` | OpenAI-compatible external API |
+| `app/api/chat/route.ts` | Internal chat endpoint (auth proxy → platform Responses API) |
 | `app/api/datasets/` | Dataset CRUD and upload proxy routes |
 | `app/api/agents/` | Agent CRUD — creates/updates platform workflow on every save |

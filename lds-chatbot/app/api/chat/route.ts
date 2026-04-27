@@ -1,54 +1,69 @@
+// Thin auth proxy that forwards a chat turn to the platform's OpenAI
+// Responses-API-compatible endpoint and translates its SSE event stream
+// into AI SDK UI message parts for `useChat()`.
+//
+// The platform endpoint (`POST /agent/:workflowId/responses`) is OpenAI
+// Responses-API stream-conformant per
+// `web-app/packages/backend/lib/streaming/specs/responses_v1.md`.
+// We consume it directly — no bespoke chunk translation, no
+// `result.stream.agent.chunks` polling, no auto-reconnect retry envelope.
+//
+// Per-turn flow:
+//   1. Resolve the user's Authentik token from the better-auth session.
+//   2. Load the agent and (existing or new) conversation from SQLite.
+//   3. POST the user's prompt to the platform's Responses endpoint with
+//      `previous_response_id` carrying the conversation's stored
+//      response_id for multi-turn continuity (spec §7).
+//   4. Translate Responses SSE events to AI SDK UI parts:
+//      - `response.output_text.delta` → `text-delta`
+//      - non-root `response.output_item.added` (item.id encodes agent
+//        identity per spec §4) → `data-subagent` panel
+//      - `response.function_call_arguments.done` → `data-toolCall`
+//   5. On `response.completed` / `response.failed`, persist the
+//      assistant message and update `conversation.sessionId` to the
+//      new response_id so the next turn resumes the agent's memory.
+//
+// Subagent panels render alongside the main assistant text. Item ids
+// shaped `agent:<aid>::msg_<n>` carry the agent attribution; the panel
+// uses the AgentRegistry from `metadata.x_alien_agent_registry` (read
+// off the `response.created` event's `Response.metadata`) for display
+// names.
+
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
+import { eq } from "drizzle-orm"
 import { auth } from "@/lib/auth"
+import { resolveAccessToken } from "@/lib/auth-helpers"
 import { db } from "@/lib/db"
 import { agents, conversations, messages } from "@/lib/db/schema"
-import { eq } from "drizzle-orm"
-import { runWorkflow } from "@/lib/platform/client"
-import { streamJobSSE } from "@/lib/platform/sse"
-import { extractAgentOutput } from "@/lib/platform/results"
-import { resolveAccessToken } from "@/lib/auth-helpers"
+import { translateResponseStream } from "@/lib/platform/responses_stream"
 
 export const dynamic = "force-dynamic"
 
-type WriterEvent = Parameters<
-  Parameters<typeof createUIMessageStream>[0]["execute"]
->[0]["writer"] extends { write: (e: infer E) => unknown }
-  ? E
-  : never
+const PLATFORM_API_URL = process.env.PLATFORM_API_URL
+if (!PLATFORM_API_URL) {
+  throw new Error("PLATFORM_API_URL is required")
+}
 
-interface PlatformToolCall {
-  id?: string
-  type?: string
-  index?: number
-  function?: {
-    name?: string
-    arguments?: string
+interface ChatRequestBody {
+  messages?: Array<{
+    role: string
+    parts?: Array<{ type: string; text?: string }>
+    content?: string
+  }>
+  agentId?: string
+  conversationId?: string
+}
+
+function extractUserMessage(body: ChatRequestBody): string {
+  const last = body.messages?.[body.messages.length - 1]
+  if (!last) return ""
+  if (last.parts && Array.isArray(last.parts)) {
+    return last.parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text ?? "")
+      .join("")
   }
-}
-
-interface PlatformChunkDelta {
-  content?: string
-  role?: string
-  tool_calls?: PlatformToolCall[]
-}
-
-interface PlatformChunkChoice {
-  delta?: PlatformChunkDelta
-  finish_reason?: string | null
-  index?: number
-}
-
-interface PlatformChunk {
-  id?: string
-  model?: string
-  agent_context?: string
-  choices?: PlatformChunkChoice | PlatformChunkChoice[]
-}
-
-function firstChoice(chunk: PlatformChunk): PlatformChunkChoice | undefined {
-  const choices = chunk.choices
-  if (!choices) return undefined
-  return Array.isArray(choices) ? choices[0] : choices
+  return typeof last.content === "string" ? last.content : ""
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -59,19 +74,14 @@ export async function POST(request: Request): Promise<Response> {
 
   const accessToken = await resolveAccessToken(session.user.id)
 
-  let body: Record<string, unknown>
+  let body: ChatRequestBody
   try {
-    body = await request.json()
+    body = (await request.json()) as ChatRequestBody
   } catch {
     return new Response("Invalid JSON body", { status: 400 })
   }
 
-  const { messages: chatMessages, agentId, conversationId: existingConversationId } = body as {
-    messages: Array<{ role: string; parts?: Array<{ type: string; text?: string }>; content?: string }>
-    agentId?: string
-    conversationId?: string
-  }
-
+  const { agentId, conversationId: existingConversationId } = body
   if (!agentId) {
     return new Response("agentId required", { status: 400 })
   }
@@ -81,7 +91,15 @@ export async function POST(request: Request): Promise<Response> {
     return new Response("Agent not found", { status: 404 })
   }
   if (agent.workflowId === null) {
-    return new Response("Agent has no platform workflow yet — finish configuring it first", { status: 409 })
+    return new Response(
+      "Agent has no platform workflow yet — finish configuring it first",
+      { status: 409 },
+    )
+  }
+
+  const userMessage = extractUserMessage(body)
+  if (!userMessage) {
+    return new Response("No user message text found in request", { status: 400 })
   }
 
   const existingConversation = existingConversationId
@@ -89,24 +107,6 @@ export async function POST(request: Request): Promise<Response> {
         where: eq(conversations.id, existingConversationId),
       })
     : null
-
-  // Extract the user's text from the last message (AI SDK v6 uses parts)
-  const lastMsg = chatMessages?.[chatMessages?.length - 1]
-  let userMessage = ""
-  if (lastMsg) {
-    if (lastMsg.parts && Array.isArray(lastMsg.parts)) {
-      userMessage = lastMsg.parts
-        .filter((p) => p.type === "text")
-        .map((p) => p.text ?? "")
-        .join("")
-    } else if (typeof lastMsg.content === "string") {
-      userMessage = lastMsg.content
-    }
-  }
-
-  if (!userMessage) {
-    return new Response("No user message text found in request", { status: 400 })
-  }
 
   const conversationId = existingConversationId ?? crypto.randomUUID()
 
@@ -127,138 +127,58 @@ export async function POST(request: Request): Promise<Response> {
     content: userMessage,
   })
 
-  const job = await runWorkflow(
-    agent.workflowId,
+  // Open the platform Responses stream. `previous_response_id` carries
+  // the stored response_id from the prior turn so the agent runtime
+  // resumes its session memory (per `responses_v1.md` §7).
+  const upstreamResponse = await fetch(
+    `${PLATFORM_API_URL}/agent/${agent.workflowId}/responses`,
     {
-      user_prompt: userMessage,
-      session_id: existingConversation?.sessionId ?? null,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-oauth-access-token": accessToken,
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({
+        model: agent.model ?? "agent",
+        input: userMessage,
+        stream: true,
+        previous_response_id: existingConversation?.sessionId ?? undefined,
+      }),
     },
-    accessToken
   )
+
+  if (!upstreamResponse.ok || !upstreamResponse.body) {
+    const errBody = await upstreamResponse.text().catch(() => "(no body)")
+    return new Response(
+      `Platform Responses error ${upstreamResponse.status}: ${errBody}`,
+      { status: 502 },
+    )
+  }
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      // Send the conversationId as a typed data chunk so the client can redirect
-      writer.write({
-        type: "data-conversationId",
-        data: conversationId,
-      } as WriterEvent)
-
-      let lastChunkIndex = 0
-      let fullContent = ""
-      let finalSessionId: string | null = null
-      let finalMetadata: Record<string, unknown> | null = null
-
-      // Text-part lifecycle: lazily opened so tool calls emitted before any
-      // text don't create an empty leading text part. Closed before each tool
-      // call so parts render in chronological order.
-      let textPartId: string | null = null
-      const openTextPart = () => {
-        if (textPartId) return
-        textPartId = crypto.randomUUID()
-        writer.write({ type: "text-start", id: textPartId } as WriterEvent)
-      }
-      const closeTextPart = () => {
-        if (!textPartId) return
-        writer.write({ type: "text-end", id: textPartId } as WriterEvent)
-        textPartId = null
-      }
-      const writeTextDelta = (delta: string) => {
-        openTextPart()
-        writer.write({ type: "text-delta", id: textPartId!, delta } as WriterEvent)
-        fullContent += delta
-      }
-
-      // Dedupe tool calls by their LLM-assigned id — the platform re-sends the
-      // same tool_call entry across cumulative chunks, we only want to emit once.
-      const emittedToolCallIds = new Set<string>()
-      const emitToolCall = (tc: PlatformToolCall) => {
-        const tcId = tc.id
-        const fnName = tc.function?.name
-        if (!tcId || !fnName || emittedToolCallIds.has(tcId)) return
-        emittedToolCallIds.add(tcId)
-
-        let args: unknown = tc.function?.arguments
-        if (typeof args === "string" && args.trim().length > 0) {
-          try {
-            args = JSON.parse(args)
-          } catch {
-            // leave as raw string if unparseable
-          }
-        }
-
-        closeTextPart()
-        writer.write({
-          type: "data-toolCall",
-          data: { id: tcId, name: fnName, args },
-        } as WriterEvent)
-      }
-
-      for await (const event of streamJobSSE(job.id, accessToken)) {
-        const result = event.result as Record<string, unknown> | null | undefined
-        const streamAll = result?.stream as Record<string, unknown> | undefined
-        const streamBlock = streamAll?.agent as Record<string, unknown> | null | undefined
-        const chunks = (streamBlock?.chunks as PlatformChunk[] | undefined) ?? []
-
-        // `chunks` is NOT monotonic across a run: when a subagent takes over
-        // the platform swaps a shorter array in, then swaps the main agent's
-        // longer array back in. Only advance on forward motion — never rewind
-        // `lastChunkIndex`, otherwise a swing like 125 → 1 → 309 would replay
-        // 124 already-emitted deltas and the UI shows duplicated lines.
-        // TODO: remove this workaround once the worker writes per-agent chunk
-        // streams under distinct keys instead of sharing stream.agent.chunks.
-        if (chunks.length > lastChunkIndex) {
-          for (let i = lastChunkIndex; i < chunks.length; i++) {
-            const chunk = chunks[i]
-            const choice = firstChoice(chunk)
-            const delta = choice?.delta
-            if (!delta) continue
-
-            if (delta.content) {
-              writeTextDelta(delta.content)
-            }
-            if (delta.tool_calls && delta.tool_calls.length > 0) {
-              for (const tc of delta.tool_calls) emitToolCall(tc)
-            }
-          }
-          lastChunkIndex = chunks.length
-        }
-
-        const eventType = event.type as string | undefined
-        const eventStatus = event.status as string | undefined
-
-        if (
-          eventType === "done" ||
-          eventStatus === "completed" ||
-          eventStatus === "failed"
-        ) {
-          const output = extractAgentOutput(result)
-          finalSessionId = output.sessionId
-          finalMetadata = output.answer.metadata
-
-          // Non-streaming fallback: some runs return the full answer only at
-          // terminal, with no incremental text-delta chunks.
-          if (!fullContent && output.answer.content) {
-            writeTextDelta(output.answer.content)
-          }
-          break
-        }
-      }
-
-      closeTextPart()
+      const result = await translateResponseStream(upstreamResponse.body!, {
+        writer,
+        conversationId,
+      })
 
       await db.insert(messages).values({
         id: crypto.randomUUID(),
         conversationId,
         role: "assistant",
-        content: fullContent,
-        metadata: finalMetadata ? JSON.stringify(finalMetadata) : null,
+        content: result.text,
+        metadata: result.usage ? JSON.stringify({ usage: result.usage }) : null,
       })
 
+      // Persist the platform-assigned response_id as the conversation's
+      // sessionId so the next turn can pass it as `previous_response_id`
+      // and chain agent memory.
+      const newSessionId = result.responseId ?? existingConversation?.sessionId ?? null
       await db
         .update(conversations)
         .set({
-          sessionId: finalSessionId ?? existingConversation?.sessionId ?? null,
+          sessionId: newSessionId,
           updatedAt: new Date(),
         })
         .where(eq(conversations.id, conversationId))
