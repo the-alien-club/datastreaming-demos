@@ -61,8 +61,7 @@ COPY --from=builder --chown=node:node /app/scripts ./scripts
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /app/package.json ./package.json
 
-COPY --chown=node:node docker/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh && chown -R node:node /app
+COPY --chown=node:node --chmod=0755 docker/entrypoint.sh /app/entrypoint.sh
 
 USER node
 
