@@ -17,10 +17,15 @@ interface ExistingChatClientProps {
   agentId: string
   agentName: string
   conversationId: string
+  // Each message's `parts` may be a single text part (legacy / user rows)
+  // or the full structured stream from the `messages.parts` jsonb column —
+  // text bubbles, tool-call chips, subagent panels. The chat UI's
+  // `MessageBubble` already type-guards every part, so anything unknown
+  // is silently dropped.
   initialMessages: Array<{
     id: string
     role: "user" | "assistant"
-    parts: Array<{ type: "text"; text: string }>
+    parts: Array<{ type: string } & Record<string, unknown>>
   }>
 }
 

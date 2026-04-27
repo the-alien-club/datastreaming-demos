@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Upload, X } from "lucide-react"
-import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-fetch"
 import { WIZARD_AGENT_TEMPLATES } from "../templates"
@@ -24,15 +23,18 @@ interface DatasetRow {
 interface KnowledgeStepContentProps {
   state: WizardState
   setState: WizardSetState
+  // True while the parent wizard's "Next" handler is mid-upload. We hide
+  // the per-file remove buttons during that window so the user can't
+  // mutate the queue we're already POSTing.
+  uploadInFlight?: boolean
 }
 
-export function KnowledgeStepContent({ state, setState }: KnowledgeStepContentProps) {
+export function KnowledgeStepContent({ state, setState, uploadInFlight = false }: KnowledgeStepContentProps) {
   const template = WIZARD_AGENT_TEMPLATES.find((t) => t.id === state.templateId)
   const knowledgeRequired = template?.knowledgeRequired ?? false
 
   const [datasets, setDatasets] = useState<DatasetRow[]>([])
   const [loadingDatasets, setLoadingDatasets] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const uploadDone = state.uploadedDatasetIds.length > 0
 
   useEffect(() => {
@@ -82,57 +84,6 @@ export function KnowledgeStepContent({ state, setState }: KnowledgeStepContentPr
       ...prev,
       uploadFiles: prev.uploadFiles.filter((_, i) => i !== idx),
     }))
-  }
-
-  async function handleUpload() {
-    const datasetName = state.uploadDatasetName.trim()
-    if (!datasetName) {
-      toast.error("Dataset name is required")
-      return
-    }
-    if (state.uploadFiles.length === 0) {
-      toast.error("Add at least one file")
-      return
-    }
-    setUploading(true)
-    try {
-      const createResponse = await apiFetch("/api/datasets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: datasetName,
-          description: `Uploaded via the Start wizard for "${state.name}"`,
-        }),
-      })
-      if (!createResponse.ok) {
-        const err = await createResponse.json().catch(() => ({ error: "Unknown error" }))
-        throw new Error(err.error ?? `HTTP ${createResponse.status}`)
-      }
-      const dataset = (await createResponse.json()) as { id: string }
-
-      const formData = new FormData()
-      for (const file of state.uploadFiles) {
-        formData.append("file", file)
-      }
-      const uploadResponse = await apiFetch(`/api/datasets/${dataset.id}/entries`, {
-        method: "POST",
-        body: formData,
-      })
-      if (!uploadResponse.ok) {
-        const err = await uploadResponse.json().catch(() => ({ error: "Unknown error" }))
-        throw new Error(err.error ?? `HTTP ${uploadResponse.status}`)
-      }
-
-      setState((prev) => ({
-        ...prev,
-        uploadedDatasetIds: [...prev.uploadedDatasetIds, dataset.id],
-      }))
-      toast.success("Files uploaded — processing in background")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed")
-    } finally {
-      setUploading(false)
-    }
   }
 
   return (
@@ -217,7 +168,7 @@ export function KnowledgeStepContent({ state, setState }: KnowledgeStepContentPr
                   setState((prev) => ({ ...prev, uploadDatasetName: e.target.value }))
                 }
                 placeholder="e.g. Firm contract archive"
-                disabled={uploading || uploadDone}
+                disabled={uploadInFlight || uploadDone}
               />
             </div>
 
@@ -225,7 +176,7 @@ export function KnowledgeStepContent({ state, setState }: KnowledgeStepContentPr
               htmlFor="wizard-dataset-files"
               className={cn(
                 "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border border-dashed p-6 text-sm text-muted-foreground transition-colors",
-                (uploading || uploadDone) && "pointer-events-none opacity-60",
+                (uploadInFlight || uploadDone) && "pointer-events-none opacity-60",
                 "hover:bg-accent/30",
               )}
             >
@@ -253,7 +204,7 @@ export function KnowledgeStepContent({ state, setState }: KnowledgeStepContentPr
                         {formatBytes(file.size)}
                       </span>
                     </div>
-                    {!uploading && !uploadDone && (
+                    {!uploadInFlight && !uploadDone && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -269,21 +220,24 @@ export function KnowledgeStepContent({ state, setState }: KnowledgeStepContentPr
               </div>
             )}
 
-            {uploadDone ? (
+            {/* The "Start upload" button is gone — the wizard's Next button
+                triggers the upload AND advances. Show a transient hint while
+                that's in flight, an "uploaded — keep going" line when files
+                already shipped, and a "press Next" nudge otherwise. */}
+            {uploadInFlight ? (
+              <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
+                <Loader2 className="size-3.5 animate-spin" />
+                Uploading… (Next will move on when complete)
+              </p>
+            ) : uploadDone ? (
               <p className="text-xs text-muted-foreground">
                 Uploaded — processing in background. You can move on.
               </p>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleUpload}
-                disabled={uploading || state.uploadFiles.length === 0}
-              >
-                {uploading && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
-                Start upload
-              </Button>
-            )}
+            ) : state.uploadFiles.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Click <span className="font-medium">Next</span> to upload these files and continue.
+              </p>
+            ) : null}
           </div>
         </TabsContent>
       </Tabs>

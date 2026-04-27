@@ -1,5 +1,12 @@
-import { pgTable, text, integer, boolean, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, text, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
+import type { UIDataTypes, UIMessagePart, UITools } from "ai"
+
+// Persisted shape of the assistant's `UIMessage.parts`. Accepts every data
+// part type emitted by `responses_stream.ts` (`data-toolCall`,
+// `data-subagent`, …) — the chat UI ignores unknown part types so we
+// don't need a tighter compile-time bound here.
+export type StoredMessagePart = UIMessagePart<UIDataTypes, UITools>
 
 export const mcps = pgTable("mcps", {
   id: text("id").primaryKey(), // uuid or slug (e.g. 'datacluster')
@@ -69,7 +76,14 @@ export const messages = pgTable("messages", {
   id: text("id").primaryKey(), // uuid
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // 'user' | 'assistant' | 'system'
+  // Plain-text view of the reply, kept for backward compat and for the
+  // OpenAI-compat path that doesn't carry structured parts.
   content: text("content").notNull(),
+  // Full AI-SDK `UIMessage.parts` array as emitted during streaming —
+  // text bubbles, tool-call data parts, subagent panels, etc. Lets the
+  // UI replay the rich rendering on a refresh instead of collapsing to
+  // plain text. NULL for legacy rows written before this column existed.
+  parts: jsonb("parts").$type<StoredMessagePart[]>(),
   metadata: text("metadata"), // JSON: {model, tokens, cost, tool_calls, agent_context}
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })

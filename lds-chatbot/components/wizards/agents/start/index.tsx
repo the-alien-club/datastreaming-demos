@@ -28,6 +28,12 @@ export function StartWizard({ onClose }: StartWizardProps) {
   const router = useRouter()
   const [state, setState] = useState<WizardState>(createInitialState)
   const [models, setModels] = useState<PublicAIModel[]>([])
+  // Reflects the in-flight upload kicked off by the wizard's Next button on
+  // the knowledge step. Lifted up so the wizard's own Loader2 spinner
+  // (driven by `onBeforeNext`'s promise) and the knowledge step body
+  // share the same flag — the user always sees one, never two,
+  // "uploading" indicators.
+  const [uploadInFlight, setUploadInFlight] = useState(false)
 
   // Refs for unmount cleanup: if the wizard closes mid-flow after the agent
   // has been created (step 2's POST), delete it server-side so we don't
@@ -67,7 +73,15 @@ export function StartWizard({ onClose }: StartWizardProps) {
   const knowledgeCanProceed = (() => {
     if (state.knowledgeMode === "skip") return !knowledgeRequired
     if (state.knowledgeMode === "existing") return state.selectedExistingDatasetIds.length > 0
-    if (state.knowledgeMode === "upload") return state.uploadedDatasetIds.length > 0
+    if (state.knowledgeMode === "upload") {
+      // Either the files are already uploaded, OR there are queued files +
+      // a name set — in which case Next will trigger the upload before
+      // advancing.
+      return (
+        state.uploadedDatasetIds.length > 0 ||
+        (state.uploadFiles.length > 0 && state.uploadDatasetName.trim().length > 0)
+      )
+    }
     return false
   })()
 
@@ -186,18 +200,47 @@ export function StartWizard({ onClose }: StartWizardProps) {
       <Step
         label="Add knowledge"
         description={template?.knowledgePrompt || "Optional documents the agent should draw from."}
-        canProceed={() => knowledgeCanProceed}
+        canProceed={() => knowledgeCanProceed && !uploadInFlight}
         onBeforeNext={async () => {
           if (!state.agentId) {
             toast.error("Agent missing — go back")
             return false
           }
 
+          // Upload mode: if the user queued files but hasn't pushed them
+          // yet, do the upload here (formerly behind an inline "Start
+          // upload" button). Then fall through to the attach loop with the
+          // freshly-created dataset id added in.
+          let uploadedHere: string[] = []
+          if (
+            state.knowledgeMode === "upload" &&
+            state.uploadedDatasetIds.length === 0 &&
+            state.uploadFiles.length > 0
+          ) {
+            setUploadInFlight(true)
+            try {
+              uploadedHere = await uploadWizardCorpus(state)
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Upload failed")
+              return false
+            } finally {
+              setUploadInFlight(false)
+            }
+            setState((prev) => ({
+              ...prev,
+              uploadedDatasetIds: [...prev.uploadedDatasetIds, ...uploadedHere],
+            }))
+          }
+
           const datasetIdsToAttach: string[] = []
           if (state.knowledgeMode === "existing") {
             datasetIdsToAttach.push(...state.selectedExistingDatasetIds)
           } else if (state.knowledgeMode === "upload") {
-            datasetIdsToAttach.push(...state.uploadedDatasetIds)
+            // Combine the previously-uploaded ids in `state` with whatever
+            // we just uploaded in this same Next click — `setState` above
+            // hasn't flushed yet so we can't read it back from
+            // `state.uploadedDatasetIds`.
+            datasetIdsToAttach.push(...state.uploadedDatasetIds, ...uploadedHere)
           }
 
           const newOnes = datasetIdsToAttach.filter(
@@ -228,7 +271,11 @@ export function StartWizard({ onClose }: StartWizardProps) {
           return true
         }}
       >
-        <KnowledgeStepContent state={state} setState={setState} />
+        <KnowledgeStepContent
+          state={state}
+          setState={setState}
+          uploadInFlight={uploadInFlight}
+        />
       </Step>
 
       <Step
@@ -247,4 +294,47 @@ export function StartWizard({ onClose }: StartWizardProps) {
       </Step>
     </Wizard>
   )
+}
+
+/**
+ * Upload the queued files in the wizard's corpus-upload step. Creates a
+ * dataset, then POSTs the files to its entries endpoint. Returns the new
+ * dataset id (wrapped in an array so future iterations could add more
+ * datasets in one click). Throws on any non-2xx response — the caller
+ * surfaces the error via `toast` and short-circuits the wizard's
+ * `onBeforeNext`.
+ */
+async function uploadWizardCorpus(state: WizardState): Promise<string[]> {
+  const datasetName = state.uploadDatasetName.trim()
+  if (!datasetName) throw new Error("Dataset name is required")
+  if (state.uploadFiles.length === 0) throw new Error("Add at least one file")
+
+  const createResponse = await apiFetch("/api/datasets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: datasetName,
+      description: `Uploaded via the Start wizard for "${state.name}"`,
+    }),
+  })
+  if (!createResponse.ok) {
+    const err = await createResponse.json().catch(() => ({ error: "Unknown error" }))
+    throw new Error(err.error ?? `HTTP ${createResponse.status}`)
+  }
+  const dataset = (await createResponse.json()) as { id: string }
+
+  const formData = new FormData()
+  for (const file of state.uploadFiles) {
+    formData.append("file", file)
+  }
+  const uploadResponse = await apiFetch(`/api/datasets/${dataset.id}/entries`, {
+    method: "POST",
+    body: formData,
+  })
+  if (!uploadResponse.ok) {
+    const err = await uploadResponse.json().catch(() => ({ error: "Unknown error" }))
+    throw new Error(err.error ?? `HTTP ${uploadResponse.status}`)
+  }
+
+  return [dataset.id]
 }

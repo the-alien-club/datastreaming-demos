@@ -34,12 +34,27 @@ export default async function ExistingChatPage({ params }: ExistingChatPageProps
 
   if (!conversation || conversation.agentId !== agentId) notFound()
 
-  // Convert DB messages to UIMessage format (parts-based)
-  const initialMessages = conversation.messages.map((msg) => ({
-    id: msg.id,
-    role: msg.role as "user" | "assistant",
-    parts: [{ type: "text" as const, text: msg.content }],
-  }))
+  // Convert DB messages to UIMessage format. Assistant rows written since
+  // the parts-jsonb migration carry the full structured stream (text +
+  // tool-call chips + subagent panels) so a refreshed tab replays the
+  // same rich rendering it had during the live stream. Older rows (and
+  // every user message) fall back to a single text part built from the
+  // plain `content` column.
+  const initialMessages = conversation.messages.map((msg) => {
+    const role = msg.role as "user" | "assistant"
+    if (role === "assistant" && Array.isArray(msg.parts) && msg.parts.length > 0) {
+      return {
+        id: msg.id,
+        role,
+        parts: msg.parts as Array<{ type: string } & Record<string, unknown>>,
+      }
+    }
+    return {
+      id: msg.id,
+      role,
+      parts: [{ type: "text" as const, text: msg.content }],
+    }
+  })
 
   return (
     <ExistingChatClient

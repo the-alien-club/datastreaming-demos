@@ -168,21 +168,29 @@ function ToolCallChip({ name, args }: { name: string; args: unknown }) {
 
 interface MessageBubbleProps {
   message: UIMessage
-  // When true, render text as plain pre-wrap instead of parsing markdown.
-  // ReactMarkdown re-parses the full accumulated text on every delta, which
-  // goes O(N²) across a long streamed response and freezes the tab. During
-  // streaming we show plain text; once the message is finalized we upgrade
-  // to markdown (one-time parse).
-  isStreaming?: boolean
   // Render an inline "thinking" dots indicator at the end of this bubble —
   // used between a tool call and the next text chunk to signal the agent
   // is still working inside the same message.
   showThinking?: boolean
 }
 
+// Tailwind `prose` overrides applied to every assistant text bubble. The
+// default plugin spacing is too tight for an inline chat bubble:
+// paragraphs, headings, lists, and blockquotes crash into each other.
+// Loosen with explicit child-selector classes so dark mode still inherits
+// the prose-invert palette.
+const PROSE_BUBBLE_CLASSES =
+  "prose prose-sm dark:prose-invert max-w-none " +
+  "prose-pre:rounded-lg prose-code:before:content-none prose-code:after:content-none " +
+  "[&_p]:my-3 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
+  "[&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:mt-5 [&_h3]:mb-2 " +
+  "[&_h4]:mt-4 [&_h4]:mb-2 " +
+  "[&_ul]:my-3 [&_ol]:my-3 [&_li]:my-1 [&_li>p]:my-1 " +
+  "[&_blockquote]:my-3 [&_pre]:my-4 " +
+  "[&_:first-child]:mt-0 [&_:last-child]:mb-0"
+
 const MessageBubble = memo(function MessageBubble({
   message,
-  isStreaming = false,
   showThinking = false,
 }: MessageBubbleProps) {
   const isUser = message.role === "user"
@@ -205,21 +213,22 @@ const MessageBubble = memo(function MessageBubble({
   parts.forEach((part, idx) => {
     if (isTextPart(part)) {
       if (!part.text) return
+      // Markdown renders live during streaming. react-markdown re-parses
+      // the accumulated text on each delta, which is fine for the
+      // ~kilobyte-sized assistant turns this chat sees; if a future
+      // workload pushes it into multi-thousand-line outputs we'll
+      // memoize. Partial markdown (mid-token like `**bo`) renders
+      // briefly ugly but tolerable — chasing prettiness here means
+      // delaying the user's first read by seconds.
       rendered.push(
         <div
           key={`t-${idx}`}
           className={cn(
-            "rounded-xl rounded-tl-none bg-card border px-4 py-2.5 text-sm max-w-none wrap-break-word",
-            isStreaming
-              ? "whitespace-pre-wrap leading-relaxed"
-              : "prose prose-sm dark:prose-invert prose-p:leading-relaxed prose-pre:rounded-lg prose-code:before:content-none prose-code:after:content-none"
+            "rounded-xl rounded-tl-none bg-card border px-4 py-2.5 text-sm wrap-break-word",
+            PROSE_BUBBLE_CLASSES,
           )}
         >
-          {isStreaming ? (
-            part.text
-          ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
-          )}
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.text}</ReactMarkdown>
         </div>
       )
       return
@@ -402,11 +411,6 @@ export function ChatUI({
           <MessageBubble
             key={message.id}
             message={message}
-            isStreaming={
-              status === "streaming" &&
-              idx === messages.length - 1 &&
-              message.role === "assistant"
-            }
             showThinking={idx === inlineThinkingIdx}
           />
         ))}

@@ -10,15 +10,25 @@
 // completes after the resume, and return a `text/event-stream` the
 // client consumes via `readUIMessageStream`.
 
-import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  readUIMessageStream,
+  type UIMessage,
+  type UIMessageChunk,
+} from "ai"
 import { and, eq } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { db } from "@/lib/db"
 import { agents, conversations, messages } from "@/lib/db/schema"
 import { resumeResponsesStream } from "@/lib/platform/client"
-import { translateResponseStream } from "@/lib/platform/responses_stream"
+import {
+  translateResponseStream,
+  type TranslatedResponseResult,
+} from "@/lib/platform/responses_stream"
 import { badRequest, conflict, notFound, unauthorized } from "@/lib/api-response"
+import { filterPersistableParts } from "@/lib/chat/persisted-parts"
 
 export const dynamic = "force-dynamic"
 
@@ -83,40 +93,18 @@ export async function POST(request: Request): Promise<Response> {
     })
   }
 
-  const stream = createUIMessageStream({
+  // Mirror the POST route: capture the translator's result so the
+  // background persistence branch can pull responseId/usage/text from
+  // it after the chunk stream finishes.
+  let translation: TranslatedResponseResult | null = null
+
+  const chunkStream = createUIMessageStream({
     execute: async ({ writer }) => {
-      const result = await translateResponseStream(upstream.body!, { writer, conversationId, signal })
-
-      // Only persist on a clean terminal completion. Mid-stream aborts
-      // (refresh again during resume) leave the previously-persisted
-      // assistant row untouched — the next resume will pick up from
-      // wherever the platform's response store stands.
-      if (result.error !== null) return
-
-      // The original POST `/api/chat` route already wrote the assistant
-      // row at the original turn's terminal event. If the abort happened
-      // before that write, persist now. We detect "already persisted"
-      // by looking for an assistant message tied to this responseId
-      // via the conversation sessionId — when the original turn
-      // completed normally, sessionId was already updated.
-      const alreadyPersisted = conversation.sessionId === responseId
-      if (alreadyPersisted) return
-
-      await db.insert(messages).values({
-        id: crypto.randomUUID(),
+      translation = await translateResponseStream(upstream.body!, {
+        writer,
         conversationId,
-        role: "assistant",
-        content: result.text,
-        metadata: result.usage ? JSON.stringify({ usage: result.usage }) : null,
+        signal,
       })
-
-      await db
-        .update(conversations)
-        .set({
-          sessionId: result.responseId ?? responseId,
-          updatedAt: new Date(),
-        })
-        .where(eq(conversations.id, conversationId))
     },
     onError: error => {
       console.error("Chat resume stream error:", error)
@@ -124,5 +112,78 @@ export async function POST(request: Request): Promise<Response> {
     },
   })
 
-  return createUIMessageStreamResponse({ stream })
+  // Tee so we can drain one branch into the persisted-parts assembler
+  // without blocking the SSE response. The original POST already wrote
+  // a row when its turn completed normally — detect that via the
+  // conversation's sessionId so we don't double-write on resume.
+  const [forClient, forPersist] = chunkStream.tee()
+  const alreadyPersisted = conversation.sessionId === responseId
+  void persistResumedAssistantMessage({
+    chunkStream: forPersist,
+    conversationId,
+    responseId,
+    alreadyPersisted,
+    getResult: () => translation,
+  })
+
+  return createUIMessageStreamResponse({ stream: forClient })
+}
+
+interface PersistResumeArgs {
+  chunkStream: ReadableStream<UIMessageChunk>
+  conversationId: string
+  responseId: string
+  alreadyPersisted: boolean
+  getResult: () => TranslatedResponseResult | null
+}
+
+/**
+ * Drain the resume's tee'd chunk stream and persist the assistant turn —
+ * but only when the original POST didn't already write it (detected via
+ * `conversation.sessionId === responseId`) and only on clean terminations
+ * (`result.error` is null). Mirrors the POST-side persistence shape
+ * (content + parts + metadata) so a second refresh recovers the same
+ * rich rendering.
+ */
+async function persistResumedAssistantMessage({
+  chunkStream,
+  conversationId,
+  responseId,
+  alreadyPersisted,
+  getResult,
+}: PersistResumeArgs): Promise<void> {
+  let assembled: UIMessage | undefined
+  try {
+    for await (const message of readUIMessageStream({ stream: chunkStream })) {
+      assembled = message
+    }
+  } catch (e) {
+    console.error("[chat/resume] failed to drain chunk stream:", e)
+  }
+
+  if (alreadyPersisted) return
+  const result = getResult()
+  if (!result || result.error !== null) return
+
+  const persistedParts = filterPersistableParts(assembled?.parts)
+
+  try {
+    await db.insert(messages).values({
+      id: crypto.randomUUID(),
+      conversationId,
+      role: "assistant",
+      content: result.text,
+      parts: persistedParts.length > 0 ? persistedParts : null,
+      metadata: result.usage ? JSON.stringify({ usage: result.usage }) : null,
+    })
+    await db
+      .update(conversations)
+      .set({
+        sessionId: result.responseId ?? responseId,
+        updatedAt: new Date(),
+      })
+      .where(eq(conversations.id, conversationId))
+  } catch (e) {
+    console.error("[chat/resume] failed to persist assistant message:", e)
+  }
 }
