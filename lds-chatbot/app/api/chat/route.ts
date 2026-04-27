@@ -66,10 +66,14 @@ function extractUserMessage(body: ChatRequestBody): string {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const t0 = Date.now()
+
   const session = await auth.api.getSession({ headers: request.headers })
+  const t1 = Date.now()
   if (!session) return unauthorized()
 
   const accessToken = await resolveAccessToken(session.user.id)
+  const t2 = Date.now()
 
   let body: ChatRequestBody
   try {
@@ -83,6 +87,7 @@ export async function POST(request: Request): Promise<Response> {
   const agent = await db.query.agents.findFirst({
     where: and(eq(agents.id, body.agentId), eq(agents.userId, session.user.id)),
   })
+  const t3 = Date.now()
   if (!agent) return notFound("Agent not found")
   if (agent.workflowId === null) {
     return conflict("Agent has no platform workflow yet — finish configuring it first")
@@ -99,6 +104,7 @@ export async function POST(request: Request): Promise<Response> {
         ),
       })
     : null
+  const t4 = Date.now()
   if (body.conversationId && !existingConversation) {
     return notFound("Conversation not found")
   }
@@ -121,6 +127,22 @@ export async function POST(request: Request): Promise<Response> {
     role: "user",
     content: userMessage,
   })
+  const t5 = Date.now()
+
+  // [DIAG] Structured timing log — remove once latency root cause is confirmed.
+  console.error(JSON.stringify({
+    event: "chat_pre_stream_timing",
+    workflowId: agent.workflowId,
+    isNewConversation: !existingConversation,
+    ms: {
+      session: t1 - t0,
+      accessToken: t2 - t1,
+      agentLookup: t3 - t2,
+      conversationLookup: t4 - t3,
+      messageInsert: t5 - t4,
+      totalPreStream: t5 - t0,
+    },
+  }))
 
   const provider = platformProvider({
     baseURL: `${PLATFORM_API_URL}/agent/${agent.workflowId}`,

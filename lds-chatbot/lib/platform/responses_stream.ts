@@ -145,6 +145,11 @@ export async function runPlatformResponse(
 ): Promise<PlatformResponseResult> {
   const { provider, prompt, previousResponseId, writer, conversationId, signal } = opts
 
+  // [DIAG] Track TTFT breakdown — remove once latency root cause is confirmed.
+  const tStreamTextCall = Date.now()
+  let tHttp200: number | null = null
+  let tFirstTextDelta: number | null = null
+
   const result = streamText({
     model: provider.responses("agent"),
     prompt,
@@ -171,6 +176,7 @@ export async function runPlatformResponse(
     for await (const part of result.fullStream) {
       switch (part.type) {
         case "start":
+          tHttp200 = Date.now()
           writer.write({ type: "start" } as WriterEvent)
           break
 
@@ -180,6 +186,18 @@ export async function runPlatformResponse(
           break
 
         case "text-delta":
+          if (tFirstTextDelta === null) {
+            tFirstTextDelta = Date.now()
+            // [DIAG] Log TTFT breakdown — remove once latency root cause is confirmed.
+            console.error(JSON.stringify({
+              event: "chat_stream_ttft",
+              ms: {
+                toHttp200: tHttp200 !== null ? tHttp200 - tStreamTextCall : null,
+                toFirstTextDelta: tFirstTextDelta - tStreamTextCall,
+                http200ToFirstText: tHttp200 !== null ? tFirstTextDelta - tHttp200 : null,
+              },
+            }))
+          }
           writer.write({ type: "text-delta", id: part.id, delta: part.text } as WriterEvent)
           sidecarState.accumulateText(part.text)
           break
@@ -263,6 +281,16 @@ export async function runPlatformResponse(
       errorText: err instanceof Error ? err.message : String(err),
     } as WriterEvent)
   }
+
+  // [DIAG] Log full stream duration — remove once latency root cause is confirmed.
+  console.error(JSON.stringify({
+    event: "chat_stream_done",
+    ok: sidecarState.result().ok,
+    ms: {
+      total: Date.now() - tStreamTextCall,
+      toFirstTextDelta: tFirstTextDelta !== null ? tFirstTextDelta - tStreamTextCall : null,
+    },
+  }))
 
   return sidecarState.result()
 }
