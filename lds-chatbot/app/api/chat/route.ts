@@ -1,7 +1,7 @@
 // Thin auth proxy: forwards a chat turn to the platform's OpenAI
 // Responses-API endpoint and translates its SSE event stream into AI
 // SDK UI message parts for `useChat()`. Persists user/assistant
-// messages and the per-conversation `response_id` to SQLite so each
+// messages and the per-conversation `response_id` to Postgres so each
 // turn resumes the agent's session memory.
 //
 // The platform endpoint (`POST /agent/:workflowId/responses`) is OpenAI

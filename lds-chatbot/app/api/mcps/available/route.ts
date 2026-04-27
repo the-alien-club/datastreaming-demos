@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
-import staticMcpConfig from "@/lib/mcps/config.json"
 
 export interface AvailableMcp {
   id: string
@@ -13,48 +12,33 @@ export interface AvailableMcp {
   source: "builtin" | "user"
 }
 
-interface StaticMcpEntry {
-  type: string
-  url: string
-  name: string
-  description?: string
-  category?: string
-}
+// MCPs that are bootstrapped via `scripts/seed-mcps.mjs`. The chatbot UI
+// surfaces these under a curated "Legal" section; everything else (whether
+// seeded or user-created) shows up under "User MCPs". The split is purely
+// presentational — both source rows live in the same `mcps` table.
+const BUILTIN_MCP_IDS = new Set(["legifrance", "convention-collective"])
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
-  const builtin: AvailableMcp[] = Object.entries(staticMcpConfig as Record<string, StaticMcpEntry>).map(
-    ([id, entry]) => ({
-      id,
-      name: entry.name,
-      description: entry.description ?? null,
-      category: entry.category ?? null,
-      source: "builtin",
-    }),
-  )
-
-  const userRows = await db
+  const rows = await db
     .select()
     .from(mcps)
     .where(eq(mcps.enabled, true))
     .orderBy(desc(mcps.createdAt))
 
-  const userMcps: AvailableMcp[] = userRows.map((r) => ({
+  const all: AvailableMcp[] = rows.map((r) => ({
     id: r.id,
     name: r.name,
     description: r.description ?? null,
     category: r.category ?? null,
-    source: "user",
+    source: BUILTIN_MCP_IDS.has(r.id) ? "builtin" : "user",
   }))
 
-  const legal = builtin.filter((m) => m.category === "legal")
-  const otherBuiltin = builtin.filter((m) => m.category !== "legal")
+  const legal = all.filter((m) => m.source === "builtin" && m.category === "legal")
+  const otherBuiltin = all.filter((m) => m.source === "builtin" && m.category !== "legal")
+  const userMcps = all.filter((m) => m.source === "user")
 
-  return Response.json({
-    legal,
-    otherBuiltin,
-    userMcps,
-  })
+  return Response.json({ legal, otherBuiltin, userMcps })
 }

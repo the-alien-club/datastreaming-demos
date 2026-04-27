@@ -2,35 +2,16 @@ import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import type { McpConfig } from "@/lib/platform/workflows"
-import staticMcpConfig from "./config.json"
 
-type StaticMcpEntry = {
-  type: string
-  url: string
-  name?: string
-  description?: string
-  category?: string
-}
-
+// MCP registrations live entirely in the `mcps` table. The legacy
+// `lib/mcps/config.json` static manifest has been retired; legal/built-in
+// MCPs are seeded via `scripts/seed-mcps.mjs` (idempotent upsert) and from
+// then on are managed through the same DB row as user-added entries.
 export async function loadEnabledMcpConfigs(): Promise<McpConfig[]> {
-  const staticConfigs: McpConfig[] = Object.entries(
-    staticMcpConfig as Record<string, StaticMcpEntry>,
-  ).map(([id, entry]) => ({
-    id,
-    serverUrl: entry.url,
-    authToken: null,
-  }))
-
-  const dbRows = await db.select().from(mcps).where(eq(mcps.enabled, true))
-  const dbConfigs: McpConfig[] = dbRows.map((r) => ({
+  const rows = await db.select().from(mcps).where(eq(mcps.enabled, true))
+  return rows.map((r) => ({
     id: r.id,
     serverUrl: r.serverUrl,
     authToken: r.authToken ?? null,
   }))
-
-  return [...staticConfigs, ...dbConfigs]
 }
-
-export type StaticMcpManifest = Record<string, StaticMcpEntry>
-export const STATIC_MCP_CONFIG: StaticMcpManifest =
-  staticMcpConfig as StaticMcpManifest

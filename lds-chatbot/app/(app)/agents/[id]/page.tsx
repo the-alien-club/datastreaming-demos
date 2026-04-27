@@ -190,7 +190,17 @@ export default function AgentEditorPage({
           systemPrompt: systemPrompt.trim(),
           steps,
           model,
-          subagents,
+          // Preserve datasetId on every subagent so corpus attachments survive
+          // a save round-trip. Without this, editing an agent that has a
+          // corpus-linked subagent silently destroys the RAG link.
+          subagents: subagents.map((sa) => ({
+            name: sa.name,
+            description: sa.description,
+            systemPrompt: sa.systemPrompt,
+            model: sa.model,
+            mcpIds: sa.mcpIds,
+            datasetId: sa.datasetId ?? null,
+          })),
         }),
       })
       if (!response.ok) {

@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   // Body may arrive with `steps` and `subagents[].mcpIds` as either:
   //   - already-parsed arrays (the typical UI flow), or
   //   - JSON-encoded strings (a client that round-trips the GET response,
-  //     where these fields are stored as JSON text in SQLite).
+  //     where these fields are stored as JSON text in Postgres).
   // We coerce to arrays here and validate; never trust `.map()` on raw input.
   let body: {
     name?: string
@@ -127,7 +127,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const steps = parsedSteps
   const model = body.model ?? existing.model ?? "gpt-4.1-mini"
 
-  let subagentConfigs: SubagentConfig[]
+  // Track datasetId alongside the workflow-graph SubagentConfig so we can
+  // preserve corpus attachments on round-trip writes (the graph builder
+  // doesn't need datasetId — but the persistence layer does).
+  type SubagentConfigWithDataset = SubagentConfig & { datasetId: string | null }
+
+  let subagentConfigs: SubagentConfigWithDataset[]
   try {
     if (body.subagents !== undefined) {
       const rawSubagents = coerceArray<{
@@ -136,6 +141,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         systemPrompt: string
         model: string
         mcpIds: string[] | string
+        datasetId?: string | null
       }>(body.subagents, "subagents")
       subagentConfigs = rawSubagents.map((sa, idx) => ({
         name: sa.name,
@@ -143,6 +149,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         systemPrompt: sa.systemPrompt,
         model: sa.model,
         mcpIds: coerceArray<string>(sa.mcpIds, `subagents[${idx}].mcpIds`),
+        datasetId: sa.datasetId ?? null,
       }))
     } else {
       subagentConfigs = existing.subagents.map((sa) => ({
@@ -151,6 +158,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         systemPrompt: sa.systemPrompt,
         model: sa.model ?? "gpt-4.1-mini",
         mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
+        datasetId: sa.datasetId ?? null,
       }))
     }
   } catch (err) {
@@ -207,6 +215,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           systemPrompt: sa.systemPrompt,
           model: sa.model,
           mcpIds: JSON.stringify(sa.mcpIds),
+          datasetId: sa.datasetId,
           createdAt: now,
         }))
       )
