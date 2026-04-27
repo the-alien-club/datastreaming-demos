@@ -1,10 +1,10 @@
 // Thin auth proxy: forwards a chat turn to the platform's OpenAI
-// Responses-API endpoint and translates its SSE event stream into AI
-// SDK UI message parts for `useChat()`. Persists user/assistant
+// Responses-API endpoint via the native AI SDK integration and writes
+// the resulting UI parts to the client. Persists user/assistant
 // messages and the per-conversation `response_id` to Postgres so each
 // turn resumes the agent's session memory.
 //
-// Persistence persists BOTH the plain-text view (`messages.content`,
+// Persistence stores BOTH the plain-text view (`messages.content`,
 // kept for backward compat and the OpenAI-compat path) AND the full
 // `UIMessage.parts` array (`messages.parts` jsonb) so a tab refresh
 // replays the rich live render — text bubbles, tool-call chips,
@@ -13,7 +13,8 @@
 // The platform endpoint (`POST /agent/:workflowId/responses`) is OpenAI
 // Responses-API stream-conformant per
 // `web-app/packages/backend/lib/streaming/specs/responses_v1.md`.
-// All translation logic lives in `lib/platform/responses_stream.ts`.
+// Streaming is driven by `platformProvider` + `runPlatformResponse` in
+// `lib/platform/responses_stream.ts`.
 
 import {
   createUIMessageStream,
@@ -27,10 +28,10 @@ import { auth } from "@/lib/auth"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { db } from "@/lib/db"
 import { agents, conversations, messages } from "@/lib/db/schema"
-import { openResponsesStream } from "@/lib/platform/client"
 import {
-  translateResponseStream,
-  type TranslatedResponseResult,
+  platformProvider,
+  runPlatformResponse,
+  type PlatformResponseResult,
 } from "@/lib/platform/responses_stream"
 import { badRequest, conflict, notFound, unauthorized } from "@/lib/api-response"
 import {
@@ -40,8 +41,14 @@ import {
 
 export const dynamic = "force-dynamic"
 
+const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
+
 interface ChatRequestBody {
-  messages?: Array<{ role: string; parts?: Array<{ type: string; text?: string }>; content?: string }>
+  messages?: Array<{
+    role: string
+    parts?: Array<{ type: string; text?: string }>
+    content?: string
+  }>
   agentId?: string
   conversationId?: string
 }
@@ -50,7 +57,10 @@ function extractUserMessage(body: ChatRequestBody): string {
   const last = body.messages?.[body.messages.length - 1]
   if (!last) return ""
   if (Array.isArray(last.parts)) {
-    return last.parts.filter(p => p.type === "text").map(p => p.text ?? "").join("")
+    return last.parts
+      .filter(p => p.type === "text")
+      .map(p => p.text ?? "")
+      .join("")
   }
   return typeof last.content === "string" ? last.content : ""
 }
@@ -83,7 +93,10 @@ export async function POST(request: Request): Promise<Response> {
 
   const existingConversation = body.conversationId
     ? await db.query.conversations.findFirst({
-        where: and(eq(conversations.id, body.conversationId), eq(conversations.userId, session.user.id)),
+        where: and(
+          eq(conversations.id, body.conversationId),
+          eq(conversations.userId, session.user.id),
+        ),
       })
     : null
   if (body.conversationId && !existingConversation) {
@@ -109,40 +122,26 @@ export async function POST(request: Request): Promise<Response> {
     content: userMessage,
   })
 
-  // Wire the request's abort signal through to both the upstream fetch and
-  // the SSE consumer loop. When the client closes the tab mid-stream the
-  // platform connection is cancelled instead of being held open until the
-  // workflow finishes. We also persist whatever assistant text streamed
-  // before the abort so partial answers aren't silently lost.
+  const provider = platformProvider({
+    baseURL: `${PLATFORM_API_URL}/agent/${agent.workflowId}`,
+    accessToken,
+  })
+
+  // Wire the request's abort signal through to the upstream call. When
+  // the client closes the tab mid-stream the platform connection is
+  // cancelled instead of being held open until the workflow finishes.
   const signal = request.signal
 
-  // `previous_response_id` carries the prior turn's response_id so the
-  // agent runtime resumes its session memory (responses_v1.md §7).
-  const upstream = await openResponsesStream(
-    agent.workflowId,
-    {
-      model: agent.model ?? "agent",
-      input: userMessage,
-      previous_response_id: existingConversation?.sessionId ?? undefined,
-    },
-    accessToken,
-    signal,
-  )
-
-  if (!upstream.ok || !upstream.body) {
-    const errBody = await upstream.text().catch(() => "(no body)")
-    return new Response(`Platform Responses error ${upstream.status}: ${errBody}`, { status: 502 })
-  }
-
-  // Hold the translator's text/responseId/usage so the persistence branch
-  // can read them after the chunk stream has been fully drained. Both
-  // halves come from the same `execute()` body — the chunk stream tees
-  // off it; the closure variable carries the alien metadata.
-  let translation: TranslatedResponseResult | null = null
+  // Hold the result so the persistence branch can read responseId/usage
+  // after the chunk stream drains.
+  let platformResult: PlatformResponseResult | null = null
 
   const chunkStream = createUIMessageStream({
     execute: async ({ writer }) => {
-      translation = await translateResponseStream(upstream.body!, {
+      platformResult = await runPlatformResponse({
+        provider,
+        prompt: userMessage,
+        previousResponseId: existingConversation?.sessionId ?? undefined,
         writer,
         conversationId,
         signal,
@@ -157,15 +156,14 @@ export async function POST(request: Request): Promise<Response> {
   // Tee the chunk stream: one branch goes to the SSE response the client
   // reads, the other is drained through `readUIMessageStream` so we
   // capture the assembled assistant `UIMessage` (text bubbles, tool-call
-  // chips, subagent panels) and persist its `parts` for replay on a tab
-  // refresh. Without this only the plain-text concatenation survives.
+  // chips, subagent panels) and persist its `parts` for replay on refresh.
   const [forClient, forPersist] = chunkStream.tee()
 
   void persistAssistantMessage({
     chunkStream: forPersist,
     conversationId,
     fallbackSessionId: existingConversation?.sessionId ?? null,
-    getResult: () => translation,
+    getResult: () => platformResult,
   })
 
   return createUIMessageStreamResponse({ stream: forClient })
@@ -177,7 +175,7 @@ interface PersistArgs {
   chunkStream: ReadableStream<UIMessageChunk>
   conversationId: string
   fallbackSessionId: string | null
-  getResult: () => TranslatedResponseResult | null
+  getResult: () => PlatformResponseResult | null
 }
 
 /**

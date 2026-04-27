@@ -1,68 +1,50 @@
-// Translator: OpenAI Responses-API SSE → AI SDK UI message parts.
+// Native AI SDK integration for the platform's OpenAI Responses API.
 //
-// The platform's `POST /agent/:id/responses` endpoint emits an
-// OpenAI-Responses-conformant SSE stream per the spec at
-// `web-app/packages/backend/lib/streaming/specs/responses_v1.md`.
-// This module parses those events and writes corresponding parts to the
-// AI SDK UI message stream consumed by `useChat()`.
+// The platform's `POST /agent/:id/responses` endpoint is OpenAI
+// Responses-API-stream-conformant (spec at
+// `web-app/packages/backend/lib/streaming/specs/responses_v1.md`).
+// Rather than a bespoke SSE parser we use `@ai-sdk/openai`'s
+// `createOpenAI` provider — configured with the platform's OAuth header
+// and pointed at the platform base URL — and drive it through AI SDK v6
+// `streamText`.
 //
-// Mapping (only the events the chatbot UI cares about are handled;
-// everything else is ignored — degradation per spec §7 of
-// `chat_completions_v1.md`):
+// Architecture: single-pass over fullStream
 //
-//   - `response.created`              → emits `data-conversationId`
-//                                       (so the page can rewrite the URL)
-//                                       AND captures `response_id` for
-//                                       persistence as the next turn's
-//                                       `previous_response_id`. Reads the
-//                                       agent registry from
-//                                       `Response.metadata.x_alien_agent_registry`
-//                                       so subagent panels can surface
-//                                       human-readable names.
+// We iterate `result.fullStream` exactly once, handling both UI parts
+// (text-start/delta/end, tool-input-start/delta/available, start/finish)
+// and platform extensions (raw events, tool-call sidecar) in the same
+// loop. This avoids the tee-based two-consumer approach:
 //
-//   - `response.output_item.added`    → if the item id encodes a non-root
-//                                       agent (`agent:<aid>::*` per spec
-//                                       §4) AND it's the first time we've
-//                                       seen that agent in this turn,
-//                                       emits a `data-subagent` part to
-//                                       open a panel for the subagent's
-//                                       activity.
+//   PROBLEM: StreamTextResult.teeStream() is stateful and mutates
+//   `this.baseStream` on every call. Accessing both `result.fullStream`
+//   and `result.toUIMessageStream()` creates two tees. Under Node.js
+//   ReadableStream backpressure semantics, both halves of a tee must be
+//   consumed for either to advance. Running them in parallel async-for
+//   loops causes deadlock — the microtask queue serialises the two loops
+//   so they can't interleave, and the tee buffer fills and blocks.
 //
-//   - `response.output_text.delta`    → opens a text part (lazily, scoped
-//                                       to the producing output item) and
-//                                       writes a `text-delta` for each
-//                                       token. Each Responses-API output
-//                                       item gets its OWN AI SDK text part,
-//                                       so the parent agent's text and
-//                                       each subagent's text render as
-//                                       separate bubbles instead of
-//                                       interleaving into one stream.
+//   FIX: iterate fullStream once. Translate TextStreamPart variants to
+//   UIMessageChunk manually, and run the sidecar (raw / tool-call
+//   platform extensions) in the same iteration.
 //
-//   - `response.output_item.done`     → closes the per-item text part
-//                                       (writes the matching `text-end`).
+// Four platform-specific `data-*` parts emitted by the sidecar:
 //
-//   - `response.function_call_arguments.done`
-//                                     → emits `data-toolCall` so the UI
-//                                       can render the tool chip
-//                                       (matches the prior format).
-//
-//   - `response.completed`            → captures usage and finalises the
-//                                       response_id; we close any open
-//                                       text parts.
-//
-//   - `response.failed`               → captures the error code/message
-//                                       and closes any open text parts.
-//
-// In addition, every translated event emits a transient
-// `data-streamProgress` part carrying `{responseId, sequenceNumber,
-// terminal}`. The chat client persists this to localStorage so a tab
-// refresh mid-stream can reconnect via
-// `GET /agent/:id/responses/:respId?starting_after=<seq>`.
-//
-// Parts emitted are AI SDK v6 UI message parts; consumers (`chat-ui.tsx`)
-// type-guard them.
+//   data-conversationId  — emitted once at start; lets the page rewrite
+//                          its URL before any text arrives.
+//   data-subagent        — emitted the first time a non-root agent's
+//                          output item appears (via raw events); drives
+//                          the subagent panel announcement.
+//   data-toolCall        — emitted on `tool-call` fullStream parts;
+//                          carries `{ id, name, args }` in the legacy
+//                          chip shape the chat UI expects.
+//   data-streamProgress  — emitted on every raw event with a
+//                          `sequence_number`; transient; drives the
+//                          client-side localStorage resume cursor.
 
-import type { createUIMessageStream } from "ai"
+import { createOpenAI } from "@ai-sdk/openai"
+import { streamText, type createUIMessageStream } from "ai"
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type StreamWriter = Parameters<
   Parameters<typeof createUIMessageStream>[0]["execute"]
@@ -80,386 +62,307 @@ interface AgentRegistryEntry {
   dispatched_by_tool_call_id?: string
 }
 
-interface ResponseObject {
+/** Raw shape emitted by the platform on `response.created`. */
+interface ResponseCreatedPayload {
   id?: string
   status?: string
   metadata?: Record<string, string> | null
-  usage?: Record<string, unknown> | null
-  error?: { code?: string; message?: string } | null
 }
 
-export interface TranslatedResponseResult {
-  /** Full assistant text concatenated from all `output_text.delta`s. */
+/** Minimal shape of a `response.output_item.added` item field. */
+interface OutputItem {
+  id?: string
+  type?: string
+}
+
+export interface PlatformResponseResult {
+  /** Full assistant text concatenated from all text-delta events. */
   text: string
-  /** The platform-assigned response_id (persist as next turn's previous_response_id). */
+  /** Platform-assigned response_id; persist as next turn's previous_response_id. */
   responseId: string | null
   /** Token usage rolled up at terminal time. */
   usage: Record<string, unknown> | null
-  /** Populated when the platform emitted `response.failed`. */
-  error: { code: string; message: string } | null
+  /** True when the stream completed without error. */
+  ok: boolean
 }
 
-export interface TranslateOptions {
+// ── Provider factory ─────────────────────────────────────────────────────────
+
+export interface PlatformProviderOptions {
+  /**
+   * Platform API base URL for this specific agent workflow:
+   * `${PLATFORM_API_URL}/agent/${workflowId}`.
+   * The Responses provider appends `/responses` automatically.
+   */
+  baseURL: string
+  /** Authentik access token forwarded as `x-oauth-access-token`. */
+  accessToken: string
+}
+
+/**
+ * Construct an `@ai-sdk/openai` provider pointed at the platform's
+ * Responses-API endpoint for a given agent workflow. The OAuth guard
+ * on the platform ignores the API key; the real auth flows via the
+ * `x-oauth-access-token` header.
+ */
+export function platformProvider(
+  opts: PlatformProviderOptions,
+): ReturnType<typeof createOpenAI> {
+  return createOpenAI({
+    baseURL: opts.baseURL,
+    apiKey: "unused",
+    headers: { "x-oauth-access-token": opts.accessToken },
+  })
+}
+
+// ── Stream runner ─────────────────────────────────────────────────────────────
+
+export interface RunPlatformResponseOptions {
+  provider: ReturnType<typeof createOpenAI>
+  prompt: string
+  previousResponseId?: string
   writer: StreamWriter
   conversationId: string
-  /** Forward the request's abort signal so we can stop reading the upstream
-   *  body when the client closes the tab mid-stream. The caller's fetch
-   *  should be opened with the same signal so the upstream socket is also
-   *  cancelled — the reader cancel here only releases our consumer side. */
   signal?: AbortSignal
 }
 
 /**
- * Read an OpenAI Responses-API SSE stream from `body` and translate
- * each event onto the AI SDK UI message stream `writer`.
+ * Drive a single streaming Responses-API turn through AI SDK `streamText`.
  *
- * Returns the full assistant text plus the platform `response_id` so
- * the caller can persist them.
+ * Iterates `result.fullStream` in a single pass — writing UI parts
+ * (text, tool-input, start/finish) directly to `writer` and extracting
+ * platform extensions (subagent announcements, progress beacons, tool chips)
+ * via a sidecar state machine in the same loop.
+ *
+ * Returns a settled result carrying the accumulated text, `responseId`, and
+ * usage so the caller can persist the turn.
  */
-export async function translateResponseStream(
-  body: ReadableStream<Uint8Array>,
-  opts: TranslateOptions,
-): Promise<TranslatedResponseResult> {
-  const reader = body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ""
+export async function runPlatformResponse(
+  opts: RunPlatformResponseOptions,
+): Promise<PlatformResponseResult> {
+  const { provider, prompt, previousResponseId, writer, conversationId, signal } = opts
 
-  const state = new TranslationState(opts)
+  const result = streamText({
+    model: provider.responses("agent"),
+    prompt,
+    includeRawChunks: true,
+    abortSignal: signal,
+    ...(previousResponseId !== undefined && previousResponseId !== null
+      ? { providerOptions: { openai: { previousResponseId } } }
+      : {}),
+  })
 
-  // If the caller aborts (client disconnect mid-stream), cancel the reader
-  // so the `await reader.read()` resolves immediately and we exit the loop.
-  // The fetch initiated upstream by the caller should also have been opened
-  // with the same signal — that's what actually closes the upstream socket.
-  const onAbort = () => {
-    reader.cancel(opts.signal?.reason ?? new Error("aborted")).catch(() => {})
-  }
-  if (opts.signal) {
-    if (opts.signal.aborted) onAbort()
-    else opts.signal.addEventListener("abort", onAbort, { once: true })
-  }
+  // Emit data-conversationId immediately so the page can rewrite its URL
+  // before the first text token arrives.
+  writer.write({
+    type: "data-conversationId",
+    data: conversationId,
+  } as WriterEvent)
 
+  const sidecarState = new SidecarState(writer)
+
+  // Single pass: one iterator over fullStream. TextStreamPart variants are
+  // translated to UIMessageChunk and written; `raw` parts and `tool-call`
+  // parts feed the sidecar. No tee, no parallel consumers, no deadlock.
   try {
-    while (true) {
-      if (opts.signal?.aborted) break
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
+    for await (const part of result.fullStream) {
+      switch (part.type) {
+        case "start":
+          writer.write({ type: "start" } as WriterEvent)
+          break
 
-      // SSE frames are separated by blank lines. Each frame may carry an
-      // `event:` line and one or more `data:` lines; per the Responses
-      // spec we route by `event:` and treat `data:` as a single JSON
-      // payload.
-      let boundary = buffer.indexOf("\n\n")
-      while (boundary !== -1) {
-        const frame = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + 2)
-        boundary = buffer.indexOf("\n\n")
+        case "text-start":
+          writer.write({ type: "text-start", id: part.id } as WriterEvent)
+          sidecarState.trackText(part.id)
+          break
 
-        const parsed = parseSseFrame(frame)
-        if (parsed) state.handleEvent(parsed.event, parsed.data)
+        case "text-delta":
+          writer.write({ type: "text-delta", id: part.id, delta: part.text } as WriterEvent)
+          sidecarState.accumulateText(part.text)
+          break
+
+        case "text-end":
+          writer.write({ type: "text-end", id: part.id } as WriterEvent)
+          break
+
+        case "tool-input-start":
+          // TextStreamPart uses `id`; UIMessageChunk uses `toolCallId`.
+          writer.write({
+            type: "tool-input-start",
+            toolCallId: part.id,
+            toolName: part.toolName,
+          } as WriterEvent)
+          break
+
+        case "tool-input-delta":
+          // TextStreamPart uses `delta`; UIMessageChunk uses `inputTextDelta`.
+          writer.write({
+            type: "tool-input-delta",
+            toolCallId: part.id,
+            inputTextDelta: part.delta,
+          } as WriterEvent)
+          break
+
+        case "tool-input-end":
+          // tool-input-end has no matching UIMessageChunk — the native
+          // tool-input-available fires on tool-call which supersedes it.
+          // No-op: the tool-call case below handles the completion event.
+          break
+
+        case "tool-call": {
+          // TextStreamPart.tool-call carries `input` (not `args`).
+          // Write native tool-input-available chunk for the AI SDK UI renderer.
+          const toolInput = "input" in part ? (part as { input: unknown }).input : undefined
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            input: toolInput,
+          } as WriterEvent)
+          // Also emit the legacy data-toolCall chip the chat UI expects.
+          sidecarState.handleToolCall(part.toolCallId, part.toolName, toolInput)
+          break
+        }
+
+        case "finish":
+          writer.write({
+            type: "finish",
+            finishReason: part.finishReason,
+          } as WriterEvent)
+          break
+
+        case "finish-step":
+          writer.write({ type: "finish-step" } as WriterEvent)
+          break
+
+        case "error":
+          writer.write({
+            type: "error",
+            errorText: part.error instanceof Error ? part.error.message : String(part.error),
+          } as WriterEvent)
+          break
+
+        case "raw":
+          // Platform extension events: subagent announcements, progress beacons.
+          sidecarState.handleRawPart(part.rawValue)
+          break
+
+        default:
+          // start-step, reasoning-*, source-*, file — not surfaced in UI yet.
+          break
       }
     }
-  } finally {
-    if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
-    reader.releaseLock()
-    state.finish()
+  } catch (err) {
+    // Surface transport/parse errors as error chunks so the client can
+    // display them rather than hanging on an empty stream.
+    writer.write({
+      type: "error",
+      errorText: err instanceof Error ? err.message : String(err),
+    } as WriterEvent)
   }
 
-  return state.result()
+  return sidecarState.result()
 }
 
-/**
- * Parse one `text/event-stream` frame into `(event, data)`. Returns null
- * for comment-only frames (the platform sends `:keep-alive` heartbeats)
- * or frames whose data fails to parse as JSON.
- */
-function parseSseFrame(frame: string): { event: string; data: unknown } | null {
-  let event = ""
-  const dataLines: string[] = []
+// ── Sidecar state machine ────────────────────────────────────────────────────
 
-  for (const rawLine of frame.split("\n")) {
-    if (rawLine.startsWith(":") || rawLine.length === 0) continue
-    if (rawLine.startsWith("event:")) {
-      event = rawLine.slice(6).trim()
-      continue
-    }
-    if (rawLine.startsWith("data:")) {
-      // SSE allows leading single space after the colon.
-      dataLines.push(rawLine.slice(5).replace(/^ /, ""))
-    }
-  }
-
-  if (!event || dataLines.length === 0) return null
-
-  const dataStr = dataLines.join("\n")
-  try {
-    return { event, data: JSON.parse(dataStr) as unknown }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Decode the `agent:<id>::<kind>_<n>` item-id prefix used by the
- * platform's Responses translator (see `responses_v1.md` §4) to embed
- * agent identity in the otherwise-opaque output item id. Returns null
- * for ids that don't carry a prefix (e.g. unrelated SDK shapes).
- */
-function decodeAgentFromItemId(itemId: string | undefined): string | null {
-  if (!itemId) return null
-  const match = itemId.match(/^agent:([^:]+)::/)
-  return match ? match[1] : null
-}
-
-/**
- * Stateful per-stream translator. Holds the current text-part id, the
- * set of subagents already announced to the UI, the agent registry
- * (parsed from `Response.metadata.x_alien_agent_registry`), and the
- * accumulated assistant text.
- */
-class TranslationState {
+class SidecarState {
   private readonly _writer: StreamWriter
-  private readonly _conversationId: string
 
-  /**
-   * Open text parts, keyed by the Responses-API output item id. Each
-   * `output_text.delta` event carries the `item_id` of the message it
-   * belongs to (per the OpenAI Responses spec); we route every delta
-   * to a part scoped to that item so the parent agent's text and each
-   * subagent's text render as separate bubbles instead of interleaving.
-   * Closed by `output_item.done` (per-item) and by `finish()` (catch-all).
-   */
-  private readonly _textPartIds: Map<string, string> = new Map()
-  /** Full text accumulated for Postgres persistence. */
-  private _fullText: string = ""
-  /** Subagents we've already opened panels for, by agent_id. */
-  private readonly _announcedSubagents: Set<string> = new Set()
-  /** Agent registry, keyed by agent_id. Populated from response.created metadata. */
-  private readonly _registry: Map<string, AgentRegistryEntry> = new Map()
-  /** Root agent id, parsed from `metadata.x_alien_root_agent_id`. */
-  private _rootAgentId: string | null = null
-  /** Platform-assigned response_id (carried on response.created/completed). */
   private _responseId: string | null = null
-  /** Final usage block. */
   private _usage: Record<string, unknown> | null = null
-  /** Error block, populated on response.failed. */
-  private _error: { code: string; message: string } | null = null
-  /** Has the conversationId been emitted to the UI yet. */
-  private _conversationIdEmitted: boolean = false
+  private _ok: boolean = false
+  private _fullText: string = ""
+  private _rootAgentId: string | null = null
+  private _hasOpenTextPart: boolean = false
 
-  constructor(opts: TranslateOptions) {
-    this._writer = opts.writer
-    this._conversationId = opts.conversationId
+  private readonly _registry: Map<string, AgentRegistryEntry> = new Map()
+  private readonly _announcedSubagents: Set<string> = new Set()
+
+  constructor(writer: StreamWriter) {
+    this._writer = writer
   }
 
-  handleEvent(event: string, data: unknown): void {
-    if (typeof data !== "object" || data === null) return
-    const payload = data as Record<string, unknown>
+  // ── Text tracking ──────────────────────────────────────────────────────────
 
-    switch (event) {
-      case "response.created":
-        this._handleCreated(payload)
+  trackText(_partId: string): void {
+    this._hasOpenTextPart = true
+  }
+
+  accumulateText(delta: string): void {
+    this._fullText += delta
+  }
+
+  // ── Raw event handler ──────────────────────────────────────────────────────
+
+  handleRawPart(rawValue: unknown): void {
+    if (typeof rawValue !== "object" || rawValue === null) return
+    const payload = rawValue as Record<string, unknown>
+
+    const eventType = typeof payload.type === "string" ? payload.type : null
+    if (eventType === null) return
+
+    const seqNum = payload.sequence_number
+    const hasSeq = typeof seqNum === "number" && Number.isInteger(seqNum)
+
+    switch (eventType) {
+      case "response.created": {
+        const response = payload.response as ResponseCreatedPayload | undefined
+        if (response?.id) this._responseId = response.id
+        this._loadRegistry(response)
         break
-      case "response.output_item.added":
-        this._handleOutputItemAdded(payload)
+      }
+      case "response.output_item.added": {
+        const item = payload.item as OutputItem | undefined
+        this._maybeAnnounceSubagent(item?.id)
         break
-      case "response.output_item.done":
-        this._handleOutputItemDone(payload)
+      }
+      case "response.completed": {
+        const response = payload.response as
+          | { id?: string; usage?: Record<string, unknown> | null }
+          | undefined
+        if (response?.id) this._responseId = response.id
+        if (response?.usage) this._usage = response.usage
+        this._ok = true
         break
-      case "response.output_text.delta":
-        this._handleTextDelta(payload)
-        break
-      case "response.function_call_arguments.done":
-        this._handleFunctionCallDone(payload)
-        break
-      case "response.completed":
-        this._handleCompleted(payload)
-        break
+      }
       case "response.failed":
-        this._handleFailed(payload)
+        this._ok = false
         break
       default:
-        // Other events (in_progress, content_part.*, reasoning_*, etc.)
-        // are not surfaced in the UI yet — see the module docstring.
-        // Ignored intentionally.
         break
     }
 
-    // Surface a transient progress beacon for the UI's resume bookkeeping.
-    // Carries the platform `response_id` and the event's `sequence_number`
-    // so the client can persist `(responseId, lastSeq)` to localStorage and
-    // reconnect via `GET /agent/:id/responses/:respId?starting_after=<seq>`
-    // after a refresh. Marked `transient` so it bypasses the message-parts
-    // store and only flows through `useChat({ onData })`.
-    this._emitProgress(event, payload)
-  }
+    if (hasSeq && this._responseId !== null) {
+      const terminal =
+        eventType === "response.completed" ||
+        eventType === "response.failed" ||
+        eventType === "response.incomplete"
 
-  /**
-   * Close any open text parts. Always safe to call multiple times.
-   */
-  finish(): void {
-    this._closeAllTextParts()
-  }
-
-  result(): TranslatedResponseResult {
-    return {
-      text: this._fullText,
-      responseId: this._responseId,
-      usage: this._usage,
-      error: this._error,
-    }
-  }
-
-  // ── Event handlers ──────────────────────────────────────────────────────────
-
-  private _handleCreated(data: Record<string, unknown>): void {
-    const responseObj = data.response as ResponseObject | undefined
-    if (responseObj?.id) this._responseId = responseObj.id
-
-    this._loadRegistryFromResponse(responseObj)
-
-    // The chat-ui.tsx page expects `data-conversationId` early in the
-    // stream so it can rewrite the URL. Emit it on the first event we
-    // see (response.created is always seq 0).
-    if (!this._conversationIdEmitted) {
       this._writer.write({
-        type: "data-conversationId",
-        data: this._conversationId,
+        type: "data-streamProgress",
+        transient: true,
+        data: {
+          responseId: this._responseId,
+          sequenceNumber: seqNum as number,
+          terminal,
+        },
       } as WriterEvent)
-      this._conversationIdEmitted = true
     }
   }
 
-  private _handleOutputItemAdded(data: Record<string, unknown>): void {
-    const item = data.item as Record<string, unknown> | undefined
-    const itemId = typeof item?.id === "string" ? item.id : undefined
-    const agentId = decodeAgentFromItemId(itemId)
-    if (!agentId) return
+  // ── Tool-call handler ──────────────────────────────────────────────────────
 
-    // Skip the root agent — its content is the main assistant body and
-    // doesn't need a panel announcement.
-    if (this._rootAgentId !== null && agentId === this._rootAgentId) return
-    if (this._announcedSubagents.has(agentId)) return
-
-    const entry = this._registry.get(agentId)
-    // Fall back to the agent_id as the display name when the registry
-    // was truncated or didn't include this entry (per spec §4 the
-    // registry is best-effort under the 512-char metadata cap).
-    const displayName = entry?.name ?? agentId
-
-    this._writer.write({
-      type: "data-subagent",
-      data: {
-        agentId,
-        name: displayName,
-        kind: entry?.kind ?? "subagent",
-        parentId: entry?.parent_id ?? null,
-        dispatchedByToolCallId: entry?.dispatched_by_tool_call_id ?? null,
-      },
-    } as WriterEvent)
-    this._announcedSubagents.add(agentId)
-  }
-
-  private _handleOutputItemDone(data: Record<string, unknown>): void {
-    // Close the per-item text part on `output_item.done`. The matching
-    // `text-end` writes are how the AI SDK seals each text part — without
-    // them the consumer keeps the part marked "streaming" forever.
-    const item = data.item as Record<string, unknown> | undefined
-    const itemId = typeof item?.id === "string" ? item.id : undefined
-    if (!itemId) return
-    this._closeTextPart(itemId)
-  }
-
-  private _handleTextDelta(data: Record<string, unknown>): void {
-    const delta = data.delta
-    if (typeof delta !== "string" || delta.length === 0) return
-    // The Responses spec guarantees `item_id` on every output_text.delta
-    // (§3, ResponseTextDeltaEvent). We key text parts off this so each
-    // output item gets its own AI SDK text part — main agent and
-    // subagents don't interleave.
-    const itemId = typeof data.item_id === "string" ? data.item_id : null
-    if (itemId === null) return
-    this._writeTextDelta(itemId, delta)
-  }
-
-  private _handleFunctionCallDone(data: Record<string, unknown>): void {
-    const name = typeof data.name === "string" ? data.name : null
-    const argsStr = typeof data.arguments === "string" ? data.arguments : ""
-    const itemId = typeof data.item_id === "string" ? data.item_id : crypto.randomUUID()
-    if (!name) return
-
-    let args: unknown = argsStr
-    if (argsStr.trim().length > 0) {
-      try {
-        args = JSON.parse(argsStr)
-      } catch {
-        // Leave as raw string when arguments aren't valid JSON.
-      }
-    }
-
+  handleToolCall(toolCallId: string, toolName: string, args: unknown): void {
     this._writer.write({
       type: "data-toolCall",
-      data: { id: itemId, name, args },
+      data: { id: toolCallId, name: toolName, args },
     } as WriterEvent)
   }
 
-  private _handleCompleted(data: Record<string, unknown>): void {
-    const responseObj = data.response as ResponseObject | undefined
-    if (responseObj?.id) this._responseId = responseObj.id
-    if (responseObj?.usage) this._usage = responseObj.usage as Record<string, unknown>
-    this._closeAllTextParts()
-  }
+  // ── Registry helpers ───────────────────────────────────────────────────────
 
-  private _handleFailed(data: Record<string, unknown>): void {
-    const responseObj = data.response as ResponseObject | undefined
-    const err = responseObj?.error
-    this._error = {
-      code: typeof err?.code === "string" ? err.code : "server_error",
-      message: typeof err?.message === "string" ? err.message : "Unknown error",
-    }
-    this._closeAllTextParts()
-  }
-
-  // ── Internal helpers ────────────────────────────────────────────────────────
-
-  /**
-   * Emit a transient `data-streamProgress` beacon carrying the
-   * `(responseId, sequenceNumber, terminal)` triple. Picked up via
-   * `useChat({ onData })` on the client and persisted to localStorage so
-   * a tab refresh mid-stream can reconnect to the platform's resume
-   * endpoint with `starting_after = sequenceNumber`. Terminal events
-   * (`response.completed`/`response.failed`) flag `terminal: true` so
-   * the client clears the persisted cursor.
-   */
-  private _emitProgress(event: string, payload: Record<string, unknown>): void {
-    if (this._responseId === null) return
-    const seq = payload.sequence_number
-    if (typeof seq !== "number" || !Number.isInteger(seq)) return
-
-    const terminal =
-      event === "response.completed" ||
-      event === "response.failed" ||
-      event === "response.incomplete"
-
-    this._writer.write({
-      type: "data-streamProgress",
-      transient: true,
-      data: {
-        responseId: this._responseId,
-        sequenceNumber: seq,
-        terminal,
-      },
-    } as WriterEvent)
-  }
-
-  /**
-   * Pull the agent registry off the `response.created` event's
-   * `Response.metadata` per `responses_v1.md` §4. Tolerant of missing
-   * or malformed entries — the spec guarantees the per-item id prefix
-   * as the source of truth, so a missing registry only loses display
-   * names, not subagent visibility.
-   */
-  private _loadRegistryFromResponse(response: ResponseObject | undefined): void {
+  private _loadRegistry(response: ResponseCreatedPayload | undefined): void {
     const metadata = response?.metadata
     if (!metadata) return
 
@@ -499,42 +402,209 @@ class TranslationState {
     }
   }
 
-  private _writeTextDelta(itemId: string, delta: string): void {
-    let partId = this._textPartIds.get(itemId)
-    if (partId === undefined) {
-      partId = crypto.randomUUID()
-      this._textPartIds.set(itemId, partId)
-      this._writer.write({ type: "text-start", id: partId } as WriterEvent)
-    }
+  private _decodeAgentFromItemId(itemId: string | undefined): string | null {
+    if (!itemId) return null
+    const match = itemId.match(/^agent:([^:]+)::/)
+    return match ? (match[1] ?? null) : null
+  }
+
+  private _maybeAnnounceSubagent(itemId: string | undefined): void {
+    const agentId = this._decodeAgentFromItemId(itemId)
+    if (!agentId) return
+    if (this._rootAgentId !== null && agentId === this._rootAgentId) return
+    if (this._announcedSubagents.has(agentId)) return
+
+    const entry = this._registry.get(agentId)
+    const displayName = entry?.name ?? agentId
+
     this._writer.write({
-      type: "text-delta",
-      id: partId,
-      delta,
+      type: "data-subagent",
+      data: {
+        agentId,
+        name: displayName,
+        kind: entry?.kind ?? "subagent",
+        parentId: entry?.parent_id ?? null,
+        dispatchedByToolCallId: entry?.dispatched_by_tool_call_id ?? null,
+      },
     } as WriterEvent)
-    this._fullText += delta
+    this._announcedSubagents.add(agentId)
   }
 
-  /**
-   * Close the text part scoped to a single output item. No-op when the
-   * item never produced any text (e.g. function-call items, or items
-   * whose `output_item.done` arrives before any deltas).
-   */
-  private _closeTextPart(itemId: string): void {
-    const partId = this._textPartIds.get(itemId)
-    if (partId === undefined) return
-    this._writer.write({ type: "text-end", id: partId } as WriterEvent)
-    this._textPartIds.delete(itemId)
-  }
+  // ── Result accessor ────────────────────────────────────────────────────────
 
-  /**
-   * Close every still-open text part. Called from `finish()` and on
-   * terminal events as a safety net for streams that drop without
-   * matching `output_item.done` events.
-   */
-  private _closeAllTextParts(): void {
-    for (const partId of this._textPartIds.values()) {
-      this._writer.write({ type: "text-end", id: partId } as WriterEvent)
+  result(): PlatformResponseResult {
+    return {
+      text: this._fullText,
+      responseId: this._responseId,
+      usage: this._usage,
+      ok: this._ok,
     }
-    this._textPartIds.clear()
+  }
+}
+
+// ── Resume-path SSE translator ───────────────────────────────────────────────
+//
+// The mid-stream resume endpoint (`GET /agent/:id/responses/:respId?starting_after=<seq>`)
+// returns a raw SSE body in the same Responses-API event format. We cannot
+// drive it through `streamText` (which always POSTs) so the resume route
+// in `app/api/chat/resume/route.ts` calls `translateResponseStream` directly
+// with the raw body from `resumeResponsesStream`.
+
+export interface TranslateOptions {
+  writer: StreamWriter
+  conversationId: string
+  /** Forward the request's abort signal to cancel the upstream body reader. */
+  signal?: AbortSignal
+}
+
+/**
+ * Read an OpenAI Responses-API SSE stream from `body` and translate
+ * each event onto the AI SDK UI message stream `writer`.
+ *
+ * Used by the resume route. Returns the settled result so the caller
+ * can persist the completed turn.
+ */
+export async function translateResponseStream(
+  body: ReadableStream<Uint8Array>,
+  opts: TranslateOptions,
+): Promise<PlatformResponseResult> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  const state = new SidecarState(opts.writer)
+
+  // Emit data-conversationId so the client can rewrite its URL on resume.
+  opts.writer.write({
+    type: "data-conversationId",
+    data: opts.conversationId,
+  } as WriterEvent)
+
+  const onAbort = (): void => {
+    reader.cancel(opts.signal?.reason ?? new Error("aborted")).catch(() => {})
+  }
+  if (opts.signal) {
+    if (opts.signal.aborted) onAbort()
+    else opts.signal.addEventListener("abort", onAbort, { once: true })
+  }
+
+  try {
+    // Track open text parts: keyed by output item id → AI SDK text-part id.
+    const openTextParts = new Map<string, string>()
+
+    while (true) {
+      if (opts.signal?.aborted) break
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let boundary = buffer.indexOf("\n\n")
+      while (boundary !== -1) {
+        const frame = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        boundary = buffer.indexOf("\n\n")
+
+        const parsed = parseSseFrame(frame)
+        if (!parsed) continue
+
+        const { event, data } = parsed
+        if (typeof data !== "object" || data === null) continue
+        const payload = data as Record<string, unknown>
+
+        // Delegate to SidecarState for platform extensions.
+        state.handleRawPart(payload)
+
+        // Translate the text and tool events to UIMessageChunk.
+        switch (event) {
+          case "response.output_text.delta": {
+            const delta = payload.delta
+            const itemId = typeof payload.item_id === "string" ? payload.item_id : null
+            if (typeof delta === "string" && delta.length > 0 && itemId !== null) {
+              let partId = openTextParts.get(itemId)
+              if (partId === undefined) {
+                partId = crypto.randomUUID()
+                openTextParts.set(itemId, partId)
+                opts.writer.write({ type: "text-start", id: partId } as WriterEvent)
+              }
+              opts.writer.write({ type: "text-delta", id: partId, delta } as WriterEvent)
+              state.accumulateText(delta)
+            }
+            break
+          }
+          case "response.output_item.done": {
+            const item = payload.item as Record<string, unknown> | undefined
+            const itemId = typeof item?.id === "string" ? item.id : null
+            if (itemId !== null) {
+              const partId = openTextParts.get(itemId)
+              if (partId !== undefined) {
+                opts.writer.write({ type: "text-end", id: partId } as WriterEvent)
+                openTextParts.delete(itemId)
+              }
+            }
+            break
+          }
+          case "response.function_call_arguments.done": {
+            const name = typeof payload.name === "string" ? payload.name : null
+            const argsStr = typeof payload.arguments === "string" ? payload.arguments : ""
+            const callId =
+              typeof payload.item_id === "string" ? payload.item_id : crypto.randomUUID()
+            if (name !== null) {
+              let args: unknown = argsStr
+              if (argsStr.trim().length > 0) {
+                try {
+                  args = JSON.parse(argsStr)
+                } catch {
+                  // Leave as raw string when arguments aren't valid JSON.
+                }
+              }
+              state.handleToolCall(callId, name, args)
+            }
+            break
+          }
+          default:
+            break
+        }
+      }
+    }
+
+    // Close any text parts that didn't receive an output_item.done.
+    for (const [, partId] of openTextParts) {
+      opts.writer.write({ type: "text-end", id: partId } as WriterEvent)
+    }
+    openTextParts.clear()
+  } finally {
+    if (opts.signal) opts.signal.removeEventListener("abort", onAbort)
+    reader.releaseLock()
+  }
+
+  return state.result()
+}
+
+/**
+ * Parse one `text/event-stream` frame into `(event, data)`. Returns null
+ * for comment-only frames or frames whose data fails JSON parsing.
+ */
+function parseSseFrame(frame: string): { event: string; data: unknown } | null {
+  let event = ""
+  const dataLines: string[] = []
+
+  for (const rawLine of frame.split("\n")) {
+    if (rawLine.startsWith(":") || rawLine.length === 0) continue
+    if (rawLine.startsWith("event:")) {
+      event = rawLine.slice(6).trim()
+      continue
+    }
+    if (rawLine.startsWith("data:")) {
+      dataLines.push(rawLine.slice(5).replace(/^ /, ""))
+    }
+  }
+
+  if (!event || dataLines.length === 0) return null
+
+  const dataStr = dataLines.join("\n")
+  try {
+    return { event, data: JSON.parse(dataStr) as unknown }
+  } catch {
+    return null
   }
 }

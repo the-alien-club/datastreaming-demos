@@ -25,7 +25,7 @@ import { agents, conversations, messages } from "@/lib/db/schema"
 import { resumeResponsesStream } from "@/lib/platform/client"
 import {
   translateResponseStream,
-  type TranslatedResponseResult,
+  type PlatformResponseResult,
 } from "@/lib/platform/responses_stream"
 import { badRequest, conflict, notFound, unauthorized } from "@/lib/api-response"
 import { filterPersistableParts } from "@/lib/chat/persisted-parts"
@@ -96,7 +96,7 @@ export async function POST(request: Request): Promise<Response> {
   // Mirror the POST route: capture the translator's result so the
   // background persistence branch can pull responseId/usage/text from
   // it after the chunk stream finishes.
-  let translation: TranslatedResponseResult | null = null
+  let translation: PlatformResponseResult | null = null
 
   const chunkStream = createUIMessageStream({
     execute: async ({ writer }) => {
@@ -134,14 +134,14 @@ interface PersistResumeArgs {
   conversationId: string
   responseId: string
   alreadyPersisted: boolean
-  getResult: () => TranslatedResponseResult | null
+  getResult: () => PlatformResponseResult | null
 }
 
 /**
  * Drain the resume's tee'd chunk stream and persist the assistant turn —
  * but only when the original POST didn't already write it (detected via
  * `conversation.sessionId === responseId`) and only on clean terminations
- * (`result.error` is null). Mirrors the POST-side persistence shape
+ * (`result.ok` is true). Mirrors the POST-side persistence shape
  * (content + parts + metadata) so a second refresh recovers the same
  * rich rendering.
  */
@@ -163,7 +163,9 @@ async function persistResumedAssistantMessage({
 
   if (alreadyPersisted) return
   const result = getResult()
-  if (!result || result.error !== null) return
+  // Only persist on clean termination — if the stream failed we don't
+  // want to write a partial/error turn as the canonical assistant message.
+  if (!result || !result.ok) return
 
   const persistedParts = filterPersistableParts(assembled?.parts)
 
