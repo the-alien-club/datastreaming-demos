@@ -42,7 +42,7 @@
 //                          client-side localStorage resume cursor.
 
 import { createOpenAI } from "@ai-sdk/openai"
-import { streamText, type createUIMessageStream } from "ai"
+import { smoothStream, streamText, type createUIMessageStream } from "ai"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,6 +155,7 @@ export async function runPlatformResponse(
     prompt,
     includeRawChunks: true,
     abortSignal: signal,
+    experimental_transform: smoothStream({ delayInMs: 20, chunking: "word" }),
     ...(previousResponseId !== undefined && previousResponseId !== null
       ? { providerOptions: { openai: { previousResponseId } } }
       : {}),
