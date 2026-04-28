@@ -1,6 +1,6 @@
 {
   "name": "lds-chatbot",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -34,6 +34,7 @@
     "motion": "^12.38.0",
     "nanoid": "^5.1.9",
     "next": "16.2.4",
+    "next-intl": "^4.9.2",
     "next-themes": "^0.4.6",
     "pg": "^8.20.0",
     "radix-ui": "^1.4.3",
