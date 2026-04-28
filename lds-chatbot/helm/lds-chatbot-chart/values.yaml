@@ -103,13 +103,22 @@ config:
   # Set to "1" to print every globalThis.fetch URL+status to stderr — strictly
   # for debugging better-auth fetch failures. Empty = disabled.
   fetchTrace: ""
+  # Numeric ID of the enterprise org users should be auto-provisioned into.
+  # Must be set alongside secrets.chatbot.scalewaySecretName. Leave empty
+  # to disable org auto-provisioning (chatbot works in standalone mode).
+  orgId: ""
 
-# Scaleway Secret Manager reference for Authentik OAuth credentials.
+# Scaleway Secret Manager references for secrets.
 secrets:
   authentik:
     scalewaySecretName: authentik-prod
     clientIdProperty: AUTHENTIK_CLIENT_ID
     clientSecretProperty: AUTHENTIK_CLIENT_SECRET
+  chatbot:
+    # Name of the Scaleway Secret Manager secret containing ADMIN_TOKEN.
+    # Leave empty to disable the chatbot ExternalSecret entirely.
+    scalewaySecretName: ""
+    adminTokenProperty: ADMIN_TOKEN
 
 livenessProbe:
   httpGet:

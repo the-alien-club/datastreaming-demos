@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { agents, agentSubagents } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { and, desc, eq, ne } from "drizzle-orm"
 import { createWorkflow } from "@/lib/platform/client"
 import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
 import { resolveAccessToken } from "@/lib/auth-helpers"
@@ -15,13 +15,23 @@ export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) return unauthorized()
 
-  const rows = await db.query.agents.findMany({
-    where: eq(agents.userId, session.user.id),
-    orderBy: [desc(agents.createdAt)],
-    with: { subagents: true },
-  })
+  const [ownRows, publicRows] = await Promise.all([
+    db.query.agents.findMany({
+      where: eq(agents.userId, session.user.id),
+      orderBy: [desc(agents.createdAt)],
+      with: { subagents: true },
+    }),
+    db.query.agents.findMany({
+      where: and(eq(agents.isPublic, true), ne(agents.userId, session.user.id)),
+      orderBy: [desc(agents.createdAt)],
+      with: { subagents: true },
+    }),
+  ])
 
-  return ok(rows)
+  return ok([
+    ...ownRows.map((r) => ({ ...r, isOwn: true })),
+    ...publicRows.map((r) => ({ ...r, isOwn: false })),
+  ])
 }
 
 export async function POST(request: NextRequest) {

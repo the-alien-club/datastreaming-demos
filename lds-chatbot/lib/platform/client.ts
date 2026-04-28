@@ -61,11 +61,18 @@ async function platformFetch(
   options: RequestInit,
   token: string
 ): Promise<Response> {
+  // API tokens issued by the platform start with "oat_" and are read by the
+  // backend's `api` guard via Authorization: Bearer. Authentik OAuth tokens go
+  // via x-oauth-access-token (oauth guard).
+  const authHeader: Record<string, string> = token.startsWith("oat_")
+    ? { authorization: `Bearer ${token}` }
+    : { [PLATFORM_OAUTH_TOKEN_HEADER]: token }
+
   const response = await fetch(`${PLATFORM_API_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      [PLATFORM_OAUTH_TOKEN_HEADER]: token,
+      ...authHeader,
       ...(options.headers as Record<string, string> | undefined),
     },
   })

@@ -19,3 +19,6 @@ data:
   {{- with .Values.config.fetchTrace }}
   FETCH_TRACE: {{ . | quote }}
   {{- end }}
+  {{- with .Values.config.orgId }}
+  ORG_ID: {{ . | quote }}
+  {{- end }}

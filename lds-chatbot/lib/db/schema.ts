@@ -46,6 +46,7 @@ export const agents = pgTable("agents", {
   steps: text("steps"), // JSON array of {name, prompt} objects
   starterPrompts: text("starter_prompts"), // JSON array of strings — chip-style suggestions for empty conversations
   model: text("model").default("gpt-4.1-mini"),
+  isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
@@ -97,6 +98,7 @@ export const datasets = pgTable("datasets", {
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").default("pending"), // pending | processing | ready | error
+  isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })

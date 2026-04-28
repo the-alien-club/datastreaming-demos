@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth"
 import { genericOAuth } from "better-auth/plugins"
 import { pool } from "@/lib/db"
 import { OAUTH_PROVIDER_ID } from "@/lib/constants"
+import { ensureOrgMembership } from "@/lib/platform/onboarding"
 
 // Server-side only — must NOT use the NEXT_PUBLIC_ prefix or Next.js
 // constant-folds it to the build-time placeholder.
@@ -26,6 +27,17 @@ export const auth = betterAuth({
   account: {
     accountLinking: {
       enabled: true,
+    },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session) => {
+          // Run org onboarding once per session creation.
+          // Errors are swallowed inside ensureOrgMembership.
+          await ensureOrgMembership(session.userId)
+        },
+      },
     },
   },
   plugins: [
