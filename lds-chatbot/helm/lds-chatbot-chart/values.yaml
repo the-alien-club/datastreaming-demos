@@ -91,7 +91,7 @@ config:
   # changes for this demo) hasn't been promoted to prod yet.
   platformApiUrl: https://api.alpha.alien.club
   clusterId: "155"
-  datalclusterMcpUrl: https://mcp-test-lds-1772018329422.mcp.alpha.alien.club/mcp
+  datalclusterMcpUrl: https://mcp-legaldataspace-eu-1776167705541.mcp.alpha.alien.club/mcp
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
   # better-auth's baseURL is the bare host — basePath is added at the
