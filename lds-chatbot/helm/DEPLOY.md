@@ -19,14 +19,16 @@ Deployment  replicas=1         (stateless Next.js app, basePath=/agents)
    │
    └─ Connects to:
       ├─ StatefulSet <release>-postgres:5432  (bundled Postgres, PVC-backed)
-      ├─ api.alien.club         (Alien Backend — workflow engine, AI models)
-      ├─ mcp.alien.club         (Data Cluster MCP — RAG)
+      ├─ api.alpha.alien.club   (Alien Backend — workflow engine, Responses API)
+      ├─ mcp.alpha.alien.club   (Data Cluster MCP — RAG)
       └─ auth.alien.club        (Authentik — OAuth2/OIDC)
 ```
 
 **Storage**: a bundled Postgres StatefulSet with a PVC owned by `volumeClaimTemplates` holds all app state (agents, conversations, messages, better-auth sessions). The app pod itself is stateless.
 
 **Gateway / certificate**: by default the chart **attaches** to an existing Istio Gateway that already serves `demo.alien.club` and provisions its own Certificate. The name of that Gateway is supplied via `istio.sharedGatewayName` (required).
+
+---
 
 ## Naming Conventions
 
@@ -36,8 +38,156 @@ Deployment  replicas=1         (stateless Next.js app, basePath=/agents)
 | Helm release name | `demo-lds-chatbot-prod` |
 | Kubernetes namespace | `demo-lds-chatbot` |
 | All resources | prefixed `demo-lds-chatbot-prod-…` |
+| Image repo | `rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot` |
+| k8s context | `platform-prod` |
 
-## Prerequisites
+---
+
+## Protected Secrets — DO NOT TOUCH
+
+These two Secrets are annotated `helm.sh/resource-policy: keep` and survive chart upgrades. **Never delete or edit them directly.**
+
+- `demo-lds-chatbot-prod-postgres` — Postgres password (generated once at first install)
+- `demo-lds-chatbot-prod-app` — `BETTER_AUTH_SECRET` (generated once at first install)
+
+Deleting either will break the app irreversibly (all sessions invalidated; Postgres data unreachable).
+
+---
+
+## Release Loop
+
+### 1. Pre-flight checks
+
+All three must be green before building. Fix any errors; warnings are acceptable.
+
+```bash
+cd datastreaming-demos/lds-chatbot
+
+npx tsc --noEmit          # 0 errors
+npm test -- --run         # all tests pass (currently 49/49)
+npx eslint .              # 0 errors (warnings OK)
+```
+
+### 2. Version bump
+
+Bump **both** files to the same version (e.g. `0.2.6`):
+
+```bash
+# 1. package.json — "version" field
+# 2. helm/lds-chatbot-chart/values.yaml — image.tag
+```
+
+They must stay in sync. The Helm tag is what ArgoCD deploys; `package.json` is what shows in logs and `npm run --version`.
+
+### 3. Commit
+
+Stage only production files — never commit debug scripts, spike files, or `.log` files:
+
+```bash
+git add \
+  package.json \
+  helm/lds-chatbot-chart/values.yaml \
+  <...any changed source files...>
+
+# Example:
+git commit -m "feat(chatbot): <description> + bump to 0.2.6"
+```
+
+No `Co-Authored-By` lines. No `spike_*.mjs`, `*.log`, or scratch files.
+
+### 4. Build and push
+
+`NEXT_PUBLIC_BASE_PATH=/agents` is **baked into the client bundle** at build time. It must match `istio.path` in `values.yaml` — both are `/agents`.
+
+```bash
+cd datastreaming-demos/lds-chatbot
+
+docker build \
+  --build-arg NEXT_PUBLIC_BASE_PATH=/agents \
+  -t rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot:0.2.6 \
+  .
+
+docker push rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot:0.2.6
+```
+
+Build takes ~5–7 min. Push takes ~1–2 min (layers are cached after first push).
+
+### 5. Push to git → ArgoCD auto-sync
+
+```bash
+git push origin main
+```
+
+ArgoCD has `automated.selfHeal: true` on `demo-lds-chatbot-prod`. It polls git every ~3 min. To force immediate pickup:
+
+```bash
+kubectl --context platform-prod \
+  annotate application demo-lds-chatbot-prod -n argocd \
+  argocd.argoproj.io/refresh=hard --overwrite
+```
+
+Watch the rollout:
+
+```bash
+# Poll sync + health + running image
+for i in $(seq 1 20); do
+  sleep 10
+  STATUS=$(kubectl --context platform-prod get application demo-lds-chatbot-prod \
+    -n argocd -o jsonpath='{.status.sync.status} {.status.health.status}' 2>&1)
+  IMAGE=$(kubectl --context platform-prod get pods -n demo-lds-chatbot \
+    -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null)
+  echo "$(date -u +%H:%M:%S) $STATUS | $IMAGE"
+  [[ "$STATUS" == "Synced Healthy" && "$IMAGE" == *"0.2.6"* ]] && break
+done
+```
+
+### 6. Verify startup logs
+
+```bash
+kubectl --context platform-prod logs -n demo-lds-chatbot \
+  deploy/demo-lds-chatbot-prod --tail=30
+```
+
+Expected clean boot sequence:
+```
+[entrypoint] Waiting for Postgres at …:5432...
+[entrypoint] Postgres is ready.
+[entrypoint] Applying drizzle migrations...
+[migrate-db] Drizzle migrations complete.
+[entrypoint] Applying better-auth migrations...
+Database is already up to date.
+[entrypoint] Starting Next.js server...
+▲ Next.js 16.x.x
+✓ Ready in 0ms
+```
+
+Any error before `Ready` is a startup failure — check the logs for the specific migration or config issue.
+
+### 7. Playwright smoke (optional but recommended)
+
+Sign in to https://demo.alien.club/agents with `leo@alien.club`. Verify:
+- All sidebar items load without "Failed to load" toasts
+- Create or open an existing agent
+- Send a short message — response should stream within ~10–15s
+- Sign out
+
+---
+
+## Current State (as of 0.2.5)
+
+| Item | Value |
+|---|---|
+| Live version | `0.2.5` |
+| Image digest | `sha256:ac8d32f52543f7615319d5d027df049a5283b1a7dea60de8b49029004162eed7` |
+| Platform backend | `api.alpha.alien.club` (dev environment — not prod) |
+| Workers | `workers:0.5.37-dev` on `platform-dev` / `datastreaming-dev` |
+| Cluster ID | `88` (data cluster on alpha) |
+
+**Note**: the chatbot currently targets `api.alpha.alien.club` (the dev Alien Backend), not `api.alien.club`. This is intentional — the Responses API and streaming features were developed on the dev environment and have not been promoted to prod yet.
+
+---
+
+## Prerequisites (first install only)
 
 - Kubernetes cluster with:
   - Istio (`ingressgateway` in `istio-system`)
@@ -46,94 +196,123 @@ Deployment  replicas=1         (stateless Next.js app, basePath=/agents)
   - Scaleway Secret Manager secret `authentik-prod` with properties `AUTHENTIK_CLIENT_ID` / `AUTHENTIK_CLIENT_SECRET`
 - Authentik: redirect URI `https://demo.alien.club/agents/api/auth/oauth2/callback/authentik` registered on the `datastreaming` application
 
-## Build & Push Image
-
-`NEXT_PUBLIC_BASE_PATH=/agents` is baked into the client bundle at build time — must match `istio.path` in `values.yaml`.
-
-```bash
-cd datastreaming-demos/lds-chatbot
-
-docker build \
-  --build-arg NEXT_PUBLIC_BASE_PATH=/agents \
-  -t rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot:0.1.0 .
-
-docker push rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot:0.1.0
-```
-
-Bump `image.tag` in `helm/lds-chatbot-chart/values.yaml` to match.
-
-## Find the Shared Gateway Name
+### Find the shared Gateway name
 
 ```bash
 kubectl --context platform-prod get vs -A -o wide | grep demo.alien.club
 ```
 
-The command prints the VirtualService(s) already attached to that host; the `GATEWAYS` column contains the Gateway reference as `istio-system/<name>`. Record `<name>` — you'll pass it to the chart via `istio.sharedGatewayName`.
+The `GATEWAYS` column prints `istio-system/<name>`. Pass `<name>` to `istio.sharedGatewayName`.
 
-## Deploy via ArgoCD
+### Apply the ArgoCD application (once)
 
-`helm/argocd-application.yaml` already pins `istio.sharedGatewayName` to `demo-openaire-prod-gateway` (the Gateway currently serving `demo.alien.club` on platform-prod). If that Gateway is ever renamed/replaced, update the `parameters` block in the Application manifest.
+`helm/argocd-application.yaml` pins `istio.sharedGatewayName` to `demo-openaire-prod-gateway`. If that Gateway is ever renamed, update the `parameters` block.
 
 ```bash
 kubectl --context platform-prod apply -f helm/argocd-application.yaml
 ```
 
-If `istio.sharedGatewayName` is unset, `helm template` fails fast with a clear error — the Application will show a sync failure in ArgoCD instead of rendering an invalid VirtualService.
-
-ArgoCD sync waves:
-- `-2`: ConfigMap, ExternalSecret (Authentik), Secret (BETTER_AUTH_SECRET, Postgres credentials)
-- `0` (default): Postgres StatefulSet + Service, app Deployment + Service, VirtualService
-
-Generated-once secrets, preserved across upgrades (`helm.sh/resource-policy: keep`):
-- `…-app.BETTER_AUTH_SECRET` — 48 random chars
-- `…-postgres.POSTGRES_PASSWORD` — 32 random chars
-
-The Postgres PVC (via `volumeClaimTemplates` + the same annotation) also survives `helm uninstall`.
-
-## Deploy via Helm Directly
-
-```bash
-helm upgrade --install demo-lds-chatbot-prod ./helm/lds-chatbot-chart \
-  --namespace demo-lds-chatbot \
-  --create-namespace \
-  --set istio.sharedGatewayName=<gateway-name-from-the-step-above>
-```
-
-## Verify
-
-```bash
-CTX=platform-prod NS=demo-lds-chatbot
-kubectl --context $CTX get pods -n $NS
-kubectl --context $CTX logs -n $NS deploy/demo-lds-chatbot-prod -f
-kubectl --context $CTX exec -n $NS demo-lds-chatbot-prod-postgres-0 -- \
-  psql -U lds_chatbot -d lds_chatbot -c "\dt"
-kubectl --context $CTX get pvc -n $NS
-kubectl --context $CTX get vs -n $NS -o yaml | grep -A2 gateways:
-curl -I https://demo.alien.club/agents
-```
+---
 
 ## Configuration Knobs
 
 Edit `helm/lds-chatbot-chart/values.yaml` (or pass `--set` / ArgoCD parameters):
 
-| Key | Purpose | Default |
+| Key | Purpose | Current |
 |---|---|---|
-| `image.tag` | App container image tag | `0.1.0` |
+| `image.tag` | App container image tag | `0.2.5` |
+| `config.platformApiUrl` | Alien Backend base URL | `https://api.alpha.alien.club` |
+| `config.clusterId` | Data cluster ID | `88` |
+| `config.datalclusterMcpUrl` | Data Cluster MCP endpoint | `https://mcp-test-lds-…/mcp` |
 | `istio.host` | Public hostname | `demo.alien.club` |
-| `istio.path` | URI prefix; must match `NEXT_PUBLIC_BASE_PATH` build-arg | `/agents` |
-| `istio.sharedGatewayName` | **Required** when `gateway.create: false` | `""` |
-| `istio.gateway.create` | Have the chart create its own Gateway | `false` |
-| `istio.certificate.enabled` | Have the chart provision a cert-manager Certificate | `false` |
-| `config.platformApiUrl` | Alien Backend base URL | `https://api.alien.club` |
-| `config.clusterId` | Data cluster ID to query | `77` |
-| `config.betterAuthUrl` | better-auth public URL | `https://demo.alien.club/agents` |
+| `istio.path` | URI prefix; must match `NEXT_PUBLIC_BASE_PATH` | `/agents` |
+| `istio.sharedGatewayName` | **Required** — existing Gateway name | see `argocd-application.yaml` |
 | `postgres.persistence.size` | Postgres PVC size | `5Gi` |
-| `postgres.resources` | Postgres CPU / memory | 100m/256Mi → 500m/1Gi |
 | `resources` | App CPU / memory | 250m/512Mi → 1000m/2Gi |
+
+---
+
+## ArgoCD Sync Waves
+
+| Wave | Resources |
+|---|---|
+| `-2` | ConfigMap, ExternalSecret (Authentik), Secrets (app + postgres) |
+| `0` (default) | Postgres StatefulSet + Service, app Deployment + Service, VirtualService |
+
+---
+
+## Troubleshooting
+
+### App pod `CrashLoopBackOff`
+
+```bash
+kubectl --context platform-prod logs -n demo-lds-chatbot deploy/demo-lds-chatbot-prod
+```
+
+The entrypoint waits up to ~2 min for Postgres, then runs drizzle + better-auth migrations. Most startup failures are visible here.
+
+### Chat returns no response / blank stream
+
+Check workers first — this is the most common cause:
+
+```bash
+kubectl --context platform-dev logs -n datastreaming-dev \
+  -l app.kubernetes.io/name=workers --tail=50 | grep -i "error\|child nodes\|failed"
+```
+
+If you see `has no child nodes in the graph` → workers image is stale. Redeploy workers with current `dev` HEAD (see workers repo).
+
+### SQS dispatch delayed 60–90s
+
+Redis TLS stall on `responseStore.create()`. The fix (fire-and-forget Redis write, SQS first) is in `web-app` backend `0.6.67-dev+`. If this recurs, check the Redis connection to `redis-demos` on Scaleway.
+
+### Postgres pod stuck `Pending`
+
+PVC unbound — storage class mismatch:
+
+```bash
+kubectl --context platform-prod describe pvc -n demo-lds-chatbot \
+  data-demo-lds-chatbot-prod-postgres-0
+kubectl --context platform-prod get storageclass
+```
+
+Leave `postgres.persistence.storageClassName` unset to use the cluster default (`sbs-default` on Scaleway).
+
+### OAuth callback 400 / `redirect_uri_mismatch`
+
+Authentik redirect URI must exactly match `${BETTER_AUTH_URL}/api/auth/oauth2/callback/authentik`. Changes to `istio.host` / `config.betterAuthUrl` require updating the Authentik application in tandem.
+
+### VirtualService not routing
+
+```bash
+kubectl --context platform-prod get gateway -n istio-system
+kubectl --context platform-prod get vs -n demo-lds-chatbot -o yaml | grep -A2 gateways:
+```
+
+The VirtualService `gateways` reference (`istio-system/<sharedGatewayName>`) must point at an existing Gateway whose `hosts` includes `demo.alien.club`.
+
+### ArgoCD stuck OutOfSync after image tag change
+
+The ArgoCD Image Updater stores the image tag as a **Helm parameter override** directly on the Application object — this takes precedence over `values.yaml` in git. If the deployed tag doesn't match git:
+
+```bash
+# Check what tag ArgoCD is actually using
+kubectl --context platform-prod get application demo-lds-chatbot-prod \
+  -n argocd -o jsonpath='{.spec.source.helm.parameters}'
+
+# Patch it directly to force the correct tag
+kubectl --context platform-prod patch application demo-lds-chatbot-prod \
+  -n argocd --type json \
+  -p '[{"op":"replace","path":"/spec/source/helm/parameters/0/value","value":"0.2.6"}]'
+```
+
+**Never** use `kubectl delete application` on `platform-prod` — this cascades and deletes all managed resources including the Postgres StatefulSet and PVC.
+
+---
 
 ## Standalone Mode (own Gateway + Cert)
 
-If no shared Gateway exists for your target host, or you want the chart fully self-contained, flip:
+If no shared Gateway exists for your target host, flip:
 
 ```yaml
 istio:
@@ -146,35 +325,9 @@ istio:
     issuerName: letsencrypt
 ```
 
-The chart will then provision its own `Gateway` in `istio.gatewayNamespace` and a `Certificate` in the same namespace.
-
-## Troubleshooting
-
-### App pod `CrashLoopBackOff`
-```bash
-kubectl --context platform-prod logs -n demo-lds-chatbot deploy/demo-lds-chatbot-prod
-```
-The entrypoint waits up to ~2 min for Postgres (`pg_isready`), then runs drizzle + better-auth migrations. Most startup failures are visible here.
-
-### Postgres pod stuck `Pending`
-PVC unbound — usually a storage class mismatch.
-```bash
-kubectl --context platform-prod describe pvc -n demo-lds-chatbot data-demo-lds-chatbot-prod-postgres-0
-kubectl --context platform-prod get storageclass
-```
-Leave `postgres.persistence.storageClassName` unset to use the cluster default (on Scaleway that's `sbs-default`).
-
-### OAuth callback fails (400 / redirect_uri_mismatch)
-Authentik redirect URI must exactly match `${BETTER_AUTH_URL}/api/auth/oauth2/callback/authentik`. Changes to `istio.host` / `istio.path` / `config.betterAuthUrl` require updating the Authentik application config in tandem.
-
-### VirtualService not routing
-```bash
-kubectl --context platform-prod get gateway -n istio-system
-kubectl --context platform-prod get vs -n demo-lds-chatbot -o yaml | grep -A2 gateways:
-```
-The VirtualService's `gateways` reference (`istio-system/<sharedGatewayName>`) must point at an existing Gateway whose `hosts` includes `demo.alien.club`.
+---
 
 ## Data Persistence Notes
 
-- Bundled Postgres has **no replication and no backup**. For a client demo this is fine — for real production you'd want Scaleway Managed Database or at minimum a cron-based `pg_dump` to object storage.
-- The StatefulSet PVC + generated Postgres Secret are both `helm.sh/resource-policy: keep` — uninstalling the chart leaves them in place. To truly wipe state, delete the PVC and Secret manually after `helm uninstall`.
+- Bundled Postgres has **no replication and no backup**. For a client demo this is fine — for real production use Scaleway Managed Database or a cron-based `pg_dump` to object storage.
+- The StatefulSet PVC + generated Secrets are `helm.sh/resource-policy: keep` — uninstalling the chart leaves them in place. To fully wipe state, delete the PVC and Secrets manually after `helm uninstall`.
