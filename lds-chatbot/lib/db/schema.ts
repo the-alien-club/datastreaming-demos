@@ -18,6 +18,7 @@ export const mcps = pgTable("mcps", {
   description: text("description"),
   category: text("category"), // e.g. 'data', 'research', 'legal'
   enabled: boolean("enabled").default(true),
+  isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
@@ -30,6 +31,7 @@ export const specialists = pgTable("specialists", {
   systemPrompt: text("system_prompt").notNull(),
   model: text("model").default("gpt-4.1-mini"),
   mcpIds: text("mcp_ids"),
+  isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })

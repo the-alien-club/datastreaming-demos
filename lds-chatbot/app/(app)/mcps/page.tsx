@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Server, Plus, Trash2, Pencil, Loader2, KeyRound } from "lucide-react"
+import { Server, Plus, Trash2, Pencil, Loader2, KeyRound, Globe, Lock } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 
@@ -19,6 +19,7 @@ interface McpRecord {
   description: string | null
   category: string | null
   enabled: boolean | null
+  isPublic: boolean
   createdAt: number | null
   updatedAt: number | null
 }
@@ -219,6 +220,7 @@ export default function McpsPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState<string | null>(null)
   const [dialog, setDialog] = useState<null | { isNew: true } | McpRecord>(null)
 
   useEffect(() => {
@@ -259,6 +261,25 @@ export default function McpsPage() {
       toast.error(err instanceof Error ? err.message : "Failed to update")
     } finally {
       setToggling(null)
+    }
+  }
+
+  async function handleTogglePublic(mcp: McpRecord) {
+    setPublishing(mcp.id)
+    try {
+      const res = await apiFetch(`/api/mcps/${mcp.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: !mcp.isPublic }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const updated: McpRecord = await res.json()
+      setMcps((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
+      toast.success(updated.isPublic ? "MCP published" : "MCP set to private")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update")
+    } finally {
+      setPublishing(null)
     }
   }
 
@@ -336,6 +357,12 @@ export default function McpsPage() {
                   ) : (
                     <Badge variant="secondary" className="text-xs">disabled</Badge>
                   )}
+                  {mcp.isPublic && (
+                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
+                      <Globe className="h-3 w-3" />
+                      public
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate font-mono">
                   {mcp.serverUrl}
@@ -347,6 +374,21 @@ export default function McpsPage() {
                 )}
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={publishing === mcp.id}
+                  onClick={() => handleTogglePublic(mcp)}
+                >
+                  {publishing === mcp.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : mcp.isPublic ? (
+                    <><Lock className="h-3 w-3 mr-1" />Make Private</>
+                  ) : (
+                    <><Globe className="h-3 w-3 mr-1" />Make Public</>
+                  )}
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

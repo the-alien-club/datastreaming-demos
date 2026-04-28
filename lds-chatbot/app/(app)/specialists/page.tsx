@@ -8,8 +8,9 @@ import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { BrainCircuit, Plus, Settings } from "lucide-react"
+import { BrainCircuit, Globe, Plus, Settings } from "lucide-react"
 import { DeleteCardAction } from "@/components/delete-card-action"
+import { PublishCardAction } from "@/components/publish-card-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export default async function SpecialistsPage() {
@@ -70,6 +71,9 @@ export default async function SpecialistsPage() {
                   <CardTitle className="text-base flex items-center gap-2">
                     <BrainCircuit className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="truncate">{specialist.name}</span>
+                    {specialist.isPublic && (
+                      <Globe className="h-3.5 w-3.5 text-blue-500 shrink-0" aria-label="Public" />
+                    )}
                   </CardTitle>
                   {specialist.description && (
                     <CardDescription className="line-clamp-2 text-sm">
@@ -90,13 +94,18 @@ export default async function SpecialistsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">Created {createdAt}</p>
                 </CardContent>
-                <CardFooter className="pt-2 gap-2">
+                <CardFooter className="pt-2 gap-2 flex-wrap">
                   <Button asChild variant="outline" size="sm" className="flex-1">
                     <Link href={`/specialists/${specialist.id}`}>
                       <Settings className="h-3.5 w-3.5 mr-1.5" />
                       Edit
                     </Link>
                   </Button>
+                  <PublishCardAction
+                    resource="specialist"
+                    endpoint={`/api/specialists/${specialist.id}`}
+                    isPublic={specialist.isPublic}
+                  />
                   <DeleteCardAction
                     resource="specialist"
                     name={specialist.name}

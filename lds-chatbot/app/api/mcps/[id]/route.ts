@@ -45,6 +45,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       description: "description" in body ? (body.description ?? null) : existing.description,
       category: "category" in body ? (body.category ?? null) : existing.category,
       enabled: body.enabled ?? existing.enabled,
+      isPublic: body.isPublic ?? existing.isPublic,
       updatedAt: new Date(),
     })
     .where(and(eq(mcps.id, id), eq(mcps.userId, session.user.id)))

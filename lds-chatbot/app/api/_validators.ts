@@ -119,6 +119,16 @@ export const updateMcpBodySchema = z.object({
   description: SHORT_TEXT.nullable().optional(),
   category: z.string().trim().max(50).nullable().optional(),
   enabled: z.boolean().optional(),
+  isPublic: z.boolean().optional(),
+})
+
+// ── Visibility patch ───────────────────────────────────────────────────────
+
+// Narrow schema for the PATCH /api/{mcps,specialists}/[id]/visibility endpoint.
+// Kept separate from the full PUT bodies so callers can toggle isPublic without
+// supplying the entire resource shape.
+export const patchVisibilityBodySchema = z.object({
+  isPublic: z.boolean(),
 })
 
 // ── Specialists ────────────────────────────────────────────────────────────

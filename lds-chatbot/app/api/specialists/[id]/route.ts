@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { specialists } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { ok, notFound, unauthorized } from "@/lib/api-response"
-import { parseBody, specialistBodySchema } from "../../_validators"
+import { parseBody, specialistBodySchema, patchVisibilityBodySchema } from "../../_validators"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export async function GET(
@@ -58,6 +58,36 @@ export async function PUT(
     where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
   })
 
+  if (!updated) return notFound()
+
+  return ok(updated)
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) return unauthorized()
+
+  const { id } = await params
+
+  const existing = await db.query.specialists.findFirst({
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
+  })
+  if (!existing) return notFound()
+
+  const parsed = await parseBody(request, patchVisibilityBodySchema)
+  if (parsed instanceof Response) return parsed
+
+  await db
+    .update(specialists)
+    .set({ isPublic: parsed.isPublic, updatedAt: new Date() })
+    .where(and(eq(specialists.id, id), eq(specialists.userId, session.user.id)))
+
+  const updated = await db.query.specialists.findFirst({
+    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
+  })
   if (!updated) return notFound()
 
   return ok(updated)
