@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { datasets, agentSubagents } from "@/lib/db/schema"
-import { sql, desc, eq } from "drizzle-orm"
+import { sql, and, desc, eq, ne } from "drizzle-orm"
 import { getClusterClient } from "@/lib/cluster/client"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { ok, unauthorized } from "@/lib/api-response"
@@ -13,24 +13,36 @@ export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) return unauthorized()
 
-  const rows = await db
-    .select({
-      id: datasets.id,
-      clusterDatasetId: datasets.clusterDatasetId,
-      name: datasets.name,
-      description: datasets.description,
-      status: datasets.status,
-      createdAt: datasets.createdAt,
-      updatedAt: datasets.updatedAt,
-      attachedAgentCount: sql<number>`count(distinct ${agentSubagents.agentId})`,
-    })
-    .from(datasets)
-    .leftJoin(agentSubagents, eq(agentSubagents.datasetId, datasets.id))
-    .where(eq(datasets.userId, session.user.id))
-    .groupBy(datasets.id)
-    .orderBy(desc(datasets.createdAt))
+  const cols = {
+    id: datasets.id,
+    clusterDatasetId: datasets.clusterDatasetId,
+    name: datasets.name,
+    description: datasets.description,
+    status: datasets.status,
+    createdAt: datasets.createdAt,
+    updatedAt: datasets.updatedAt,
+    attachedAgentCount: sql<number>`count(distinct ${agentSubagents.agentId})`,
+  }
 
-  return ok(rows)
+  const [ownRows, publicRows] = await Promise.all([
+    db.select(cols)
+      .from(datasets)
+      .leftJoin(agentSubagents, eq(agentSubagents.datasetId, datasets.id))
+      .where(eq(datasets.userId, session.user.id))
+      .groupBy(datasets.id)
+      .orderBy(desc(datasets.createdAt)),
+    db.select(cols)
+      .from(datasets)
+      .leftJoin(agentSubagents, eq(agentSubagents.datasetId, datasets.id))
+      .where(and(eq(datasets.isPublic, true), ne(datasets.userId, session.user.id)))
+      .groupBy(datasets.id)
+      .orderBy(desc(datasets.createdAt)),
+  ])
+
+  return ok([
+    ...ownRows.map((r) => ({ ...r, isOwn: true })),
+    ...publicRows.map((r) => ({ ...r, isOwn: false })),
+  ])
 }
 
 export async function POST(request: NextRequest) {
