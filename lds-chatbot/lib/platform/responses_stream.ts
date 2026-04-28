@@ -321,19 +321,8 @@ class SidecarState {
 
   // ── Text tracking ──────────────────────────────────────────────────────────
 
-  trackText(partId: string): void {
+  trackText(_partId: string): void {
     this._hasOpenTextPart = true
-    // If root-agent text resumes after a subagent was active, close the panel.
-    const agentId = this._decodeAgentFromItemId(partId)
-    if (
-      agentId !== null &&
-      this._rootAgentId !== null &&
-      agentId === this._rootAgentId &&
-      this._activeSubagentId !== null
-    ) {
-      this._writer.write({ type: "data-subagent-end", data: {} } as WriterEvent)
-      this._activeSubagentId = null
-    }
   }
 
   accumulateText(delta: string): void {
@@ -458,7 +447,14 @@ class SidecarState {
   private _maybeAnnounceSubagent(itemId: string | undefined): void {
     const agentId = this._decodeAgentFromItemId(itemId)
     if (!agentId) return
-    if (this._rootAgentId !== null && agentId === this._rootAgentId) return
+    if (this._rootAgentId !== null && agentId === this._rootAgentId) {
+      // Root agent added a new output item — if a subagent panel was open, close it.
+      if (this._activeSubagentId !== null) {
+        this._writer.write({ type: "data-subagent-end", data: {} } as WriterEvent)
+        this._activeSubagentId = null
+      }
+      return
+    }
     if (this._announcedSubagents.has(agentId)) return
 
     const entry = this._registry.get(agentId)
