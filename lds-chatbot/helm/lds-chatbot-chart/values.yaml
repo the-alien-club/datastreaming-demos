@@ -21,7 +21,7 @@ namespace: demo-lds-chatbot
 # NEXT_PUBLIC_BASE_PATH and must match `istio.path` below.
 istio:
   host: demo.alien.club
-  path: /agents/en/sign-in
+  path: /agents
 
   gatewayNamespace: istio-system
   # REQUIRED unless gateway.create is true. Name of the existing Istio Gateway
