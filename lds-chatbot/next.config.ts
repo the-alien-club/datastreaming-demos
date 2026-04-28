@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   // exists in a parent directory (e.g. monorepo checkout).
   turbopack: { root: path.resolve(".") },
   ...(basePath ? { basePath } : {}),
+  async redirects() {
+    // Redirect the basePath root to the default locale agents page.
+    // Without this, the [locale]/page.tsx redirect loops on itself.
+    return [{ source: "/", destination: "/en/agents", permanent: false }]
+  },
 }
 
 export default withNextIntl(nextConfig)
