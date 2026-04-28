@@ -1,0 +1,2 @@
+ALTER TABLE "mcps" ADD COLUMN IF NOT EXISTS "is_public" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "specialists" ADD COLUMN IF NOT EXISTS "is_public" boolean DEFAULT false NOT NULL;
