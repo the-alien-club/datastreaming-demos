@@ -1,7 +1,7 @@
 "use client"
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useTranslations } from "next-intl"
+import { Link, usePathname } from "@/i18n/routing"
 import { Bot, MessageSquare, Database, LogOut, BrainCircuit, Server, Sparkles } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
 import { useWizardStart } from "@/components/wizards/agents/start/wizard-context"
+import { LocaleSwitcher } from "@/components/locale-switcher"
 
 interface AppSidebarProps {
   user: {
@@ -18,17 +19,18 @@ interface AppSidebarProps {
   }
 }
 
-const navigation = [
-  { name: "Agents", href: "/agents", icon: Bot },
-  { name: "Specialists", href: "/specialists", icon: BrainCircuit },
-  { name: "Conversations", href: "/conversations", icon: MessageSquare },
-  { name: "Datasets", href: "/datasets", icon: Database },
-  { name: "MCP Servers", href: "/mcps", icon: Server },
-]
-
 export function AppSidebar({ user }: AppSidebarProps) {
+  const t = useTranslations("nav")
   const pathname = usePathname()
   const { openWizard } = useWizardStart()
+
+  const navigation = [
+    { name: t("agents"), href: "/agents" as const, icon: Bot },
+    { name: t("specialists"), href: "/specialists" as const, icon: BrainCircuit },
+    { name: t("conversations"), href: "/conversations" as const, icon: MessageSquare },
+    { name: t("datasets"), href: "/datasets" as const, icon: Database },
+    { name: t("mcpServers"), href: "/mcps" as const, icon: Server },
+  ]
 
   const handleSignOut = async () => {
     await authClient.signOut()
@@ -40,10 +42,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   return (
     <aside className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 items-center px-4">
-        <Link href="/agents" className="text-lg font-semibold">
-          LDS Chatbot
+      <div className="flex h-16 items-center justify-between px-4">
+        <Link href="/agents" className="flex flex-col gap-0.5">
+          <img src="/lds-logo.png" alt="Legal DataSpace" className="h-7 w-auto" />
+          <span className="text-[10px] italic text-muted-foreground leading-none">powered by Alien Intelligence</span>
         </Link>
+        <LocaleSwitcher />
       </div>
       <Separator />
       <div className="px-3 py-3">
@@ -53,7 +57,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
         >
           <Sparkles className="h-4 w-4" />
-          Start
+          {t("start")}
         </Button>
       </div>
       <Separator />
@@ -62,7 +66,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           const isActive = pathname.startsWith(item.href)
           return (
             <Link
-              key={item.name}
+              key={item.href}
               href={item.href}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
