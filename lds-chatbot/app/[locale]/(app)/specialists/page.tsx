@@ -52,7 +52,7 @@ export default async function SpecialistsPage() {
         </Button>
       </div>
 
-      {specialistList.length === 0 ? (
+      {ownSpecialists.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <BrainCircuit className="h-12 w-12 text-muted-foreground mb-4" />
           <h2 className="text-lg font-semibold mb-2">{t("emptyTitle")}</h2>
@@ -66,7 +66,7 @@ export default async function SpecialistsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {specialistList.map((specialist) => {
+          {ownSpecialists.map((specialist) => {
             const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
             const createdAt = specialist.createdAt
               ? new Date(specialist.createdAt).toLocaleDateString()
@@ -101,30 +101,79 @@ export default async function SpecialistsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">{t("created", { date: createdAt })}</p>
                 </CardContent>
-                {specialist.isOwn && (
-                  <CardFooter className="pt-2 gap-2 flex-wrap">
-                    <Button asChild variant="outline" size="sm" className="flex-1">
-                      <Link href={`/specialists/${specialist.id}`}>
-                        <Settings className="h-3.5 w-3.5 mr-1.5" />
-                        {tCommon("edit")}
-                      </Link>
-                    </Button>
-                    <PublishCardAction
-                      resource="specialist"
-                      endpoint={`/api/specialists/${specialist.id}`}
-                      isPublic={specialist.isPublic}
-                    />
-                    <DeleteCardAction
-                      resource="specialist"
-                      name={specialist.name}
-                      endpoint={`/api/specialists/${specialist.id}`}
-                    />
-                  </CardFooter>
-                )}
+                <CardFooter className="pt-2 gap-2 flex-wrap">
+                  <Button asChild variant="outline" size="sm" className="flex-1">
+                    <Link href={`/specialists/${specialist.id}`}>
+                      <Settings className="h-3.5 w-3.5 mr-1.5" />
+                      {tCommon("edit")}
+                    </Link>
+                  </Button>
+                  <PublishCardAction
+                    resource="specialist"
+                    endpoint={`/api/specialists/${specialist.id}`}
+                    isPublic={specialist.isPublic}
+                  />
+                  <DeleteCardAction
+                    resource="specialist"
+                    name={specialist.name}
+                    endpoint={`/api/specialists/${specialist.id}`}
+                  />
+                </CardFooter>
               </Card>
             )
           })}
         </div>
+      )}
+
+      {publicSpecialists.length > 0 && (
+        <>
+          <div className="flex items-center gap-3 mt-8 mb-4">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5" />
+              {t("publicSection")}
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {publicSpecialists.map((specialist) => {
+              const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
+              const createdAt = specialist.createdAt
+                ? new Date(specialist.createdAt).toLocaleDateString()
+                : "—"
+
+              return (
+                <Card key={specialist.id} className="flex flex-col">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <BrainCircuit className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{specialist.name}</span>
+                      <Globe className="h-3.5 w-3.5 text-blue-500 shrink-0" aria-label="Public" />
+                    </CardTitle>
+                    {specialist.description && (
+                      <CardDescription className="line-clamp-2 text-sm">
+                        {specialist.description}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="pb-2 flex-1">
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {specialist.model ?? DEFAULT_MODEL_SLUG}
+                      </Badge>
+                      {mcpIds.map((mcpId) => (
+                        <Badge key={mcpId} variant="outline" className="text-xs">
+                          {mcpNames.get(mcpId) ?? mcpId}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">{t("created", { date: createdAt })}</p>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

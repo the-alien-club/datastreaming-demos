@@ -323,7 +323,7 @@ export default function McpsPage() {
         </Button>
       </div>
 
-      {mcps.length === 0 ? (
+      {mcps.filter((m) => m.isOwn).length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <Server className="h-10 w-10 text-muted-foreground mb-4" />
           <p className="text-muted-foreground font-medium mb-4">{t("emptyDescription")}</p>
@@ -334,7 +334,7 @@ export default function McpsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {mcps.map((mcp) => (
+          {mcps.filter((m) => m.isOwn).map((mcp) => (
             <div
               key={mcp.id}
               className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
@@ -442,6 +442,51 @@ export default function McpsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {mcps.filter((m) => !m.isOwn).length > 0 && (
+        <>
+          <div className="flex items-center gap-3 mt-8 mb-4">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5" />
+              {t("publicSection")}
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="space-y-3">
+            {mcps.filter((m) => !m.isOwn).map((mcp) => (
+              <div
+                key={mcp.id}
+                className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
+              >
+                <Server className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold truncate">{mcp.name}</p>
+                    {mcp.category && (
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {mcp.category}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-xs font-mono">
+                      {mcp.transport ?? "streamable_http"}
+                    </Badge>
+                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
+                      <Globe className="h-3 w-3" />
+                      public
+                    </Badge>
+                  </div>
+                  {mcp.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {mcp.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {dialog && (

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { and, desc, eq, ne } from "drizzle-orm"
 import { ok, unauthorized } from "@/lib/api-response"
 import { createMcpBodySchema, parseBody } from "../_validators"
 import { DEFAULT_MCP_TRANSPORT } from "@/lib/constants"
@@ -11,12 +11,15 @@ export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) return unauthorized()
 
-  const rows = await db
-    .select()
-    .from(mcps)
-    .where(eq(mcps.userId, session.user.id))
-    .orderBy(desc(mcps.createdAt))
-  return ok(rows)
+  const [ownRows, publicRows] = await Promise.all([
+    db.select().from(mcps).where(eq(mcps.userId, session.user.id)).orderBy(desc(mcps.createdAt)),
+    db.select().from(mcps).where(and(eq(mcps.isPublic, true), ne(mcps.userId, session.user.id))).orderBy(desc(mcps.createdAt)),
+  ])
+
+  return ok([
+    ...ownRows.map((r) => ({ ...r, isOwn: true })),
+    ...publicRows.map((r) => ({ ...r, isOwn: false })),
+  ])
 }
 
 export async function POST(request: NextRequest) {
