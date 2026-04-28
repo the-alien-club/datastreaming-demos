@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, ne } from "drizzle-orm"
 import { ok, unauthorized } from "@/lib/api-response"
 
 export interface AvailableMcp {
@@ -33,19 +33,27 @@ export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) return unauthorized()
 
-  const rows = await db
-    .select()
-    .from(mcps)
-    .where(and(eq(mcps.enabled, true), eq(mcps.userId, session.user.id)))
-    .orderBy(desc(mcps.createdAt))
+  const [ownRows, publicRows] = await Promise.all([
+    db.select().from(mcps)
+      .where(and(eq(mcps.enabled, true), eq(mcps.userId, session.user.id)))
+      .orderBy(desc(mcps.createdAt)),
+    db.select().from(mcps)
+      .where(and(eq(mcps.enabled, true), eq(mcps.isPublic, true), ne(mcps.userId, session.user.id)))
+      .orderBy(desc(mcps.createdAt)),
+  ])
 
-  const all: AvailableMcp[] = rows.map((r) => ({
+  const toAvailable = (r: typeof ownRows[number]): AvailableMcp => ({
     id: r.id,
     name: r.name,
     description: r.description ?? null,
     category: r.category ?? null,
     source: builtinSlug(r.id) !== null ? "builtin" : "user",
-  }))
+  })
+
+  const all: AvailableMcp[] = [
+    ...ownRows.map(toAvailable),
+    ...publicRows.map(toAvailable),
+  ]
 
   const legal = all.filter((m) => m.source === "builtin" && m.category === "legal")
   const otherBuiltin = all.filter((m) => m.source === "builtin" && m.category !== "legal")
