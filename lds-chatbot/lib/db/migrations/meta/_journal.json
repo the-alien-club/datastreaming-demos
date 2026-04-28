@@ -36,6 +36,13 @@
       "when": 1777376831189,
       "tag": "0005_add_is_public",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777500000000,
+      "tag": "0006_add_is_public_agents_datasets",
+      "breakpoints": true
     }
   ]
 }
