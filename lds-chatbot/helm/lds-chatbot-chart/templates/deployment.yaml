@@ -46,6 +46,10 @@ spec:
                 name: {{ include "lds-chatbot.fullname" . }}-authentik
             - secretRef:
                 name: {{ include "lds-chatbot.fullname" . }}-app
+            {{- if .Values.secrets.onboarding.scalewaySecretName }}
+            - secretRef:
+                name: {{ include "lds-chatbot.fullname" . }}-onboarding
+            {{- end }}
           env:
             - name: DATABASE_URL
               valueFrom:
