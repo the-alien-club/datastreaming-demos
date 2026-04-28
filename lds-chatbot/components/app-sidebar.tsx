@@ -8,6 +8,17 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useWizardStart } from "@/components/wizards/agents/start/wizard-context"
 import { LocaleSwitcher } from "@/components/locale-switcher"
 
@@ -92,9 +103,30 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <p className="text-sm font-medium truncate">{user.name}</p>
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={handleSignOut} className="shrink-0">
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("signOut")}
+              className="shrink-0"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("signOutTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>{t("signOutDescription")}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("signOutCancel")}</AlertDialogCancel>
+              <AlertDialogAction onClick={handleSignOut}>
+                {t("signOutConfirm")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </aside>
   )

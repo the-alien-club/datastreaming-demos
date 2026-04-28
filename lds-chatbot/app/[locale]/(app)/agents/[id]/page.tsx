@@ -135,6 +135,7 @@ export default function AgentEditorPage({
   const [addingStep, setAddingStep] = useState(false)
   const [newStepName, setNewStepName] = useState("")
   const [newStepPrompt, setNewStepPrompt] = useState("")
+  const [stepNameError, setStepNameError] = useState(false)
 
   const [subagentDialogOpen, setSubagentDialogOpen] = useState(false)
   const [subagentForm, setSubagentForm] = useState<SubagentFormState>(emptySubagentForm())
@@ -202,6 +203,7 @@ export default function AgentEditorPage({
         const err = await response.json().catch(() => ({ error: "Unknown error" }))
         throw new Error(err.error ?? `HTTP ${response.status}`)
       }
+      setAgent((prev) => prev ? { ...prev, name: name.trim() } : prev)
       toast.success(t("agentSaved"))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("failedSave"))
@@ -228,12 +230,13 @@ export default function AgentEditorPage({
 
   function commitStep() {
     if (!newStepName.trim()) {
-      toast.error(tCommon("nameRequired"))
+      setStepNameError(true)
       return
     }
     setSteps((prev) => [...prev, { name: newStepName.trim(), prompt: newStepPrompt.trim() }])
     setNewStepName("")
     setNewStepPrompt("")
+    setStepNameError(false)
     setAddingStep(false)
   }
 
@@ -494,12 +497,18 @@ export default function AgentEditorPage({
 
             {addingStep && (
               <div className="rounded-md border p-3 space-y-2 bg-muted/30">
-                <Input
-                  placeholder={t("stepNamePlaceholder")}
-                  value={newStepName}
-                  onChange={(e) => setNewStepName(e.target.value)}
-                  autoFocus
-                />
+                <div className="space-y-1">
+                  <Input
+                    placeholder={t("stepNamePlaceholder")}
+                    value={newStepName}
+                    onChange={(e) => { setNewStepName(e.target.value); if (stepNameError) setStepNameError(false) }}
+                    aria-invalid={stepNameError}
+                    autoFocus
+                  />
+                  {stepNameError && (
+                    <p className="text-xs text-destructive">{tCommon("nameRequired")}</p>
+                  )}
+                </div>
                 <Textarea
                   placeholder={t("stepInstructionsPlaceholder")}
                   className="min-h-20 resize-y text-sm"
@@ -518,6 +527,7 @@ export default function AgentEditorPage({
                       setAddingStep(false)
                       setNewStepName("")
                       setNewStepPrompt("")
+                      setStepNameError(false)
                     }}
                   >
                     {tCommon("cancel")}
