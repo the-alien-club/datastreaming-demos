@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -31,6 +32,7 @@ interface McpStepContentProps {
 }
 
 export function McpStepContent({ state, setState }: McpStepContentProps) {
+  const t = useTranslations("wizard")
   const [available, setAvailable] = useState<AvailableMcpsResponse>({
     legal: [],
     otherBuiltin: [],
@@ -49,6 +51,17 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
       .then((data: AvailableMcpsResponse) => {
         if (cancelled) return
         setAvailable(data)
+        // Drop any stale legacy slug IDs (from template suggestedMcpIds) that
+        // are no longer valid DB IDs — avoids "Unknown MCP ID" errors at submit.
+        const validIds = new Set([
+          ...data.legal.map((m) => m.id),
+          ...data.otherBuiltin.map((m) => m.id),
+          ...data.userMcps.map((m) => m.id),
+        ])
+        setState((prev) => ({
+          ...prev,
+          selectedMcpIds: prev.selectedMcpIds.filter((id) => validIds.has(id)),
+        }))
       })
       .catch(() => {
         if (cancelled) return
@@ -78,7 +91,7 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
     const name = newMcpName.trim()
     const url = newMcpUrl.trim()
     if (!name || !url) {
-      toast.error("Name and URL are required")
+      toast.error(t("mcpNameUrlRequired"))
       return
     }
     setAdding(true)
@@ -97,7 +110,12 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
         const err = await response.json().catch(() => ({ error: "Unknown error" }))
         throw new Error(err.error ?? `HTTP ${response.status}`)
       }
-      const created = (await response.json()) as { id: string; name: string; description: string | null; category: string | null }
+      const created = (await response.json()) as {
+        id: string
+        name: string
+        description: string | null
+        category: string | null
+      }
       const newMcp: AvailableMcp = {
         id: created.id,
         name: created.name,
@@ -110,9 +128,9 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
       setNewMcpName("")
       setNewMcpUrl("")
       setAddOpen(false)
-      toast.success("MCP server added")
+      toast.success(t("mcpAdded"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add MCP")
+      toast.error(err instanceof Error ? err.message : t("mcpFailedAdd"))
     } finally {
       setAdding(false)
     }
@@ -121,37 +139,40 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted-foreground">
-        Connect tools to your <span className="font-semibold text-foreground">{state.specialistName || "specialist"}</span>. Skip if it doesn&apos;t need any.
+        {t("mcpConnectTools", { name: state.specialistName || t("mcpSpecialist") })}
       </p>
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading available tools...
+          <Loader2 className="size-4 animate-spin" /> {t("mcpLoading")}
         </div>
       ) : (
         <div className="space-y-4">
           {available.legal.length > 0 && (
             <McpGroup
-              title="Built-in legal tools"
+              title={t("mcpGroupLegal")}
               mcps={available.legal}
               selectedIds={state.selectedMcpIds}
               onToggle={toggleMcp}
+              selectedLabel={t("mcpSelected")}
             />
           )}
           {available.otherBuiltin.length > 0 && (
             <McpGroup
-              title="Other built-in tools"
+              title={t("mcpGroupOther")}
               mcps={available.otherBuiltin}
               selectedIds={state.selectedMcpIds}
               onToggle={toggleMcp}
+              selectedLabel={t("mcpSelected")}
             />
           )}
           {available.userMcps.length > 0 && (
             <McpGroup
-              title="Your MCP servers"
+              title={t("mcpGroupUser")}
               mcps={available.userMcps}
               selectedIds={state.selectedMcpIds}
               onToggle={toggleMcp}
+              selectedLabel={t("mcpSelected")}
             />
           )}
         </div>
@@ -164,12 +185,12 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
             onClick={() => setAddOpen(true)}
             className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
           >
-            <Plus className="size-3.5" /> Add custom MCP server
+            <Plus className="size-3.5" /> {t("mcpAddCustom")}
           </button>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold">New MCP server</span>
+              <span className="text-xs font-semibold">{t("mcpNewServer")}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -186,29 +207,29 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="wizard-mcp-name" className="text-xs">
-                Name
+                {t("mcpNameLabel")}
               </Label>
               <Input
                 id="wizard-mcp-name"
                 value={newMcpName}
                 onChange={(e) => setNewMcpName(e.target.value)}
-                placeholder="e.g. Internal contracts MCP"
+                placeholder={t("mcpNamePlaceholder")}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="wizard-mcp-url" className="text-xs">
-                URL
+                {t("mcpUrlLabel")}
               </Label>
               <Input
                 id="wizard-mcp-url"
                 value={newMcpUrl}
                 onChange={(e) => setNewMcpUrl(e.target.value)}
-                placeholder="https://example.com/mcp"
+                placeholder={t("mcpUrlPlaceholder")}
               />
             </div>
             <Button type="button" size="sm" onClick={handleAddMcp} disabled={adding}>
               {adding && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
-              Add server
+              {t("mcpAddButton")}
             </Button>
           </div>
         )}
@@ -222,11 +243,13 @@ function McpGroup({
   mcps,
   selectedIds,
   onToggle,
+  selectedLabel,
 }: {
   title: string
   mcps: AvailableMcp[]
   selectedIds: string[]
   onToggle: (id: string) => void
+  selectedLabel: string
 }) {
   return (
     <div className="space-y-2">
@@ -248,7 +271,7 @@ function McpGroup({
                 <span className="text-sm font-medium">{mcp.name}</span>
                 {checked && (
                   <Badge variant="default" className="text-[10px]">
-                    Selected
+                    {selectedLabel}
                   </Badge>
                 )}
               </div>
