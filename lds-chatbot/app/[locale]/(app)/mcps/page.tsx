@@ -371,9 +371,11 @@ export default function McpsPage() {
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate font-mono">
-                  {mcp.serverUrl}
-                </p>
+                {mcp.isOwn && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate font-mono">
+                    {mcp.serverUrl}
+                  </p>
+                )}
                 {mcp.description && (
                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                     {mcp.description}
