@@ -29,7 +29,7 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
       ...prev,
       specialistTemplateId: template.id,
       specialistName: template.isCustom
-        ? prev.specialistName
+        ? ""
         : (prev.specialistName && prev.specialistTemplateId === template.id
             ? prev.specialistName
             : translatedName),

@@ -41,7 +41,12 @@
     "conversations": "Conversations",
     "datasets": "Jeux de données",
     "mcpServers": "Serveurs MCP",
-    "start": "Démarrer"
+    "start": "Démarrer",
+    "signOut": "Se déconnecter",
+    "signOutTitle": "Se déconnecter",
+    "signOutDescription": "Êtes-vous sûr de vouloir vous déconnecter ?",
+    "signOutCancel": "Annuler",
+    "signOutConfirm": "Se déconnecter"
   },
   "signIn": {
     "title": "LDS Chatbot",
@@ -338,6 +343,7 @@
     "tpl_legal-qa_prompt": "Vous êtes un assistant de recherche juridique qui répond aux questions en vous appuyant strictement sur les documents fournis dans la base de connaissances du cabinet. Pour chaque affirmation, citez le document source et le paragraphe ou la section dont elle provient. Si la réponse ne se trouve pas dans les documents disponibles, dites-le explicitement sans extrapoler. Traitez les requêtes en français et en anglais et répondez dans la langue de l'utilisateur. Lorsqu'une question touche à l'interprétation juridique, résumez ce que disent les documents sans émettre d'opinion personnelle, et recommandez une consultation auprès d'un avocat qualifié le cas échéant.",
     "tpl_blank_name": "Vide",
     "tpl_blank_desc": "Partir de zéro",
+    "tpl_blank_knowledge": "Importez optionnellement des documents auxquels votre agent pourra se référer.",
     "sp_clause-writer_name": "Rédacteur de clauses",
     "sp_clause-writer_desc": "Rédige et affine les clauses contractuelles",
     "sp_clause-writer_prompt": "Vous êtes un rédacteur de clauses qui rédige, réécrit et affine les clauses contractuelles individuelles avec une précision chirurgicale. Vous produisez des clauses juridiquement solides, cohérentes en interne et alignées sur le contrat environnant. Lorsque l'agent principal fournit un contexte, respectez la numérotation des clauses existantes, les termes définis et la loi applicable.",
@@ -389,6 +395,8 @@
     "mcpUrlLabel": "URL",
     "mcpAddButton": "Ajouter le serveur",
     "mcpNameUrlRequired": "Le nom et l'URL sont obligatoires",
+    "mcpNameRequired": "Le nom est obligatoire",
+    "mcpUrlRequired": "L'URL est obligatoire",
     "mcpFailedAdd": "Impossible d'ajouter le MCP",
     "mcpAdded": "Serveur MCP ajouté",
     "knowledgeSkip": "Ignorer",

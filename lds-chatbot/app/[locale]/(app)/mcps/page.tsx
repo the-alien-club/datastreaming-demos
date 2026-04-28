@@ -69,11 +69,18 @@ function McpDialog({
         })(),
   )
   const [saving, setSaving] = useState(false)
+  const [nameError, setNameError] = useState(false)
+  const [urlError, setUrlError] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.name.trim()) { toast.error(t("nameRequired")); return }
-    if (!form.serverUrl.trim()) { toast.error(t("serverUrlRequired")); return }
+    const hasNameError = !form.name.trim()
+    const hasUrlError = !form.serverUrl.trim()
+    if (hasNameError || hasUrlError) {
+      setNameError(hasNameError)
+      setUrlError(hasUrlError)
+      return
+    }
 
     setSaving(true)
     try {
@@ -128,18 +135,26 @@ function McpDialog({
             <Input
               placeholder={t("namePlaceholder")}
               value={form.name}
-              onChange={(e) => field("name", e.target.value)}
+              onChange={(e) => { field("name", e.target.value); if (nameError) setNameError(false) }}
+              aria-invalid={nameError}
               disabled={saving}
             />
+            {nameError && (
+              <p className="text-sm text-destructive">{t("nameRequired")}</p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">{t("serverUrlLabel")}</label>
             <Input
               placeholder={t("serverUrlPlaceholder")}
               value={form.serverUrl}
-              onChange={(e) => field("serverUrl", e.target.value)}
+              onChange={(e) => { field("serverUrl", e.target.value); if (urlError) setUrlError(false) }}
+              aria-invalid={urlError}
               disabled={saving}
             />
+            {urlError && (
+              <p className="text-sm text-destructive">{t("serverUrlRequired")}</p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">

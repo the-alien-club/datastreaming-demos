@@ -41,7 +41,12 @@
     "conversations": "Conversations",
     "datasets": "Datasets",
     "mcpServers": "MCP Servers",
-    "start": "Start"
+    "start": "Start",
+    "signOut": "Sign out",
+    "signOutTitle": "Sign out",
+    "signOutDescription": "Are you sure you want to sign out?",
+    "signOutCancel": "Cancel",
+    "signOutConfirm": "Sign out"
   },
   "signIn": {
     "title": "LDS Chatbot",
@@ -338,6 +343,7 @@
     "tpl_legal-qa_prompt": "You are a legal research assistant that answers questions strictly grounded in the documents provided in the firm's knowledge base. For every claim, cite the source document and the specific paragraph or section it comes from. If the answer cannot be found in the available documents, say so explicitly and do not extrapolate. Support both French and English queries and respond in the user's language. When a question touches on legal interpretation, summarize what the documents say without offering personal legal opinion, and recommend escalation to a qualified lawyer where appropriate.",
     "tpl_blank_name": "Blank",
     "tpl_blank_desc": "Start from scratch",
+    "tpl_blank_knowledge": "Optionally upload documents for your agent to reference.",
     "sp_clause-writer_name": "Clause Writer",
     "sp_clause-writer_desc": "Drafts and refines contract clauses",
     "sp_clause-writer_prompt": "You are a clause writer who drafts, rewrites, and refines individual contract clauses with surgical precision. You produce clauses that are legally sound, internally consistent, and aligned with the surrounding contract. When the parent agent provides context, respect the existing clause numbering, defined terms, and governing law.",
@@ -389,6 +395,8 @@
     "mcpUrlLabel": "URL",
     "mcpAddButton": "Add server",
     "mcpNameUrlRequired": "Name and URL are required",
+    "mcpNameRequired": "Name is required",
+    "mcpUrlRequired": "URL is required",
     "mcpFailedAdd": "Failed to add MCP",
     "mcpAdded": "MCP server added",
     "knowledgeSkip": "Skip",

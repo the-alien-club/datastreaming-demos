@@ -140,10 +140,13 @@ function TypingIndicator() {
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
         <Bot className="h-4 w-4 text-muted-foreground" />
       </div>
-      <div className="rounded-xl rounded-tl-none border bg-card px-4 py-3">
-        <Shimmer as="span" duration={1.5}>
-          {t("thinking")}
-        </Shimmer>
+      <div className="rounded-xl rounded-tl-none border bg-card px-4 py-3 flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">{t("thinking")}</span>
+        <span className="flex items-center gap-1" aria-hidden>
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+        </span>
       </div>
     </div>
   )

@@ -43,6 +43,8 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
   const [newMcpName, setNewMcpName] = useState("")
   const [newMcpUrl, setNewMcpUrl] = useState("")
   const [adding, setAdding] = useState(false)
+  const [nameError, setNameError] = useState(false)
+  const [urlError, setUrlError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -90,8 +92,11 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
   async function handleAddMcp() {
     const name = newMcpName.trim()
     const url = newMcpUrl.trim()
-    if (!name || !url) {
-      toast.error(t("mcpNameUrlRequired"))
+    const hasNameError = !name
+    const hasUrlError = !url
+    if (hasNameError || hasUrlError) {
+      setNameError(hasNameError)
+      setUrlError(hasUrlError)
       return
     }
     setAdding(true)
@@ -127,6 +132,8 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
       setState((prev) => ({ ...prev, selectedMcpIds: [...prev.selectedMcpIds, newMcp.id] }))
       setNewMcpName("")
       setNewMcpUrl("")
+      setNameError(false)
+      setUrlError(false)
       setAddOpen(false)
       toast.success(t("mcpAdded"))
     } catch (err) {
@@ -200,6 +207,8 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
                   setAddOpen(false)
                   setNewMcpName("")
                   setNewMcpUrl("")
+                  setNameError(false)
+                  setUrlError(false)
                 }}
               >
                 <X className="size-3.5" />
@@ -212,9 +221,13 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
               <Input
                 id="wizard-mcp-name"
                 value={newMcpName}
-                onChange={(e) => setNewMcpName(e.target.value)}
+                onChange={(e) => { setNewMcpName(e.target.value); if (nameError) setNameError(false) }}
                 placeholder={t("mcpNamePlaceholder")}
+                aria-invalid={nameError}
               />
+              {nameError && (
+                <p className="text-xs text-destructive">{t("mcpNameRequired")}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="wizard-mcp-url" className="text-xs">
@@ -223,9 +236,13 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
               <Input
                 id="wizard-mcp-url"
                 value={newMcpUrl}
-                onChange={(e) => setNewMcpUrl(e.target.value)}
+                onChange={(e) => { setNewMcpUrl(e.target.value); if (urlError) setUrlError(false) }}
                 placeholder={t("mcpUrlPlaceholder")}
+                aria-invalid={urlError}
               />
+              {urlError && (
+                <p className="text-xs text-destructive">{t("mcpUrlRequired")}</p>
+              )}
             </div>
             <Button type="button" size="sm" onClick={handleAddMcp} disabled={adding}>
               {adding && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}

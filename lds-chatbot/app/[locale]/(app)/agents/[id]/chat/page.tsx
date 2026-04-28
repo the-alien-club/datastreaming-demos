@@ -6,8 +6,6 @@ import { DefaultChatTransport, type UIMessage } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
 import { apiFetch, apiUrl } from "@/lib/api-fetch"
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
-
 interface ChatPageProps {
   params: Promise<{ id: string }>
 }
@@ -64,16 +62,20 @@ export default function NewChatPage({ params }: ChatPageProps) {
   const { messages, setMessages, sendMessage, status, error } = useChat({
     transport,
     onData: (dataPart) => {
-      // Receive conversationId from the server stream.
+      // Receive conversationId from the server stream and store it so the next
+      // turn can pass it as `conversationId` in the request body.
+      // NOTE: we intentionally do NOT call window.history.replaceState here.
+      // In Next.js App Router, replaceState with a different pathname triggers
+      // a soft navigation to the new route ([conversationId]/page.tsx), which
+      // unmounts this component mid-stream and discards all streaming state
+      // before the AI response can be rendered. The conversation is still
+      // persisted to the DB and accessible from the conversations list.
       if (
         dataPart.type === "data-conversationId" &&
         typeof dataPart.data === "string" &&
         !conversationIdRef.current
       ) {
-        const convId = dataPart.data
-        conversationIdRef.current = convId
-        // Update URL to make it bookmarkable without triggering a full navigation.
-        window.history.replaceState(null, "", `${basePath}/agents/${agentId}/chat/${convId}`)
+        conversationIdRef.current = dataPart.data
       }
     },
   })
@@ -82,13 +84,12 @@ export default function NewChatPage({ params }: ChatPageProps) {
     sendMessage({ text })
   }
 
-  // We never actually navigate to /chat/[conversationId] — after the first
-  // turn we just rewrite the URL with replaceState. So "New chat" is a local
-  // reset: drop the conversation ref, clear messages, restore the base URL.
+  // "New chat" resets the in-memory session: drop the conversation ref and
+  // clear messages. The URL is already at /agents/${agentId}/chat so no
+  // replaceState is needed.
   function handleNewChat() {
     conversationIdRef.current = null
     setMessages([])
-    window.history.replaceState(null, "", `${basePath}/agents/${agentId}/chat`)
   }
 
   return (

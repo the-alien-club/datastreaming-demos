@@ -29,6 +29,7 @@ export default function NewDatasetPage() {
 
   const [step, setStep] = useState<Step>(1)
   const [name, setName] = useState("")
+  const [nameError, setNameError] = useState(false)
   const [description, setDescription] = useState("")
   const [files, setFiles] = useState<FileItem[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -167,10 +168,14 @@ export default function NewDatasetPage() {
             <Input
               id="name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); if (nameError) setNameError(false) }}
               placeholder={t("namePlaceholder")}
+              aria-invalid={nameError}
               autoFocus
             />
+            {nameError && (
+              <p className="text-sm text-destructive">{tCommon("nameRequired")}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">{tCommon("descriptionLabel")}</Label>
@@ -185,7 +190,7 @@ export default function NewDatasetPage() {
           <Button
             onClick={() => {
               if (!name.trim()) {
-                toast.error(tCommon("nameRequired"))
+                setNameError(true)
                 return
               }
               setStep(2)
