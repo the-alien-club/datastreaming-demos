@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useState, useEffect, use } from "react"
+import { useTranslations } from "next-intl"
+import { useRouter, Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,6 +24,15 @@ import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type AIModel = PublicAIModel
 
+interface SpecialistRecord {
+  id: string
+  name: string
+  description: string | null
+  systemPrompt: string
+  model: string | null
+  mcpIds: string | null
+}
+
 interface McpConfig {
   id: string
   name: string
@@ -31,73 +40,125 @@ interface McpConfig {
   category: string | null
 }
 
-export default function NewSpecialistPage() {
+const DEFAULT_MODEL = DEFAULT_MODEL_SLUG
+
+export default function SpecialistEditorPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = use(params)
+  const t = useTranslations("specialistForm")
+  const tCommon = useTranslations("common")
+  const tSpec = useTranslations("specialists")
   const router = useRouter()
-  const [submitting, setSubmitting] = useState(false)
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [specialist, setSpecialist] = useState<SpecialistRecord | null>(null)
   const [models, setModels] = useState<AIModel[]>([])
   const [mcpList, setMcpList] = useState<McpConfig[]>([])
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
-  const [model, setModel] = useState(DEFAULT_MODEL_SLUG)
+  const [model, setModel] = useState(DEFAULT_MODEL)
   const [mcpIds, setMcpIds] = useState<string[]>([])
 
   useEffect(() => {
     Promise.all([
+      apiFetch(`/api/specialists/${id}`).then((r) => r.json()),
       apiFetch("/api/models").then((r) => r.json()).catch(() => []),
       apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
-    ]).then(([modelsData, mcpsData]: [AIModel[], McpConfig[]]) => {
-      setModels(Array.isArray(modelsData) ? modelsData : [])
-      setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
-    })
-  }, [])
+    ])
+      .then(([data, modelsData, mcpsData]: [SpecialistRecord, AIModel[], McpConfig[]]) => {
+        setSpecialist(data)
+        setName(data.name)
+        setDescription(data.description ?? "")
+        setSystemPrompt(data.systemPrompt)
+        setModel(data.model ?? DEFAULT_MODEL)
+        setMcpIds(data.mcpIds ? JSON.parse(data.mcpIds) : [])
+        setModels(Array.isArray(modelsData) ? modelsData : [])
+        setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
+      })
+      .catch(() => toast.error(tSpec("failedLoad")))
+      .finally(() => setLoading(false))
+  }, [id, tSpec])
 
   function toggleMcp(mcpId: string) {
     setMcpIds((prev) =>
-      prev.includes(mcpId) ? prev.filter((id) => id !== mcpId) : [...prev, mcpId]
+      prev.includes(mcpId) ? prev.filter((m) => m !== mcpId) : [...prev, mcpId]
     )
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
+  async function handleSave() {
     if (!name.trim()) {
-      toast.error("Name is required")
+      toast.error(tCommon("nameRequired"))
       return
     }
     if (!systemPrompt.trim()) {
-      toast.error("System prompt is required")
+      toast.error(tCommon("systemPromptRequired"))
       return
     }
-
-    setSubmitting(true)
+    setSaving(true)
     try {
-      const response = await apiFetch("/api/specialists", {
-        method: "POST",
+      const response = await apiFetch(`/api/specialists/${id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
-          description: description.trim() || undefined,
+          description: description.trim() || null,
           systemPrompt: systemPrompt.trim(),
           model,
           mcpIds,
         }),
       })
-
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: "Unknown error" }))
         throw new Error(err.error ?? `HTTP ${response.status}`)
       }
-
-      const specialist = await response.json()
-      toast.success("Specialist created")
-      router.push(`/specialists/${specialist.id}`)
+      toast.success(tSpec("saved"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create specialist")
+      toast.error(err instanceof Error ? err.message : tSpec("failedSave"))
     } finally {
-      setSubmitting(false)
+      setSaving(false)
     }
+  }
+
+  async function handleDelete() {
+    if (!confirm(tSpec("confirmDelete"))) return
+    setDeleting(true)
+    try {
+      const response = await apiFetch(`/api/specialists/${id}`, { method: "DELETE" })
+      if (!response.ok && response.status !== 204) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      toast.success(tSpec("deleted"))
+      router.push("/specialists")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : tSpec("failedDelete"))
+      setDeleting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!specialist) {
+    return (
+      <div className="p-6">
+        <p className="text-muted-foreground">{tSpec("notFound")}</p>
+        <Button asChild variant="link" className="mt-2 p-0">
+          <Link href="/specialists">{tSpec("backToSpecialists")}</Link>
+        </Button>
+      </div>
+    )
   }
 
   return (
@@ -108,49 +169,48 @@ export default function NewSpecialistPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold">New Specialist</h1>
+        <h1 className="text-2xl font-bold flex-1 truncate">{specialist.name}</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
+          <Label htmlFor="name">{tCommon("nameLabel")} *</Label>
           <Input
             id="name"
-            placeholder="e.g. Literature Reviewer"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            required
+            placeholder={t("specialistNamePlaceholder")}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="description">
-            Description{" "}
+            {tCommon("descriptionLabel")}{" "}
             <span className="text-muted-foreground text-xs font-normal">
-              (shown to main agent for delegation)
+              {t("descriptionHint")}
             </span>
           </Label>
           <Input
             id="description"
-            placeholder="What this specialist is good at..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            placeholder={t("descriptionPlaceholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="systemPrompt">System Prompt *</Label>
+          <Label htmlFor="systemPrompt">{tCommon("systemPromptLabel")} *</Label>
           <Textarea
             id="systemPrompt"
-            placeholder="You are a specialist in..."
-            className="min-h-32 resize-y"
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
+            className="min-h-32 resize-y"
+            placeholder={t("systemPromptPlaceholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="model">Model</Label>
+          <Label htmlFor="model">{tCommon("modelLabel")}</Label>
           {models.length === 0 ? (
             <Input
               id="model"
@@ -161,15 +221,13 @@ export default function NewSpecialistPage() {
           ) : (
             <Select value={model} onValueChange={setModel}>
               <SelectTrigger id="model">
-                <SelectValue placeholder="Select a model" />
+                <SelectValue placeholder={tCommon("selectModel")} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((m) => (
                   <SelectItem key={m.id} value={m.slug}>
                     <span>{m.name}</span>
-                    <span className="ml-2 text-muted-foreground text-xs">
-                      {providerLabelFromModel(m)}
-                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">{providerLabelFromModel(m)}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -178,11 +236,12 @@ export default function NewSpecialistPage() {
         </div>
 
         <div className="space-y-2">
-          <Label>MCP Tools</Label>
+          <Label>{tCommon("mcpToolsLabel")}</Label>
           {mcpList.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No MCPs registered.{" "}
-              <Link href="/mcps" className="underline">Add one</Link> to enable tools.
+              {tSpec("noMcps")}{" "}
+              <Link href="/mcps" className="underline">{tCommon("addOne")}</Link>{" "}
+              {tSpec("enableTools")}
             </p>
           ) : (
             <div className="space-y-2">
@@ -210,15 +269,20 @@ export default function NewSpecialistPage() {
         </div>
 
         <div className="flex gap-3 pt-2">
-          <Button type="submit" disabled={submitting}>
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Create Specialist
+          <Button onClick={handleSave} disabled={saving || deleting}>
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {t("saveButton")}
           </Button>
-          <Button type="button" variant="outline" asChild>
-            <Link href="/specialists">Cancel</Link>
+          <Button
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={saving || deleting}
+          >
+            {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {t("deleteButton")}
           </Button>
         </div>
-      </form>
+      </div>
     </div>
   )
 }

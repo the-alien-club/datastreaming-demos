@@ -16,13 +16,23 @@ interface WizardProps {
      * Finish on the last step). Return false to stay on the current step.
      */
   children: React.ReactNode
-  /** Called after advancing to the last step's completion (no API call here). */
   onCancel?: () => void
   cancelLabel?: string
   submitLabel?: string
+  backLabel?: string
+  nextLabel?: string
+  savingLabel?: string
 }
 
-export function Wizard({ children, onCancel, cancelLabel = "Cancel", submitLabel = "Finish" }: WizardProps) {
+export function Wizard({
+  children,
+  onCancel,
+  cancelLabel = "Cancel",
+  submitLabel = "Finish",
+  backLabel = "Back",
+  nextLabel = "Next",
+  savingLabel = "Saving...",
+}: WizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -77,7 +87,7 @@ export function Wizard({ children, onCancel, cancelLabel = "Cancel", submitLabel
         ) : (
           <Button type="button" variant="outline" onClick={handleBack} disabled={isLoading}>
             <ChevronLeftIcon className="size-4 mr-1" />
-            Back
+            {backLabel}
           </Button>
         )}
 
@@ -85,13 +95,13 @@ export function Wizard({ children, onCancel, cancelLabel = "Cancel", submitLabel
           {isLoading ? (
             <>
               <Loader2 className="size-4 mr-2 animate-spin" />
-              Saving...
+              {savingLabel}
             </>
           ) : isLast ? (
             submitLabel
           ) : (
             <>
-              Next
+              {nextLabel}
               <ChevronRightIcon className="size-4 ml-1" />
             </>
           )}

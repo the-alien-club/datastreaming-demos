@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useTranslations } from "next-intl"
+import { useRouter, Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,47 +24,67 @@ import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 type AIModel = PublicAIModel
 
-export default function NewAgentPage() {
+interface McpConfig {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+}
+
+export default function NewSpecialistPage() {
+  const t = useTranslations("specialistForm")
+  const tCommon = useTranslations("common")
+  const tSpec = useTranslations("specialists")
   const router = useRouter()
   const [submitting, setSubmitting] = useState(false)
   const [models, setModels] = useState<AIModel[]>([])
-  const [loadingModels, setLoadingModels] = useState(true)
+  const [mcpList, setMcpList] = useState<McpConfig[]>([])
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
   const [model, setModel] = useState(DEFAULT_MODEL_SLUG)
+  const [mcpIds, setMcpIds] = useState<string[]>([])
 
   useEffect(() => {
-    apiFetch("/api/models")
-      .then((r) => r.json())
-      .then((data: AIModel[]) => {
-        setModels(Array.isArray(data) ? data : [])
-      })
-      .catch(() => {
-        // Models endpoint may not be reachable in all envs; fall back silently
-      })
-      .finally(() => setLoadingModels(false))
+    Promise.all([
+      apiFetch("/api/models").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
+    ]).then(([modelsData, mcpsData]: [AIModel[], McpConfig[]]) => {
+      setModels(Array.isArray(modelsData) ? modelsData : [])
+      setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
+    })
   }, [])
+
+  function toggleMcp(mcpId: string) {
+    setMcpIds((prev) =>
+      prev.includes(mcpId) ? prev.filter((id) => id !== mcpId) : [...prev, mcpId]
+    )
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     if (!name.trim()) {
-      toast.error("Name is required")
+      toast.error(tCommon("nameRequired"))
+      return
+    }
+    if (!systemPrompt.trim()) {
+      toast.error(tCommon("systemPromptRequired"))
       return
     }
 
     setSubmitting(true)
     try {
-      const response = await apiFetch("/api/agents", {
+      const response = await apiFetch("/api/specialists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || undefined,
-          systemPrompt: systemPrompt.trim() || undefined,
+          systemPrompt: systemPrompt.trim(),
           model,
+          mcpIds,
         }),
       })
 
@@ -73,11 +93,11 @@ export default function NewAgentPage() {
         throw new Error(err.error ?? `HTTP ${response.status}`)
       }
 
-      const agent = await response.json()
-      toast.success("Agent created")
-      router.push(`/agents/${agent.id}`)
+      const specialist = await response.json()
+      toast.success(tSpec("created2"))
+      router.push(`/specialists/${specialist.id}`)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create agent")
+      toast.error(err instanceof Error ? err.message : tSpec("failedCreate"))
     } finally {
       setSubmitting(false)
     }
@@ -87,19 +107,19 @@ export default function NewAgentPage() {
     <div className="p-6 max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" asChild>
-          <Link href="/agents">
+          <Link href="/specialists">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold">New Agent</h1>
+        <h1 className="text-2xl font-bold">{t("newTitle")}</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
+          <Label htmlFor="name">{tCommon("nameLabel")} *</Label>
           <Input
             id="name"
-            placeholder="e.g. Research Assistant"
+            placeholder={t("namePlaceholder")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -107,20 +127,25 @@ export default function NewAgentPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">
+            {tCommon("descriptionLabel")}{" "}
+            <span className="text-muted-foreground text-xs font-normal">
+              {t("descriptionHint")}
+            </span>
+          </Label>
           <Input
             id="description"
-            placeholder="What does this agent do?"
+            placeholder={t("descriptionPlaceholder")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="systemPrompt">System Prompt</Label>
+          <Label htmlFor="systemPrompt">{tCommon("systemPromptLabel")} *</Label>
           <Textarea
             id="systemPrompt"
-            placeholder="You are a helpful research assistant..."
+            placeholder={t("systemPromptPlaceholder")}
             className="min-h-32 resize-y"
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
@@ -128,8 +153,8 @@ export default function NewAgentPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="model">Model</Label>
-          {loadingModels || models.length === 0 ? (
+          <Label htmlFor="model">{tCommon("modelLabel")}</Label>
+          {models.length === 0 ? (
             <Input
               id="model"
               value={model}
@@ -139,7 +164,7 @@ export default function NewAgentPage() {
           ) : (
             <Select value={model} onValueChange={setModel}>
               <SelectTrigger id="model">
-                <SelectValue placeholder="Select a model" />
+                <SelectValue placeholder={tCommon("selectModel")} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((m) => (
@@ -155,13 +180,46 @@ export default function NewAgentPage() {
           )}
         </div>
 
+        <div className="space-y-2">
+          <Label>{tCommon("mcpToolsLabel")}</Label>
+          {mcpList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {tSpec("noMcps")}{" "}
+              <Link href="/mcps" className="underline">{tCommon("addOne")}</Link>{" "}
+              {tSpec("enableTools")}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {mcpList.map((mcp) => (
+                <label
+                  key={mcp.id}
+                  className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-primary"
+                    checked={mcpIds.includes(mcp.id)}
+                    onChange={() => toggleMcp(mcp.id)}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{mcp.name}</p>
+                    {mcp.description && (
+                      <p className="text-xs text-muted-foreground">{mcp.description}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-3 pt-2">
           <Button type="submit" disabled={submitting}>
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Create Agent
+            {t("createButton")}
           </Button>
           <Button type="button" variant="outline" asChild>
-            <Link href="/agents">Cancel</Link>
+            <Link href="/specialists">{tCommon("cancel")}</Link>
           </Button>
         </div>
       </form>

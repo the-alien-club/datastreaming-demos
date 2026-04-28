@@ -1,7 +1,14 @@
 "use client"
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useTranslations } from "next-intl"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { StartWizard } from "./index"
 
 interface WizardStartContextValue {
@@ -16,6 +23,7 @@ const SEEN_STORAGE_KEY = "lds-chatbot:start-wizard-seen"
 
 export function WizardStartProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+  const t = useTranslations("wizard")
 
   const openWizard = useCallback(() => setOpen(true), [])
   const closeWizard = useCallback(() => setOpen(false), [])
@@ -30,10 +38,8 @@ export function WizardStartProvider({ children }: { children: React.ReactNode })
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader className="sr-only">
-            <DialogTitle>Start a new agent</DialogTitle>
-            <DialogDescription>
-              Onboarding wizard to create your first AI agent.
-            </DialogDescription>
+            <DialogTitle>{t("dialogTitle")}</DialogTitle>
+            <DialogDescription>{t("dialogDescription")}</DialogDescription>
           </DialogHeader>
           {open && <StartWizard onClose={closeWizard} />}
         </DialogContent>

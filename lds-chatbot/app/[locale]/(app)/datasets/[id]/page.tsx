@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef, use, useCallback } from "react"
-import Link from "next/link"
+import { useTranslations } from "next-intl"
+import { Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -24,8 +25,6 @@ import { ArrowLeft, Upload, Loader2, RefreshCw, Link2 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { timeAgo } from "@/lib/time"
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 interface DatasetRecord {
   id: string
@@ -51,8 +50,6 @@ interface AgentRecord {
 
 const IN_PROGRESS_STATUSES = new Set(["pending", "uploading", "processing"])
 
-// ── Status badge ───────────────────────────────────────────────────────────────
-
 function EntryStatusBadge({ status }: { status: string }) {
   if (status === "processed")
     return (
@@ -72,7 +69,6 @@ function EntryStatusBadge({ status }: { status: string }) {
         error
       </Badge>
     )
-  // pending, uploaded, or anything else
   return <Badge variant="secondary">{status}</Badge>
 }
 
@@ -99,14 +95,14 @@ function DatasetStatusBadge({ status }: { status: string | null }) {
   return <Badge variant="secondary">{s}</Badge>
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
-
 export default function DatasetDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const t = useTranslations("datasetDetail")
+  const tCommon = useTranslations("common")
 
   const [dataset, setDataset] = useState<DatasetRecord | null>(null)
   const [entries, setEntries] = useState<ClusterEntry[]>([])
@@ -114,7 +110,6 @@ export default function DatasetDetailPage({
   const [loadingEntries, setLoadingEntries] = useState(true)
   const [uploading, setUploading] = useState(false)
 
-  // Attach dialog
   const [attachOpen, setAttachOpen] = useState(false)
   const [agents, setAgents] = useState<AgentRecord[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState("")
@@ -123,11 +118,6 @@ export default function DatasetDetailPage({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Data fetchers ────────────────────────────────────────────────────────────
-
-  // Refetch entries from the cluster proxy. Returns the parsed array so
-  // callers can chain on it; state updates happen here (we always resolve
-  // — errors are swallowed because polling intentionally stays running).
   const fetchEntries = useCallback(async (): Promise<ClusterEntry[]> => {
     try {
       const res = await apiFetch(`/api/datasets/${id}/entries`)
@@ -137,7 +127,6 @@ export default function DatasetDetailPage({
       setEntries(arr)
       return arr
     } catch {
-      // Polling errors are non-fatal — keep the existing list visible.
       return []
     } finally {
       setLoadingEntries(false)
@@ -153,23 +142,19 @@ export default function DatasetDetailPage({
         const data = await res.json()
         if (!cancelled) setDataset(data)
       } catch {
-        if (!cancelled) toast.error("Failed to load dataset")
+        if (!cancelled) toast.error(t("failedLoadDataset"))
       } finally {
         if (!cancelled) setLoadingDataset(false)
       }
     })()
 
-    /* eslint-disable-next-line react-hooks/set-state-in-effect -- entries
-       are loaded asynchronously via the SDK; setEntries inside fetchEntries
-       runs after render completes, not synchronously. */
     void fetchEntries()
 
     return () => {
       cancelled = true
     }
-  }, [id, fetchEntries])
+  }, [id, fetchEntries, t])
 
-  // Polling: restart when entries change
   useEffect(() => {
     const hasInProgress = entries.some((e) => IN_PROGRESS_STATUSES.has(e.status))
 
@@ -187,8 +172,6 @@ export default function DatasetDetailPage({
     }
   }, [entries, fetchEntries])
 
-  // ── Upload more ──────────────────────────────────────────────────────────────
-
   async function handleUploadFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
     setUploading(true)
@@ -204,19 +187,17 @@ export default function DatasetDetailPage({
         })
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: "Upload failed" }))
-          toast.error(`Failed to upload ${file.name}: ${err.error ?? "Unknown error"}`)
+          toast.error(t("failedUpload", { name: file.name, error: err.error ?? "Unknown error" }))
         }
       } catch {
-        toast.error(`Failed to upload ${file.name}`)
+        toast.error(t("failedUpload", { name: file.name, error: "Unknown error" }))
       }
     }
 
     setUploading(false)
-    toast.success("Files uploaded")
+    toast.success(t("filesUploaded"))
     await fetchEntries()
   }
-
-  // ── Attach to agent ──────────────────────────────────────────────────────────
 
   async function openAttachDialog() {
     setAttachOpen(true)
@@ -226,14 +207,14 @@ export default function DatasetDetailPage({
         const data = await res.json()
         setAgents(Array.isArray(data) ? data : [])
       } catch {
-        toast.error("Failed to load agents")
+        toast.error(t("failedLoadAgents"))
       }
     }
   }
 
   async function handleAttach() {
     if (!selectedAgentId) {
-      toast.error("Please select an agent")
+      toast.error(t("selectAgent"))
       return
     }
     setAttaching(true)
@@ -247,19 +228,17 @@ export default function DatasetDetailPage({
         const err = await res.json().catch(() => ({ error: "Unknown error" }))
         throw new Error(err.error ?? `HTTP ${res.status}`)
       }
-      toast.success("Dataset attached to agent as corpus specialist")
+      toast.success(t("attached"))
       setAttachOpen(false)
       setSelectedAgentId("")
       const updated = await apiFetch(`/api/datasets/${id}`).then((r) => r.json())
       setDataset(updated)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to attach")
+      toast.error(err instanceof Error ? err.message : t("failedAttach"))
     } finally {
       setAttaching(false)
     }
   }
-
-  // ── Render ───────────────────────────────────────────────────────────────────
 
   if (loadingDataset) {
     return (
@@ -272,9 +251,9 @@ export default function DatasetDetailPage({
   if (!dataset) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground">Dataset not found.</p>
+        <p className="text-muted-foreground">{t("notFound")}</p>
         <Button asChild variant="link" className="mt-2 p-0">
-          <Link href="/datasets">Back to datasets</Link>
+          <Link href="/datasets">{t("backToDatasets")}</Link>
         </Button>
       </div>
     )
@@ -282,7 +261,6 @@ export default function DatasetDetailPage({
 
   return (
     <div className="p-6 max-w-3xl">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/datasets">
@@ -304,7 +282,7 @@ export default function DatasetDetailPage({
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={openAttachDialog}>
             <Link2 className="h-3.5 w-3.5 mr-1.5" />
-            Attach to agent
+            {t("attachToAgent")}
           </Button>
           <Button
             variant="outline"
@@ -316,7 +294,7 @@ export default function DatasetDetailPage({
             disabled={loadingEntries}
           >
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loadingEntries ? "animate-spin" : ""}`} />
-            Refresh
+            {t("refresh")}
           </Button>
           <Button
             size="sm"
@@ -328,7 +306,7 @@ export default function DatasetDetailPage({
             ) : (
               <Upload className="h-3.5 w-3.5 mr-1.5" />
             )}
-            Upload more
+            {t("uploadMore")}
           </Button>
           <input
             ref={fileInputRef}
@@ -341,23 +319,22 @@ export default function DatasetDetailPage({
         </div>
       </div>
 
-      {/* Entries table */}
       {loadingEntries ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : entries.length === 0 ? (
         <div className="rounded-lg border border-dashed py-12 text-center">
-          <p className="text-muted-foreground text-sm">No files yet. Upload some documents.</p>
+          <p className="text-muted-foreground text-sm">{t("noFiles")}</p>
         </div>
       ) : (
         <div className="rounded-lg border overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Uploaded</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">{t("colName")}</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">{t("colStatus")}</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">{t("colUploaded")}</th>
               </tr>
             </thead>
             <tbody>
@@ -377,28 +354,24 @@ export default function DatasetDetailPage({
         </div>
       )}
 
-      {/* Attach to agent dialog */}
       <Dialog open={attachOpen} onOpenChange={setAttachOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Attach to Agent</DialogTitle>
-            <DialogDescription>
-              Choose an agent. A corpus specialist for this dataset will be added to its workflow.
-            </DialogDescription>
+            <DialogTitle>{t("attachDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("attachDialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="py-2 space-y-3">
             <p className="text-sm text-muted-foreground">
-              This will add a corpus specialist subagent to the selected agent, scoped to the{" "}
-              <strong>{dataset.name}</strong> dataset.
+              {t("attachDialogBody", { name: dataset.name })}
             </p>
             <div className="space-y-1.5">
-              <Label htmlFor="agent-select">Agent</Label>
+              <Label htmlFor="agent-select">{t("agentLabel")}</Label>
               {agents.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-1">No agents found.</p>
+                <p className="text-xs text-muted-foreground py-1">{t("noAgents")}</p>
               ) : (
                 <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
                   <SelectTrigger id="agent-select">
-                    <SelectValue placeholder="Select an agent" />
+                    <SelectValue placeholder={t("selectAgent")} />
                   </SelectTrigger>
                   <SelectContent>
                     {agents.map((agent) => (
@@ -413,14 +386,11 @@ export default function DatasetDetailPage({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAttachOpen(false)} disabled={attaching}>
-              Cancel
+              {tCommon("cancel")}
             </Button>
-            <Button
-              onClick={handleAttach}
-              disabled={attaching || !selectedAgentId}
-            >
+            <Button onClick={handleAttach} disabled={attaching || !selectedAgentId}>
               {attaching && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Attach
+              {t("attach")}
             </Button>
           </DialogFooter>
         </DialogContent>

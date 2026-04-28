@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./tailwind-theme.css";
+
+@source "../node_modules/streamdown/dist/*.js";
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+
+    button:not([disabled]),
+    [role="button"]:not([disabled]) {
+        cursor: pointer;
+    }
+}
+
+@utility no-scrollbar {
+    @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
+}
+
+:root {
+    --background: hsl(0 0% 100%);
+    --foreground: hsl(120 1.9608% 10%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(120 1.9608% 10%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(120 1.9608% 10%);
+    --primary: hsl(0 0% 9.0196%);
+    --primary-foreground: hsl(0 0% 98.0392%);
+    --secondary: hsl(0 0% 96.0784%);
+    --secondary-foreground: hsl(120 1.9608% 10%);
+    --muted: hsl(0 0% 96.0784%);
+    --muted-foreground: hsl(0 0% 45.0980%);
+    --base-accent: hsl(0 0% 14%);
+    --accent: hsl(0 0% 96.0784%);
+    --accent-foreground: hsl(120 1.9608% 10%);
+    --border: hsl(0 0% 18.0392%);
+    --input: hsl(0 0% 18.0392%);
+    --ring: hsl(0 0% 18.0392%);
+    --info: hsl(130, 41%, 67%);
+    --info-foreground: hsl(0 0% 100%);
+    --warning: hsl(28, 88%, 59%);
+    --warning-foreground: hsl(0 0% 100%);
+    --destructive: hsl(231.8841 100% 40.5882%);
+    --destructive-foreground: hsl(0 0% 100%);
+    --chart-1: hsl(91.9266 100% 78.6275%);
+    --chart-2: hsl(97.3404 91.2621% 59.6078%);
+    --chart-3: hsl(101.5842 86.3248% 54.1176%);
+    --chart-4: hsl(103.75 78.6885% 47.8431%);
+    --chart-5: hsl(106.4789 69.6078% 40%);
+    --sidebar: hsl(0 0% 98.0392%);
+    --sidebar-foreground: hsl(120 1.9608% 10%);
+    --sidebar-primary: hsl(120 1.9608% 10%);
+    --sidebar-primary-foreground: hsl(0 0% 98.0392%);
+    --sidebar-accent: hsl(0 0% 96.0784%);
+    --sidebar-accent-foreground: hsl(120 1.9608% 10%);
+    --sidebar-border: hsl(0 0% 89.8039%);
+    --sidebar-ring: hsl(0 0% 63.1373%);
+    --font-sans: Inter, ui-sans-serif, sans-serif, system-ui;
+    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --radius: 0.5rem;
+    --spacing: 0.25rem;
+}
+
+.dark {
+    --background: hsl(0, 0%, 7%);
+    --foreground: hsl(0 0% 100%);
+    --card: hsl(0, 0%, 9%);
+    --card-foreground: hsl(0 0% 100%);
+    --popover: hsl(0 0% 9.0196%);
+    --popover-foreground: hsl(0 0% 100%);
+    --primary: hsl(183, 39%, 35%);
+    --primary-foreground: hsl(0 0% 100%);
+    --secondary: oklch(0.25 0 0);
+    --secondary-foreground: oklch(1 0 0);
+    --muted: hsl(0 0% 9.0196%);
+    --muted-foreground: hsl(0 0% 54.1176%);
+    --base-accent: hsl(0 0% 14%);
+    --accent: oklch(37.1% 0 0);
+    --accent-foreground: hsl(0 0% 100%);
+    --border: hsl(0 0% 18.0392%);
+    --input: hsl(0 0% 18.0392%);
+    --ring: hsl(0 0% 80%);
+    --info: hsl(130, 41%, 67%);
+    --info-foreground: hsl(0 0% 100%);
+    --warning: hsl(28, 88%, 59%);
+    --warning-foreground: hsl(0 0% 100%);
+    --destructive: hsl(6.3158 91.5663% 67.4510%);
+    --destructive-foreground: hsl(5.4545 100.0000% 97.8431%);
+    --chart-1: hsl(129.5652 41.3174% 67.2549%);
+    --chart-2: hsl(31.2676 36.4103% 61.7647%);
+    --chart-3: hsl(6.3158 91.5663% 67.4510%);
+    --chart-4: hsl(27.541 87.5598% 59.0196%);
+    --chart-5: hsl(40.3571 100.0000% 67.0588%);
+    --sidebar: hsl(0 0% 7.0588%);
+    --sidebar-foreground: hsl(0 0% 100%);
+    --sidebar-primary: hsl(184 38.4615% 15.2941%);
+    --sidebar-primary-foreground: hsl(0 0% 100%);
+    --sidebar-accent: hsl(184 38.4615% 15.2941%);
+    --sidebar-accent-foreground: hsl(183.5294 20% 83.3333%);
+    --sidebar-border: hsl(0 0% 18.0392%);
+    --sidebar-ring: hsl(0 0% 70.9804%);
+    --font-sans: Inter, ui-sans-serif, sans-serif, system-ui;
+    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --radius: 0.5rem;
+    --spacing: 0.25rem;
+}

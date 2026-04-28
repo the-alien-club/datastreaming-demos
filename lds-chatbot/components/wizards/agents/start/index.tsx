@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/i18n/routing"
+import { useTranslations } from "next-intl"
 import { toast } from "sonner"
 import { Step } from "@/components/ui/step"
 import { Wizard } from "@/components/ui/wizard"
@@ -26,18 +27,11 @@ interface StartWizardProps {
 
 export function StartWizard({ onClose }: StartWizardProps) {
   const router = useRouter()
+  const t = useTranslations("wizard")
   const [state, setState] = useState<WizardState>(createInitialState)
   const [models, setModels] = useState<PublicAIModel[]>([])
-  // Reflects the in-flight upload kicked off by the wizard's Next button on
-  // the knowledge step. Lifted up so the wizard's own Loader2 spinner
-  // (driven by `onBeforeNext`'s promise) and the knowledge step body
-  // share the same flag — the user always sees one, never two,
-  // "uploading" indicators.
   const [uploadInFlight, setUploadInFlight] = useState(false)
 
-  // Refs for unmount cleanup: if the wizard closes mid-flow after the agent
-  // has been created (step 2's POST), delete it server-side so we don't
-  // leave a half-built ghost behind.
   const agentIdRef = useRef<string | null>(null)
   const completedRef = useRef(false)
 
@@ -59,24 +53,19 @@ export function StartWizard({ onClose }: StartWizardProps) {
       .then((data: PublicAIModel[]) => {
         setModels(Array.isArray(data) ? data : [])
       })
-      .catch(() => {
-        // Models endpoint optional; the wizard's default model still works.
-      })
+      .catch(() => {})
   }, [])
 
   const trimmedName = state.name.trim()
   const trimmedSpecialistName = state.specialistName.trim()
 
-  const template = WIZARD_AGENT_TEMPLATES.find((t) => t.id === state.templateId)
+  const template = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)
   const knowledgeRequired = template?.knowledgeRequired ?? false
 
   const knowledgeCanProceed = (() => {
     if (state.knowledgeMode === "skip") return !knowledgeRequired
     if (state.knowledgeMode === "existing") return state.selectedExistingDatasetIds.length > 0
     if (state.knowledgeMode === "upload") {
-      // Either the files are already uploaded, OR there are queued files +
-      // a name set — in which case Next will trigger the upload before
-      // advancing.
       return (
         state.uploadedDatasetIds.length > 0 ||
         (state.uploadFiles.length > 0 && state.uploadDatasetName.trim().length > 0)
@@ -86,27 +75,46 @@ export function StartWizard({ onClose }: StartWizardProps) {
   })()
 
   return (
-    <Wizard onCancel={onClose} cancelLabel="Cancel" submitLabel="Start chatting">
+    <Wizard
+      onCancel={onClose}
+      cancelLabel={t("cancel")}
+      submitLabel={t("startChatting")}
+      backLabel={t("back")}
+      nextLabel={t("next")}
+      savingLabel={t("saving")}
+    >
       <Step
-        label="Pick a starting point"
+        label={t("step1Label")}
         canProceed={() => state.templateId !== null}
         onBeforeNext={async () => {
-          const tpl = WIZARD_AGENT_TEMPLATES.find((t) => t.id === state.templateId)
+          const tpl = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)
           if (!tpl) return false
           const specialist = WIZARD_SPECIALIST_TEMPLATES.find(
             (s) => s.id === tpl.suggestedSpecialistId,
           )
+          const tplName = tpl.isBlank ? "" : t(`tpl_${tpl.id}_name` as never)
+          const tplDesc = t(`tpl_${tpl.id}_desc` as never)
+          const translatedSpecialistName = specialist && !specialist.isCustom
+            ? t(`sp_${specialist.id}_name` as never)
+            : ""
+          const translatedSpecialistPrompt = specialist
+            ? t(`sp_${specialist.id}_prompt` as never)
+            : ""
+          const translatedAgentPrompt = tpl.isBlank
+            ? ""
+            : t(`tpl_${tpl.id}_prompt` as never)
+
           setState((prev) => ({
             ...prev,
-            name: tpl.isBlank ? prev.name : (prev.name || tpl.name),
-            description: prev.description || tpl.description,
-            systemPrompt: tpl.systemPrompt,
+            name: tpl.isBlank ? prev.name : (prev.name || tplName),
+            description: prev.description || tplDesc,
+            systemPrompt: translatedAgentPrompt,
             specialistTemplateId: tpl.suggestedSpecialistId,
-            specialistName: specialist?.isCustom ? "" : (specialist?.name ?? ""),
-            specialistSystemPrompt: specialist?.systemPrompt ?? "",
+            specialistName: translatedSpecialistName,
+            specialistSystemPrompt: translatedSpecialistPrompt,
             selectedMcpIds: [...tpl.suggestedMcpIds],
             knowledgeMode: tpl.knowledgeRequired ? "upload" : prev.knowledgeMode,
-            uploadDatasetName: prev.uploadDatasetName || suggestDatasetName(tpl),
+            uploadDatasetName: prev.uploadDatasetName || suggestDatasetName(tpl.id, t),
           }))
           return true
         }}
@@ -115,11 +123,11 @@ export function StartWizard({ onClose }: StartWizardProps) {
       </Step>
 
       <Step
-        label="Name your agent"
+        label={t("step2Label")}
         canProceed={() => trimmedName.length >= 3}
         onBeforeNext={async () => {
           if (state.agentId) return true
-          const tpl = WIZARD_AGENT_TEMPLATES.find((t) => t.id === state.templateId)
+          const tpl = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)
           try {
             const response = await apiFetch("/api/agents", {
               method: "POST",
@@ -131,7 +139,11 @@ export function StartWizard({ onClose }: StartWizardProps) {
                 model: state.model,
                 steps: [],
                 subagents: [],
-                starterPrompts: tpl?.starterPrompts ?? [],
+                starterPrompts: tpl && !tpl.isBlank
+                  ? tpl.starterPrompts.map((_, i) =>
+                      t(`tpl_${tpl.id}_start${i + 1}` as never)
+                    ).filter(Boolean)
+                  : [],
               }),
             })
             if (!response.ok) {
@@ -142,7 +154,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
             setState((prev) => ({ ...prev, agentId: agent.id }))
             return true
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to create agent")
+            toast.error(err instanceof Error ? err.message : t("errCreateAgent"))
             return false
           }
         }}
@@ -151,8 +163,8 @@ export function StartWizard({ onClose }: StartWizardProps) {
       </Step>
 
       <Step
-        label="Add a specialist"
-        description="A focused subagent the main agent can call on for a specific task."
+        label={t("step3Label")}
+        description={t("step3Description")}
         canProceed={() =>
           state.specialistTemplateId !== null && trimmedSpecialistName.length >= 3
         }
@@ -162,11 +174,11 @@ export function StartWizard({ onClose }: StartWizardProps) {
       </Step>
 
       <Step
-        label="Connect tools"
+        label={t("step4Label")}
         canProceed={() => true}
         onBeforeNext={async () => {
           if (!state.agentId) {
-            toast.error("Agent missing — go back and re-create it")
+            toast.error(t("errAgentMissingRetry"))
             return false
           }
           if (state.specialistSubagentId) return true
@@ -189,7 +201,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
             setState((prev) => ({ ...prev, specialistSubagentId: subagent.id }))
             return true
           } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to add specialist")
+            toast.error(err instanceof Error ? err.message : t("errAddSpecialist"))
             return false
           }
         }}
@@ -198,19 +210,19 @@ export function StartWizard({ onClose }: StartWizardProps) {
       </Step>
 
       <Step
-        label="Add knowledge"
-        description={template?.knowledgePrompt || "Optional documents the agent should draw from."}
+        label={t("step5Label")}
+        description={
+          template
+            ? t(`tpl_${template.id}_knowledge` as never) || t("step5Label")
+            : t("step5Label")
+        }
         canProceed={() => knowledgeCanProceed && !uploadInFlight}
         onBeforeNext={async () => {
           if (!state.agentId) {
-            toast.error("Agent missing — go back")
+            toast.error(t("errAgentMissing"))
             return false
           }
 
-          // Upload mode: if the user queued files but hasn't pushed them
-          // yet, do the upload here (formerly behind an inline "Start
-          // upload" button). Then fall through to the attach loop with the
-          // freshly-created dataset id added in.
           let uploadedHere: string[] = []
           if (
             state.knowledgeMode === "upload" &&
@@ -221,7 +233,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
             try {
               uploadedHere = await uploadWizardCorpus(state)
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Upload failed")
+              toast.error(err instanceof Error ? err.message : t("errUploadFailed"))
               return false
             } finally {
               setUploadInFlight(false)
@@ -236,10 +248,6 @@ export function StartWizard({ onClose }: StartWizardProps) {
           if (state.knowledgeMode === "existing") {
             datasetIdsToAttach.push(...state.selectedExistingDatasetIds)
           } else if (state.knowledgeMode === "upload") {
-            // Combine the previously-uploaded ids in `state` with whatever
-            // we just uploaded in this same Next click — `setState` above
-            // hasn't flushed yet so we can't read it back from
-            // `state.uploadedDatasetIds`.
             datasetIdsToAttach.push(...state.uploadedDatasetIds, ...uploadedHere)
           }
 
@@ -263,7 +271,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
                 attachedDatasetIds: [...prev.attachedDatasetIds, datasetId],
               }))
             } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Failed to attach dataset")
+              toast.error(err instanceof Error ? err.message : t("errAttachDataset"))
               return false
             }
           }
@@ -279,14 +287,13 @@ export function StartWizard({ onClose }: StartWizardProps) {
       </Step>
 
       <Step
-        label="You're ready"
+        label={t("step6Label")}
         onBeforeNext={async () => {
           if (!state.agentId) return false
           completedRef.current = true
           router.push(`/agents/${state.agentId}/chat`)
           markWizardSeen()
           onClose()
-          // Navigation already happened — Wizard must not increment past the last step.
           return false
         }}
       >
@@ -296,14 +303,6 @@ export function StartWizard({ onClose }: StartWizardProps) {
   )
 }
 
-/**
- * Upload the queued files in the wizard's corpus-upload step. Creates a
- * dataset, then POSTs the files to its entries endpoint. Returns the new
- * dataset id (wrapped in an array so future iterations could add more
- * datasets in one click). Throws on any non-2xx response — the caller
- * surfaces the error via `toast` and short-circuits the wizard's
- * `onBeforeNext`.
- */
 async function uploadWizardCorpus(state: WizardState): Promise<string[]> {
   const datasetName = state.uploadDatasetName.trim()
   if (!datasetName) throw new Error("Dataset name is required")

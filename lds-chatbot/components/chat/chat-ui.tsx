@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   type FormEvent,
 } from "react"
+import { useTranslations } from "next-intl"
 import type { UIMessage } from "ai"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -113,12 +114,13 @@ function isSubagentPart(p: AnyPart): p is AnyPart & { data: SubagentData } {
   )
 }
 
+function isSubagentEndPart(p: AnyPart): boolean {
+  return p.type === "data-subagent-end"
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function cleanToolName(name: string): string {
-  // Strip the `mcp_<namespace>_<timestamp>_` prefix the platform adds to MCP
-  // tools, e.g. `mcp_test_lds_1772018329422_datacluster_list_datasets`
-  // → `datacluster_list_datasets`.
   const m = name.match(/^mcp_[a-z0-9_-]+?_\d{10,}_(.+)$/)
   return m ? m[1] : name
 }
@@ -132,6 +134,7 @@ function subagentDescription(args: unknown): string | null {
 // ── Typing indicator ───────────────────────────────────────────────────────────
 
 function TypingIndicator() {
+  const t = useTranslations("chat")
   return (
     <div className="flex items-start gap-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -139,7 +142,7 @@ function TypingIndicator() {
       </div>
       <div className="rounded-xl rounded-tl-none border bg-card px-4 py-3">
         <Shimmer as="span" duration={1.5}>
-          Thinking...
+          {t("thinking")}
         </Shimmer>
       </div>
     </div>
@@ -150,9 +153,7 @@ function TypingIndicator() {
 
 interface SubagentPanelProps {
   name: string
-  // Tool-call parts that belong to this subagent activation (gathered later)
   toolCalls: Array<{ name: string; args: unknown }>
-  // Text parts emitted by this subagent
   textParts: string[]
   isStreaming: boolean
 }
@@ -233,9 +234,6 @@ const ToolCallCard = memo(function ToolCallCard({
   args,
 }: ToolCallCardProps) {
   const pretty = cleanToolName(name)
-  // Build a synthetic ToolUIPart-compatible state to reuse ToolHeader badge.
-  // We only receive a data-toolCall event (no result part from this stream),
-  // so treat it as "input-available" (running).
   const toolInput =
     args && typeof args === "object"
       ? (args as Record<string, unknown>)
@@ -260,11 +258,12 @@ const ToolCallCard = memo(function ToolCallCard({
 // ── Subagent "task" dispatch block ─────────────────────────────────────────────
 
 function SubagentDispatchBlock({ description }: { description: string | null }) {
+  const t = useTranslations("chat")
   return (
     <div className="flex items-start gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-900 dark:text-violet-200">
       <UsersRound className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
       <div className="min-w-0 flex-1">
-        <div className="font-medium">Delegating to subagent</div>
+        <div className="font-medium">{t("delegating")}</div>
         {description && (
           <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs opacity-80">
             {description}
@@ -283,30 +282,19 @@ interface AssistantBubbleProps {
   isStreaming: boolean
 }
 
-/**
- * Groups message parts into logical sections for rendering. The algorithm
- * walks the parts array once and accumulates:
- *  - contiguous text chunks into a single MessageResponse
- *  - reasoning parts into a Reasoning block
- *  - data-toolCall parts into ToolCallCard components (unless they are
- *    "task" tool calls, which become SubagentDispatchBlock)
- *  - data-subagent announcements open a SubagentPanel that collects the
- *    tool calls and text that follow until the next data-subagent or end
- */
 const AssistantBubble = memo(function AssistantBubble({
   message,
   isLast,
   isStreaming,
 }: AssistantBubbleProps) {
+  const t = useTranslations("chat")
   const parts = (message.parts ?? []) as AnyPart[]
 
-  // ── Collect reasoning parts for a single collapsed Reasoning block ──────────
   const reasoningText = parts
     .filter(isReasoningPart)
     .map((p) => p.text)
     .join("\n\n")
 
-  // ── Walk parts once to build a render-list ──────────────────────────────────
   type Section =
     | { kind: "text"; text: string }
     | { kind: "toolCall"; name: string; args: unknown }
@@ -314,7 +302,6 @@ const AssistantBubble = memo(function AssistantBubble({
     | { kind: "subagent"; name: string; toolCalls: Array<{ name: string; args: unknown }>; textParts: string[] }
 
   const sections: Section[] = []
-
   let currentSubagent: (Section & { kind: "subagent" }) | null = null
 
   function flush() {
@@ -325,29 +312,23 @@ const AssistantBubble = memo(function AssistantBubble({
   }
 
   for (const part of parts) {
-    if (isReasoningPart(part)) {
-      // Reasoning is shown in a dedicated block at the top; skip here.
+    if (isReasoningPart(part)) continue
+
+    if (isSubagentEndPart(part)) {
+      flush()
       continue
     }
 
     if (isSubagentPart(part)) {
       flush()
-      currentSubagent = {
-        kind: "subagent",
-        name: part.data.name,
-        toolCalls: [],
-        textParts: [],
-      }
+      currentSubagent = { kind: "subagent", name: part.data.name, toolCalls: [], textParts: [] }
       continue
     }
 
     if (isToolCallPart(part)) {
       const { name, args } = part.data
-
       if (name === "task") {
-        // The "task" pseudo-tool is the platform's subagent-dispatch call.
         if (currentSubagent) {
-          // Treat as context for the subagent we're building.
           currentSubagent.toolCalls.push({ name, args })
         } else {
           flush()
@@ -355,7 +336,6 @@ const AssistantBubble = memo(function AssistantBubble({
         }
         continue
       }
-
       if (currentSubagent) {
         currentSubagent.toolCalls.push({ name, args })
       } else {
@@ -369,7 +349,6 @@ const AssistantBubble = memo(function AssistantBubble({
       if (currentSubagent) {
         currentSubagent.textParts.push(part.text)
       } else {
-        // Merge with previous text section if possible.
         const last = sections[sections.length - 1]
         if (last?.kind === "text") {
           last.text += part.text
@@ -381,15 +360,18 @@ const AssistantBubble = memo(function AssistantBubble({
     }
   }
 
-  // Flush any open subagent.
   flush()
 
-  if (sections.length === 0 && !reasoningText) return null
+  // No content yet — show thinking indicator while the first token is in flight,
+  // otherwise render nothing (avoids ghost bubbles for empty stored messages).
+  if (sections.length === 0 && !reasoningText) {
+    if (isLast && isStreaming) return <TypingIndicator />
+    return null
+  }
 
   return (
     <Message from="assistant">
       <MessageContent>
-        {/* Reasoning — always first, collapsed by default after streaming */}
         {reasoningText && (
           <Reasoning isStreaming={isLast && isStreaming}>
             <ReasoningTrigger />
@@ -405,24 +387,14 @@ const AssistantBubble = memo(function AssistantBubble({
                   {section.text}
                 </MessageResponse>
               )
-
             case "toolCall":
               return (
-                <ToolCallCard
-                  key={`tc-${idx}`}
-                  name={section.name}
-                  args={section.args}
-                />
+                <ToolCallCard key={`tc-${idx}`} name={section.name} args={section.args} />
               )
-
             case "taskDispatch":
               return (
-                <SubagentDispatchBlock
-                  key={`td-${idx}`}
-                  description={section.description}
-                />
+                <SubagentDispatchBlock key={`td-${idx}`} description={section.description} />
               )
-
             case "subagent":
               return (
                 <SubagentPanel
@@ -436,10 +408,9 @@ const AssistantBubble = memo(function AssistantBubble({
           }
         })}
 
-        {/* Inline "still working" shimmer at the end of an in-progress turn */}
         {isLast && isStreaming && sections.length > 0 && (
           <Shimmer as="p" className="text-xs text-muted-foreground" duration={1.5}>
-            Working...
+            {t("working")}
           </Shimmer>
         )}
       </MessageContent>
@@ -460,11 +431,13 @@ export function ChatUI({
   onSend,
   onNewChat,
 }: ChatUIProps) {
+  const t = useTranslations("chat")
   const [input, setInput] = useState("")
   const isLoading = status === "submitted" || status === "streaming"
   const lastMessage = messages[messages.length - 1]
 
-  // Standalone "thinking" bubble: no assistant content exists yet.
+  // Standalone "thinking" bubble: shown when the last message is from the user
+  // (the assistant message hasn't been created yet by the SDK).
   const showStandaloneIndicator =
     isLoading && (!lastMessage || lastMessage.role === "user")
 
@@ -510,19 +483,19 @@ export function ChatUI({
         {onNewChat && (
           <Button variant="outline" size="sm" onClick={onNewChat}>
             <SquarePen className="mr-1.5 h-3.5 w-3.5" />
-            New chat
+            {t("newChat")}
           </Button>
         )}
       </div>
 
-      {/* Messages — Conversation handles sticky-bottom scrolling */}
+      {/* Messages */}
       <Conversation className="flex-1">
         <ConversationContent>
           {messages.length === 0 && !isLoading && (
             <ConversationEmptyState
               icon={<Bot className="h-12 w-12 opacity-30" />}
-              title={agentName ? `Chat with ${agentName}` : "Start a conversation"}
-              description="Ask anything — the agent will respond below."
+              title={agentName ? t("chatWith", { name: agentName }) : t("startConversation")}
+              description={t("emptyDescription")}
             />
           )}
 
@@ -587,7 +560,7 @@ export function ChatUI({
             value={input}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            placeholder="Message the agent… (Enter to send, Shift+Enter for newline)"
+            placeholder={t("placeholder")}
             className={cn(
               "flex-1 min-h-11 max-h-[200px] resize-none overflow-y-auto",
               "text-sm leading-relaxed",

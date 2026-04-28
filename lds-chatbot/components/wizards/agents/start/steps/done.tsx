@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
+import { useTranslations } from "next-intl"
+import { Link } from "@/i18n/routing"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2, Loader2, Settings } from "lucide-react"
 import { apiFetch } from "@/lib/api-fetch"
@@ -20,6 +21,7 @@ interface DatasetStatusResponse {
 }
 
 export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
+  const t = useTranslations("wizard")
   const [statusByDataset, setStatusByDataset] = useState<Record<string, DatasetStatusResponse>>({})
 
   useEffect(() => {
@@ -75,7 +77,7 @@ export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
     <div className="space-y-5">
       <div className="flex items-center gap-2 text-sm">
         <CheckCircle2 className="size-5 text-primary" />
-        <span className="font-semibold">Your agent is ready.</span>
+        <span className="font-semibold">{t("doneReady")}</span>
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">
@@ -96,10 +98,10 @@ export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
               </Badge>
             )}
             <Badge variant="outline" className="text-[10px]">
-              {state.selectedMcpIds.length} tool{state.selectedMcpIds.length !== 1 ? "s" : ""}
+              {t("doneTools", { count: state.selectedMcpIds.length })}
             </Badge>
             <Badge variant="outline" className="text-[10px]">
-              {documentCount} document{documentCount !== 1 ? "s" : ""}
+              {t("doneDocs", { count: documentCount })}
             </Badge>
           </div>
         </div>
@@ -108,9 +110,7 @@ export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
       {stillProcessing && (
         <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
           <Loader2 className="size-4 animate-spin" />
-          <span>
-            Documents are still processing. Your agent will use them as soon as they&apos;re ready.
-          </span>
+          <span>{t("doneProcessing")}</span>
         </div>
       )}
 
@@ -121,7 +121,7 @@ export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
             onClick={onClose}
             className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
           >
-            <Settings className="size-3.5" /> Open advanced settings
+            <Settings className="size-3.5" /> {t("doneAdvancedSettings")}
           </Link>
         </div>
       )}

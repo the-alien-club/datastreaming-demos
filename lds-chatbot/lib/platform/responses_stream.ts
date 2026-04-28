@@ -34,6 +34,9 @@
 //   data-subagent        — emitted the first time a non-root agent's
 //                          output item appears (via raw events); drives
 //                          the subagent panel announcement.
+//   data-subagent-end    — emitted when root-agent text resumes after a
+//                          subagent was active; signals the UI to close
+//                          the subagent panel and return to main context.
 //   data-toolCall        — emitted on `tool-call` fullStream parts;
 //                          carries `{ id, name, args }` in the legacy
 //                          chip shape the chat UI expects.
@@ -307,6 +310,7 @@ class SidecarState {
   private _fullText: string = ""
   private _rootAgentId: string | null = null
   private _hasOpenTextPart: boolean = false
+  private _activeSubagentId: string | null = null
 
   private readonly _registry: Map<string, AgentRegistryEntry> = new Map()
   private readonly _announcedSubagents: Set<string> = new Set()
@@ -317,8 +321,19 @@ class SidecarState {
 
   // ── Text tracking ──────────────────────────────────────────────────────────
 
-  trackText(_partId: string): void {
+  trackText(partId: string): void {
     this._hasOpenTextPart = true
+    // If root-agent text resumes after a subagent was active, close the panel.
+    const agentId = this._decodeAgentFromItemId(partId)
+    if (
+      agentId !== null &&
+      this._rootAgentId !== null &&
+      agentId === this._rootAgentId &&
+      this._activeSubagentId !== null
+    ) {
+      this._writer.write({ type: "data-subagent-end", data: {} } as WriterEvent)
+      this._activeSubagentId = null
+    }
   }
 
   accumulateText(delta: string): void {
@@ -460,6 +475,7 @@ class SidecarState {
       },
     } as WriterEvent)
     this._announcedSubagents.add(agentId)
+    this._activeSubagentId = agentId
   }
 
   // ── Result accessor ────────────────────────────────────────────────────────

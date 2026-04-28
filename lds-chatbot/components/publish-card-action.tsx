@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 import { Globe, Lock, Loader2 } from "lucide-react"
 import { toast } from "sonner"
@@ -8,23 +9,20 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { apiFetch } from "@/lib/api-fetch"
 
-// Client island for the otherwise server-rendered list pages (specialists).
-// Renders a "Make Public" / "Make Private" button and fires a PATCH to
-// toggle isPublic. On success it calls router.refresh() so the server
-// component re-fetches the updated row — same contract as DeleteCardAction.
+type ResourceKey = "specialist"
 
 interface PublishCardActionProps {
-  /** Resource label, e.g. "specialist". Lowercase, singular. */
-  resource: string
-  /** PATCH endpoint — e.g. `/api/specialists/123`. */
+  resource: ResourceKey
   endpoint: string
-  /** Current published state of the row. */
   isPublic: boolean
 }
 
 export function PublishCardAction({ resource, endpoint, isPublic }: PublishCardActionProps) {
+  const t = useTranslations("publish")
   const router = useRouter()
   const [pending, setPending] = React.useState(false)
+
+  const resourceLabel = t(`resources.${resource}`)
 
   async function handleClick() {
     setPending(true)
@@ -38,10 +36,14 @@ export function PublishCardAction({ resource, endpoint, isPublic }: PublishCardA
         const body = (await res.json().catch(() => ({}))) as { error?: string }
         throw new Error(body.error ?? `HTTP ${res.status}`)
       }
-      toast.success(isPublic ? `${capitalize(resource)} set to private` : `${capitalize(resource)} published`)
+      toast.success(
+        isPublic
+          ? t("madePrivate", { resource: resourceLabel })
+          : t("published", { resource: resourceLabel }),
+      )
       router.refresh()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to update ${resource}`)
+      toast.error(err instanceof Error ? err.message : t("failed", { resource: resourceLabel }))
     } finally {
       setPending(false)
     }
@@ -63,11 +65,7 @@ export function PublishCardAction({ resource, endpoint, isPublic }: PublishCardA
       ) : (
         <Globe className="h-3.5 w-3.5 mr-1.5" />
       )}
-      {isPublic ? "Make Private" : "Make Public"}
+      {isPublic ? t("makePrivate") : t("makePublic")}
     </Button>
   )
-}
-
-function capitalize(s: string): string {
-  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1)
 }

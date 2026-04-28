@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,32 +26,34 @@ interface IdentityStepContentProps {
 }
 
 export function IdentityStepContent({ state, setState, models }: IdentityStepContentProps) {
+  const t = useTranslations("wizard")
+  const tCommon = useTranslations("common")
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const trimmedName = state.name.trim()
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="wizard-agent-name">Name</Label>
+        <Label htmlFor="wizard-agent-name">{tCommon("nameLabel")}</Label>
         <Input
           id="wizard-agent-name"
           value={state.name}
           onChange={(e) => setState((prev) => ({ ...prev, name: e.target.value }))}
-          placeholder="e.g. Contract Drafter for M&A"
+          placeholder={t("namePlaceholder")}
           autoFocus
         />
         {trimmedName.length > 0 && trimmedName.length < 3 && (
-          <p className="text-xs text-destructive">Name must be at least 3 characters.</p>
+          <p className="text-xs text-destructive">{t("nameMinLength")}</p>
         )}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="wizard-agent-description">Description (optional)</Label>
+        <Label htmlFor="wizard-agent-description">{t("descriptionLabel")}</Label>
         <Input
           id="wizard-agent-description"
           value={state.description}
           onChange={(e) => setState((prev) => ({ ...prev, description: e.target.value }))}
-          placeholder="One line summary of what this agent does"
+          placeholder={t("descriptionPlaceholder")}
         />
       </div>
 
@@ -60,13 +63,13 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
         className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
       >
         {advancedOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-        Advanced
+        {t("advanced")}
       </button>
 
       {advancedOpen && (
         <div className="space-y-4 rounded-md border bg-muted/30 p-4">
           <div className="space-y-2">
-            <Label htmlFor="wizard-agent-system-prompt">System prompt</Label>
+            <Label htmlFor="wizard-agent-system-prompt">{t("systemPromptLabel")}</Label>
             <Textarea
               id="wizard-agent-system-prompt"
               value={state.systemPrompt}
@@ -76,7 +79,7 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="wizard-agent-model">Model</Label>
+            <Label htmlFor="wizard-agent-model">{t("modelLabel")}</Label>
             {models.length === 0 ? (
               <Input
                 id="wizard-agent-model"
@@ -89,7 +92,7 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
                 onValueChange={(v) => setState((prev) => ({ ...prev, model: v }))}
               >
                 <SelectTrigger id="wizard-agent-model" className="w-full">
-                  <SelectValue placeholder="Select a model" />
+                  <SelectValue placeholder={tCommon("selectModel")} />
                 </SelectTrigger>
                 <SelectContent>
                   {models.map((m) => (
@@ -108,10 +111,7 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
       )}
 
       {state.agentId && (
-        <p className="text-xs text-muted-foreground">
-          Agent saved. Editing the name here will not rename it — you can adjust it later in
-          settings.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("agentSavedNote")}</p>
       )}
     </div>
   )

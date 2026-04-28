@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useTranslations } from "next-intl"
+import { useRouter } from "@/i18n/routing"
+import { Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,6 +23,8 @@ interface FileItem {
 type Step = 1 | 2
 
 export default function NewDatasetPage() {
+  const t = useTranslations("datasetNew")
+  const tCommon = useTranslations("common")
   const router = useRouter()
 
   const [step, setStep] = useState<Step>(1)
@@ -32,8 +35,6 @@ export default function NewDatasetPage() {
   const [dragActive, setDragActive] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // ── File handling ──────────────────────────────────────────────────────────
 
   function addFiles(incoming: FileList | File[]) {
     const list = Array.from(incoming)
@@ -58,22 +59,19 @@ export default function NewDatasetPage() {
     }
   }, [])
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
-
   async function handleSubmit() {
     if (!name.trim()) {
-      toast.error("Name is required")
+      toast.error(tCommon("nameRequired"))
       return
     }
     if (files.length === 0) {
-      toast.error("Please add at least one file")
+      toast.error(t("atLeastOneFile"))
       return
     }
 
     setSubmitting(true)
 
     try {
-      // 1. Create dataset
       const createResponse = await apiFetch("/api/datasets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,7 +86,6 @@ export default function NewDatasetPage() {
       const dataset = await createResponse.json()
       const datasetId: string = dataset.id
 
-      // 2. Upload files one by one, updating status as we go
       for (let i = 0; i < files.length; i++) {
         setFiles((prev) =>
           prev.map((item, idx) => (idx === i ? { ...item, status: "uploading" } : item))
@@ -121,26 +118,23 @@ export default function NewDatasetPage() {
         }
       }
 
-      toast.success("Dataset created and files uploaded")
+      toast.success(t("created"))
       router.push(`/datasets/${datasetId}`)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create dataset")
+      toast.error(err instanceof Error ? err.message : t("failedCreate"))
       setSubmitting(false)
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <div className="p-6 max-w-xl">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/datasets">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-2xl font-bold">New Dataset</h1>
+        <h1 className="text-2xl font-bold">{t("title")}</h1>
       </div>
 
       {/* Step indicator */}
@@ -152,7 +146,7 @@ export default function NewDatasetPage() {
               : "bg-muted text-muted-foreground"
           }`}
         >
-          1 Name
+          {t("step1Label")}
         </span>
         <span className="text-muted-foreground text-xs">→</span>
         <span
@@ -162,52 +156,49 @@ export default function NewDatasetPage() {
               : "bg-muted text-muted-foreground"
           }`}
         >
-          2 Files
+          {t("step2Label")}
         </span>
       </div>
 
-      {/* Step 1: Name + description */}
       {step === 1 && (
         <div className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
+            <Label htmlFor="name">{tCommon("nameLabel")} *</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Research Corpus"
+              placeholder={t("namePlaceholder")}
               autoFocus
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{tCommon("descriptionLabel")}</Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What is this dataset about?"
+              placeholder={t("descriptionPlaceholder")}
               className="min-h-24 resize-y"
             />
           </div>
           <Button
             onClick={() => {
               if (!name.trim()) {
-                toast.error("Name is required")
+                toast.error(tCommon("nameRequired"))
                 return
               }
               setStep(2)
             }}
             className="w-full"
           >
-            Next
+            {tCommon("next")}
           </Button>
         </div>
       )}
 
-      {/* Step 2: File upload */}
       {step === 2 && (
         <div className="space-y-5">
-          {/* Dropzone */}
           <div
             onDragEnter={() => setDragActive(true)}
             onDragOver={(e) => {
@@ -225,9 +216,10 @@ export default function NewDatasetPage() {
           >
             <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
-              Drag files here or <span className="text-foreground font-medium">click to select</span>
+              {t("dropzoneText")}{" "}
+              <span className="text-foreground font-medium">{t("dropzoneClick")}</span>
             </p>
-            <p className="text-xs text-muted-foreground mt-1">PDF, TXT, DOCX</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("dropzoneFormats")}</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -239,7 +231,6 @@ export default function NewDatasetPage() {
             />
           </div>
 
-          {/* File list */}
           {files.length > 0 && (
             <div className="space-y-2">
               {files.map((item, idx) => (
@@ -283,7 +274,7 @@ export default function NewDatasetPage() {
               disabled={submitting}
               className="flex-1"
             >
-              Back
+              {tCommon("back")}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -291,7 +282,7 @@ export default function NewDatasetPage() {
               className="flex-1"
             >
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create &amp; Upload
+              {t("createUpload")}
             </Button>
           </div>
         </div>

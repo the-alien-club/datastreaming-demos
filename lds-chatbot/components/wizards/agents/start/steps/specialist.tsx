@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,9 +19,12 @@ interface SpecialistStepContentProps {
 }
 
 export function SpecialistStepContent({ state, setState }: SpecialistStepContentProps) {
+  const t = useTranslations("wizard")
   const [promptOpen, setPromptOpen] = useState(false)
 
   function pick(template: WizardSpecialistTemplate) {
+    const translatedName = template.isCustom ? "" : t(`sp_${template.id}_name` as never)
+    const translatedPrompt = t(`sp_${template.id}_prompt` as never)
     setState((prev) => ({
       ...prev,
       specialistTemplateId: template.id,
@@ -28,14 +32,14 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
         ? prev.specialistName
         : (prev.specialistName && prev.specialistTemplateId === template.id
             ? prev.specialistName
-            : template.name),
-      specialistSystemPrompt: template.systemPrompt,
+            : translatedName),
+      specialistSystemPrompt: translatedPrompt,
     }))
   }
 
   const trimmedName = state.specialistName.trim()
   const selectedTemplate = WIZARD_SPECIALIST_TEMPLATES.find(
-    (t) => t.id === state.specialistTemplateId,
+    (tpl) => tpl.id === state.specialistTemplateId,
   )
 
   return (
@@ -45,6 +49,8 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
           <SpecialistCard
             key={template.id}
             template={template}
+            name={t(`sp_${template.id}_name` as never)}
+            description={t(`sp_${template.id}_desc` as never)}
             selected={state.specialistTemplateId === template.id}
             onSelect={() => pick(template)}
           />
@@ -54,17 +60,21 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
       {selectedTemplate && (
         <div className="space-y-3 rounded-md border bg-muted/20 p-4">
           <div className="space-y-2">
-            <Label htmlFor="wizard-specialist-name">Specialist name</Label>
+            <Label htmlFor="wizard-specialist-name">{t("specialistNameLabel")}</Label>
             <Input
               id="wizard-specialist-name"
               value={state.specialistName}
               onChange={(e) =>
                 setState((prev) => ({ ...prev, specialistName: e.target.value }))
               }
-              placeholder={selectedTemplate.isCustom ? "e.g. M&A Clause Writer" : selectedTemplate.name}
+              placeholder={
+                selectedTemplate.isCustom
+                  ? t("sp_custom_name" as never)
+                  : t(`sp_${selectedTemplate.id}_name` as never)
+              }
             />
             {trimmedName.length > 0 && trimmedName.length < 3 && (
-              <p className="text-xs text-destructive">Name must be at least 3 characters.</p>
+              <p className="text-xs text-destructive">{t("specialistNameMinLength")}</p>
             )}
           </div>
 
@@ -74,12 +84,12 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
             className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
           >
             {promptOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            Edit prompt
+            {t("editPrompt")}
           </button>
 
           {promptOpen && (
             <div className="space-y-2">
-              <Label htmlFor="wizard-specialist-prompt">System prompt</Label>
+              <Label htmlFor="wizard-specialist-prompt">{t("specialistPromptLabel")}</Label>
               <Textarea
                 id="wizard-specialist-prompt"
                 value={state.specialistSystemPrompt}
@@ -87,11 +97,7 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
                   setState((prev) => ({ ...prev, specialistSystemPrompt: e.target.value }))
                 }
                 className="min-h-28 resize-y text-xs"
-                placeholder={
-                  selectedTemplate.isCustom
-                    ? "Describe the role and behaviour of this specialist."
-                    : ""
-                }
+                placeholder={selectedTemplate.isCustom ? t("customPromptPlaceholder") : ""}
               />
             </div>
           )}
@@ -103,10 +109,14 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
 
 function SpecialistCard({
   template,
+  name,
+  description,
   selected,
   onSelect,
 }: {
   template: WizardSpecialistTemplate
+  name: string
+  description: string
   selected: boolean
   onSelect: () => void
 }) {
@@ -131,9 +141,9 @@ function SpecialistCard({
         >
           <Icon className="size-3.5" />
         </div>
-        <span className="text-sm font-semibold">{template.name}</span>
+        <span className="text-sm font-semibold">{name}</span>
       </div>
-      <p className="text-xs text-muted-foreground">{template.description}</p>
+      <p className="text-xs text-muted-foreground">{description}</p>
     </button>
   )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,14 +24,16 @@ interface DatasetRow {
 interface KnowledgeStepContentProps {
   state: WizardState
   setState: WizardSetState
-  // True while the parent wizard's "Next" handler is mid-upload. We hide
-  // the per-file remove buttons during that window so the user can't
-  // mutate the queue we're already POSTing.
   uploadInFlight?: boolean
 }
 
-export function KnowledgeStepContent({ state, setState, uploadInFlight = false }: KnowledgeStepContentProps) {
-  const template = WIZARD_AGENT_TEMPLATES.find((t) => t.id === state.templateId)
+export function KnowledgeStepContent({
+  state,
+  setState,
+  uploadInFlight = false,
+}: KnowledgeStepContentProps) {
+  const t = useTranslations("wizard")
+  const template = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)
   const knowledgeRequired = template?.knowledgeRequired ?? false
 
   const [datasets, setDatasets] = useState<DatasetRow[]>([])
@@ -91,21 +94,18 @@ export function KnowledgeStepContent({ state, setState, uploadInFlight = false }
       <Tabs value={state.knowledgeMode} onValueChange={(v) => setMode(v as KnowledgeMode)}>
         <TabsList>
           <TabsTrigger value="skip" disabled={knowledgeRequired}>
-            Skip
+            {t("knowledgeSkip")}
           </TabsTrigger>
-          <TabsTrigger value="existing">Pick existing</TabsTrigger>
-          <TabsTrigger value="upload">Upload new</TabsTrigger>
+          <TabsTrigger value="existing">{t("knowledgeExisting")}</TabsTrigger>
+          <TabsTrigger value="upload">{t("knowledgeUpload")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="skip">
           <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
             {knowledgeRequired ? (
-              <p>
-                This template needs documents to work. Switch to <span className="font-medium">Pick existing</span>{" "}
-                or <span className="font-medium">Upload new</span>.
-              </p>
+              <p>{t("knowledgeRequiredSwitch")}</p>
             ) : (
-              <p>You can attach documents later from the Datasets page.</p>
+              <p>{t("knowledgeSkipHint")}</p>
             )}
           </div>
         </TabsContent>
@@ -113,11 +113,11 @@ export function KnowledgeStepContent({ state, setState, uploadInFlight = false }
         <TabsContent value="existing">
           {loadingDatasets ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading datasets...
+              <Loader2 className="size-4 animate-spin" /> {t("knowledgeLoading")}
             </div>
           ) : datasets.length === 0 ? (
             <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-              No datasets yet. Switch to <span className="font-medium">Upload new</span> to create one.
+              {t("knowledgeNoDatasets")}
             </div>
           ) : (
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -160,14 +160,14 @@ export function KnowledgeStepContent({ state, setState, uploadInFlight = false }
         <TabsContent value="upload">
           <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="wizard-dataset-name">Dataset name</Label>
+              <Label htmlFor="wizard-dataset-name">{t("knowledgeDatasetNameLabel")}</Label>
               <Input
                 id="wizard-dataset-name"
                 value={state.uploadDatasetName}
                 onChange={(e) =>
                   setState((prev) => ({ ...prev, uploadDatasetName: e.target.value }))
                 }
-                placeholder="e.g. Firm contract archive"
+                placeholder={t("knowledgeDatasetNamePlaceholder")}
                 disabled={uploadInFlight || uploadDone}
               />
             </div>
@@ -181,7 +181,7 @@ export function KnowledgeStepContent({ state, setState, uploadInFlight = false }
               )}
             >
               <Upload className="size-5" />
-              <span>Click to add files (PDF, DOCX, TXT)</span>
+              <span>{t("knowledgeDropzone")}</span>
               <input
                 id="wizard-dataset-files"
                 type="file"
@@ -220,23 +220,15 @@ export function KnowledgeStepContent({ state, setState, uploadInFlight = false }
               </div>
             )}
 
-            {/* The "Start upload" button is gone — the wizard's Next button
-                triggers the upload AND advances. Show a transient hint while
-                that's in flight, an "uploaded — keep going" line when files
-                already shipped, and a "press Next" nudge otherwise. */}
             {uploadInFlight ? (
               <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
                 <Loader2 className="size-3.5 animate-spin" />
-                Uploading… (Next will move on when complete)
+                {t("knowledgeUploading")}
               </p>
             ) : uploadDone ? (
-              <p className="text-xs text-muted-foreground">
-                Uploaded — processing in background. You can move on.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("knowledgeUploaded")}</p>
             ) : state.uploadFiles.length > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Click <span className="font-medium">Next</span> to upload these files and continue.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("knowledgeClickNext")}</p>
             ) : null}
           </div>
         </TabsContent>

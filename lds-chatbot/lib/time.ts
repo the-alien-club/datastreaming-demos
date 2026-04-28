@@ -55,20 +55,21 @@ export function timeAgo(value: TimeInput): string {
   return d.toLocaleDateString()
 }
 
-export type DateGroup = "Today" | "Yesterday" | "Older"
+// Locale-neutral keys — mapped to translations in conversations/page.tsx.
+export type DateGroup = "today" | "yesterday" | "older"
 
 /**
- * Bucket a date into Today / Yesterday / Older for the conversations
- * list grouping.
+ * Bucket a date into today / yesterday / older for the conversations
+ * list grouping. Returns locale-neutral keys for i18n translation.
  */
 export function dateGroup(value: TimeInput): DateGroup {
   const d = toDate(value)
-  if (!d) return "Older"
+  if (!d) return "older"
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const yesterday = new Date(today.getTime() - 86_400_000)
   const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  if (dDay.getTime() === today.getTime()) return "Today"
-  if (dDay.getTime() === yesterday.getTime()) return "Yesterday"
-  return "Older"
+  if (dDay.getTime() === today.getTime()) return "today"
+  if (dDay.getTime() === yesterday.getTime()) return "yesterday"
+  return "older"
 }

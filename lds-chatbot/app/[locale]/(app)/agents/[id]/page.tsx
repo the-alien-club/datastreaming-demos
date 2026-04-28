@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, use } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { useTranslations } from "next-intl"
+import { useRouter } from "@/i18n/routing"
+import { Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -90,15 +91,12 @@ interface LibrarySpecialist {
 
 const DEFAULT_MODEL = DEFAULT_MODEL_SLUG
 
-// ── Subagent form state ────────────────────────────────────────────────────────
-
 interface SubagentFormState {
   name: string
   description: string
   systemPrompt: string
   model: string
   mcpIds: string[]
-  /** Present when this subagent was attached from a corpus dataset */
   datasetId?: string | null
 }
 
@@ -106,14 +104,16 @@ function emptySubagentForm(): SubagentFormState {
   return { name: "", description: "", systemPrompt: "", model: DEFAULT_MODEL, mcpIds: [] }
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
-
 export default function AgentEditorPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const t = useTranslations("agentForm")
+  const tCommon = useTranslations("common")
+  const tDialog = useTranslations("specialistDialog")
+  const tAgents = useTranslations("agents")
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -125,7 +125,6 @@ export default function AgentEditorPage({
   const [librarySpecialists, setLibrarySpecialists] = useState<LibrarySpecialist[]>([])
   const [mcpList, setMcpList] = useState<McpConfig[]>([])
 
-  // Editable fields
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [systemPrompt, setSystemPrompt] = useState("")
@@ -133,12 +132,10 @@ export default function AgentEditorPage({
   const [steps, setSteps] = useState<Step[]>([])
   const [subagents, setSubagents] = useState<SubagentFormState[]>([])
 
-  // Step inline add
   const [addingStep, setAddingStep] = useState(false)
   const [newStepName, setNewStepName] = useState("")
   const [newStepPrompt, setNewStepPrompt] = useState("")
 
-  // Subagent dialog
   const [subagentDialogOpen, setSubagentDialogOpen] = useState(false)
   const [subagentForm, setSubagentForm] = useState<SubagentFormState>(emptySubagentForm())
   const [dialogTab, setDialogTab] = useState<"library" | "new">("library")
@@ -171,13 +168,13 @@ export default function AgentEditorPage({
         setLibrarySpecialists(Array.isArray(specialistsData) ? specialistsData : [])
         setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
       })
-      .catch(() => toast.error("Failed to load agent"))
+      .catch(() => toast.error(t("failedLoad")))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, t])
 
   async function handleSave() {
     if (!name.trim()) {
-      toast.error("Name is required")
+      toast.error(tCommon("nameRequired"))
       return
     }
     setSaving(true)
@@ -191,9 +188,6 @@ export default function AgentEditorPage({
           systemPrompt: systemPrompt.trim(),
           steps,
           model,
-          // Preserve datasetId on every subagent so corpus attachments survive
-          // a save round-trip. Without this, editing an agent that has a
-          // corpus-linked subagent silently destroys the RAG link.
           subagents: subagents.map((sa) => ({
             name: sa.name,
             description: sa.description,
@@ -208,35 +202,33 @@ export default function AgentEditorPage({
         const err = await response.json().catch(() => ({ error: "Unknown error" }))
         throw new Error(err.error ?? `HTTP ${response.status}`)
       }
-      toast.success("Agent saved")
+      toast.success(t("agentSaved"))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save agent")
+      toast.error(err instanceof Error ? err.message : t("failedSave"))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this agent? This cannot be undone.")) return
+    if (!confirm(t("confirmDelete"))) return
     setDeleting(true)
     try {
       const response = await apiFetch(`/api/agents/${id}`, { method: "DELETE" })
       if (!response.ok && response.status !== 204) {
         throw new Error(`HTTP ${response.status}`)
       }
-      toast.success("Agent deleted")
+      toast.success(t("agentDeleted"))
       router.push("/agents")
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete agent")
+      toast.error(err instanceof Error ? err.message : t("failedDelete"))
       setDeleting(false)
     }
   }
 
-  // ── Steps ──────────────────────────────────────────────────────────────────
-
   function commitStep() {
     if (!newStepName.trim()) {
-      toast.error("Step name is required")
+      toast.error(tCommon("nameRequired"))
       return
     }
     setSteps((prev) => [...prev, { name: newStepName.trim(), prompt: newStepPrompt.trim() }])
@@ -258,8 +250,6 @@ export default function AgentEditorPage({
       return next
     })
   }
-
-  // ── Subagents ──────────────────────────────────────────────────────────────
 
   function openSubagentDialog() {
     setSubagentForm(emptySubagentForm())
@@ -288,12 +278,12 @@ export default function AgentEditorPage({
       },
     ])
     setSubagentDialogOpen(false)
-    toast.success(`Added "${specialist.name}" from library`)
+    toast.success(tDialog("addedFromLibrary", { name: specialist.name }))
   }
 
   async function commitSubagent() {
     if (!subagentForm.name.trim() || !subagentForm.systemPrompt.trim()) {
-      toast.error("Name and system prompt are required")
+      toast.error(tCommon("nameRequired"))
       return
     }
 
@@ -330,9 +320,9 @@ export default function AgentEditorPage({
         },
       ])
       setSubagentDialogOpen(false)
-      toast.success(`Specialist "${saved.name}" added to library`)
+      toast.success(tDialog("specialistAdded", { name: saved.name }))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create specialist")
+      toast.error(err instanceof Error ? err.message : tDialog("failedCreate"))
     } finally {
       setCommittingSubagent(false)
     }
@@ -341,8 +331,6 @@ export default function AgentEditorPage({
   function removeSubagent(index: number) {
     setSubagents((prev) => prev.filter((_, i) => i !== index))
   }
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -355,9 +343,9 @@ export default function AgentEditorPage({
   if (!agent) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground">Agent not found.</p>
+        <p className="text-muted-foreground">{tAgents("notFound")}</p>
         <Button asChild variant="link" className="mt-2 p-0">
-          <Link href="/agents">Back to agents</Link>
+          <Link href="/agents">{tAgents("backToAgents")}</Link>
         </Button>
       </div>
     )
@@ -365,7 +353,6 @@ export default function AgentEditorPage({
 
   return (
     <div className="p-6 max-w-2xl">
-      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/agents">
@@ -376,46 +363,45 @@ export default function AgentEditorPage({
         <Button asChild variant="outline" size="sm">
           <Link href={`/agents/${id}/chat`}>
             <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
-            Chat
+            {tAgents("chat")}
           </Link>
         </Button>
       </div>
 
       <div className="space-y-6">
-        {/* Basic fields */}
         <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
+          <Label htmlFor="name">{tCommon("nameLabel")} *</Label>
           <Input
             id="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Agent name"
+            placeholder={t("agentNamePlaceholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">{tCommon("descriptionLabel")}</Label>
           <Input
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What does this agent do?"
+            placeholder={t("descriptionPlaceholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="systemPrompt">System Prompt</Label>
+          <Label htmlFor="systemPrompt">{tCommon("systemPromptLabel")}</Label>
           <Textarea
             id="systemPrompt"
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
             className="min-h-32 resize-y"
-            placeholder="You are a helpful assistant..."
+            placeholder={t("systemPromptPlaceholder2")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="model">Model</Label>
+          <Label htmlFor="model">{tCommon("modelLabel")}</Label>
           {models.length === 0 ? (
             <Input
               id="model"
@@ -426,7 +412,7 @@ export default function AgentEditorPage({
           ) : (
             <Select value={model} onValueChange={setModel}>
               <SelectTrigger id="model">
-                <SelectValue placeholder="Select a model" />
+                <SelectValue placeholder={tCommon("selectModel")} />
               </SelectTrigger>
               <SelectContent>
                 {models.map((m) => (
@@ -446,10 +432,8 @@ export default function AgentEditorPage({
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-base font-semibold">Steps</h2>
-              <p className="text-xs text-muted-foreground">
-                Sequential instructions appended to the system prompt.
-              </p>
+              <h2 className="text-base font-semibold">{t("stepsTitle")}</h2>
+              <p className="text-xs text-muted-foreground">{t("stepsSubtitle")}</p>
             </div>
             <Button
               type="button"
@@ -459,7 +443,7 @@ export default function AgentEditorPage({
               disabled={addingStep}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add step
+              {t("addStep")}
             </Button>
           </div>
 
@@ -511,20 +495,20 @@ export default function AgentEditorPage({
             {addingStep && (
               <div className="rounded-md border p-3 space-y-2 bg-muted/30">
                 <Input
-                  placeholder="Step name"
+                  placeholder={t("stepNamePlaceholder")}
                   value={newStepName}
                   onChange={(e) => setNewStepName(e.target.value)}
                   autoFocus
                 />
                 <Textarea
-                  placeholder="Step instructions (optional)"
+                  placeholder={t("stepInstructionsPlaceholder")}
                   className="min-h-20 resize-y text-sm"
                   value={newStepPrompt}
                   onChange={(e) => setNewStepPrompt(e.target.value)}
                 />
                 <div className="flex gap-2">
                   <Button type="button" size="sm" onClick={commitStep}>
-                    Add
+                    {tCommon("add")}
                   </Button>
                   <Button
                     type="button"
@@ -536,14 +520,14 @@ export default function AgentEditorPage({
                       setNewStepPrompt("")
                     }}
                   >
-                    Cancel
+                    {tCommon("cancel")}
                   </Button>
                 </div>
               </div>
             )}
 
             {steps.length === 0 && !addingStep && (
-              <p className="text-xs text-muted-foreground py-2">No steps defined.</p>
+              <p className="text-xs text-muted-foreground py-2">{t("noSteps")}</p>
             )}
           </div>
         </div>
@@ -554,14 +538,12 @@ export default function AgentEditorPage({
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-base font-semibold">Specialists</h2>
-              <p className="text-xs text-muted-foreground">
-                Subagents the main agent can delegate to.
-              </p>
+              <h2 className="text-base font-semibold">{t("specialistsTitle")}</h2>
+              <p className="text-xs text-muted-foreground">{t("specialistsSubtitle")}</p>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={openSubagentDialog}>
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add specialist
+              {t("addSpecialist")}
             </Button>
           </div>
 
@@ -606,7 +588,7 @@ export default function AgentEditorPage({
             ))}
 
             {subagents.length === 0 && (
-              <p className="text-xs text-muted-foreground py-2">No specialists defined.</p>
+              <p className="text-xs text-muted-foreground py-2">{t("noSpecialists")}</p>
             )}
           </div>
         </div>
@@ -617,7 +599,7 @@ export default function AgentEditorPage({
         <div className="flex gap-3">
           <Button onClick={handleSave} disabled={saving || deleting}>
             {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save changes
+            {t("saveButton")}
           </Button>
           <Button
             variant="destructive"
@@ -625,7 +607,7 @@ export default function AgentEditorPage({
             disabled={saving || deleting}
           >
             {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Delete agent
+            {t("deleteButton")}
           </Button>
         </div>
       </div>
@@ -634,10 +616,8 @@ export default function AgentEditorPage({
       <Dialog open={subagentDialogOpen} onOpenChange={setSubagentDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Specialist</DialogTitle>
-            <DialogDescription>
-              Pick a saved specialist from your library or create a new one for this agent.
-            </DialogDescription>
+            <DialogTitle>{tDialog("title")}</DialogTitle>
+            <DialogDescription>{tDialog("description")}</DialogDescription>
           </DialogHeader>
 
           <Tabs
@@ -646,7 +626,7 @@ export default function AgentEditorPage({
           >
             <TabsList className="w-full">
               <TabsTrigger value="library" className="flex-1">
-                From Library
+                {tDialog("fromLibrary")}
                 {librarySpecialists.length > 0 && (
                   <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">
                     {librarySpecialists.length}
@@ -654,7 +634,7 @@ export default function AgentEditorPage({
                 )}
               </TabsTrigger>
               <TabsTrigger value="new" className="flex-1">
-                Create New
+                {tDialog("createNew")}
               </TabsTrigger>
             </TabsList>
 
@@ -663,13 +643,9 @@ export default function AgentEditorPage({
               {librarySpecialists.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
                   <BrainCircuit className="h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">No specialists in library yet.</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDialogTab("new")}
-                  >
-                    Create one
+                  <p className="text-sm text-muted-foreground">{tDialog("emptyLibrary")}</p>
+                  <Button variant="outline" size="sm" onClick={() => setDialogTab("new")}>
+                    {tDialog("createOne")}
                   </Button>
                 </div>
               ) : (
@@ -709,7 +685,7 @@ export default function AgentEditorPage({
               )}
               <DialogFooter className="mt-4">
                 <Button variant="outline" onClick={() => setSubagentDialogOpen(false)}>
-                  Cancel
+                  {tCommon("cancel")}
                 </Button>
               </DialogFooter>
             </TabsContent>
@@ -718,40 +694,40 @@ export default function AgentEditorPage({
             <TabsContent value="new">
               <div className="space-y-4 py-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="sa-name">Name *</Label>
+                  <Label htmlFor="sa-name">{tDialog("nameLabel")}</Label>
                   <Input
                     id="sa-name"
-                    placeholder="e.g. Literature Reviewer"
+                    placeholder={tDialog("namePlaceholder")}
                     value={subagentForm.name}
                     onChange={(e) => setSubagentForm((p) => ({ ...p, name: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="sa-desc">
-                    Description{" "}
+                    {tDialog("descLabel")}{" "}
                     <span className="text-muted-foreground text-xs font-normal">
-                      (shown to main agent for delegation)
+                      {tDialog("descHint")}
                     </span>
                   </Label>
                   <Input
                     id="sa-desc"
-                    placeholder="What this specialist is good at..."
+                    placeholder={tDialog("descHint")}
                     value={subagentForm.description}
                     onChange={(e) => setSubagentForm((p) => ({ ...p, description: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="sa-prompt">System Prompt *</Label>
+                  <Label htmlFor="sa-prompt">{tDialog("promptLabel")}</Label>
                   <Textarea
                     id="sa-prompt"
                     className="min-h-24 resize-y text-sm"
-                    placeholder="You are a specialist in..."
+                    placeholder={tDialog("promptPlaceholder")}
                     value={subagentForm.systemPrompt}
                     onChange={(e) => setSubagentForm((p) => ({ ...p, systemPrompt: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="sa-model">Model</Label>
+                  <Label htmlFor="sa-model">{tCommon("modelLabel")}</Label>
                   {models.length === 0 ? (
                     <Input
                       id="sa-model"
@@ -765,7 +741,7 @@ export default function AgentEditorPage({
                       onValueChange={(v) => setSubagentForm((p) => ({ ...p, model: v }))}
                     >
                       <SelectTrigger id="sa-model">
-                        <SelectValue placeholder="Select a model" />
+                        <SelectValue placeholder={tCommon("selectModel")} />
                       </SelectTrigger>
                       <SelectContent>
                         {models.map((m) => (
@@ -781,9 +757,9 @@ export default function AgentEditorPage({
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label>MCP Tools</Label>
+                  <Label>{tCommon("mcpToolsLabel")}</Label>
                   {mcpList.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">No MCP servers configured.</p>
+                    <p className="text-xs text-muted-foreground py-2">{tCommon("noMcps")}</p>
                   ) : (
                     <div className="space-y-4">
                       {Array.from(new Set(mcpList.map((m) => m.category ?? "other"))).map((cat) => (
@@ -827,11 +803,11 @@ export default function AgentEditorPage({
                   onClick={() => setSubagentDialogOpen(false)}
                   disabled={committingSubagent}
                 >
-                  Cancel
+                  {tCommon("cancel")}
                 </Button>
                 <Button onClick={commitSubagent} disabled={committingSubagent}>
                   {committingSubagent && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Add specialist
+                  {tDialog("addSpecialist")}
                 </Button>
               </DialogFooter>
             </TabsContent>

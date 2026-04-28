@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils"
 import {
   WIZARD_AGENT_TEMPLATES,
@@ -13,6 +14,7 @@ interface TemplateStepContentProps {
 }
 
 export function TemplateStepContent({ state, setState }: TemplateStepContentProps) {
+  const t = useTranslations("wizard")
   const selected = state.templateId
 
   function pick(template: WizardAgentTemplate) {
@@ -21,25 +23,34 @@ export function TemplateStepContent({ state, setState }: TemplateStepContentProp
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-muted-foreground">
-        An AI agent for your legal team — pick a starting point or build from scratch.
-      </p>
+      <p className="text-sm text-muted-foreground">{t("templateSubtitle")}</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {WIZARD_AGENT_TEMPLATES.filter((t) => !t.isBlank).map((template) => (
-          <TemplateCard
-            key={template.id}
-            template={template}
-            selected={selected === template.id}
-            onSelect={() => pick(template)}
-          />
-        ))}
+        {WIZARD_AGENT_TEMPLATES.filter((tpl) => !tpl.isBlank).map((template) => {
+          const id = template.id
+          return (
+            <TemplateCard
+              key={id}
+              template={template}
+              name={t(`tpl_${id}_name` as never)}
+              description={t(`tpl_${id}_desc` as never)}
+              capabilities={template.capabilities.map((_, i) =>
+                t(`tpl_${id}_cap${i + 1}` as never)
+              )}
+              selected={selected === id}
+              onSelect={() => pick(template)}
+            />
+          )
+        })}
       </div>
 
-      {WIZARD_AGENT_TEMPLATES.filter((t) => t.isBlank).map((template) => (
+      {WIZARD_AGENT_TEMPLATES.filter((tpl) => tpl.isBlank).map((template) => (
         <BlankCard
           key={template.id}
           template={template}
+          name={t(`tpl_${template.id}_name` as never)}
+          blankLabel={t("blankLabel")}
+          blankDesc={t("blankSkipDesc")}
           selected={selected === template.id}
           onSelect={() => pick(template)}
         />
@@ -50,10 +61,16 @@ export function TemplateStepContent({ state, setState }: TemplateStepContentProp
 
 function TemplateCard({
   template,
+  name,
+  description,
+  capabilities,
   selected,
   onSelect,
 }: {
   template: WizardAgentTemplate
+  name: string
+  description: string
+  capabilities: string[]
   selected: boolean
   onSelect: () => void
 }) {
@@ -78,11 +95,11 @@ function TemplateCard({
         >
           <Icon className="size-4" />
         </div>
-        <div className="text-sm font-semibold">{template.name}</div>
+        <div className="text-sm font-semibold">{name}</div>
       </div>
-      <p className="text-xs text-muted-foreground">{template.description}</p>
+      <p className="text-xs text-muted-foreground">{description}</p>
       <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-        {template.capabilities.slice(0, 3).map((cap) => (
+        {capabilities.slice(0, 3).map((cap) => (
           <li key={cap} className="flex gap-1.5">
             <span className="text-primary/80">·</span>
             <span>{cap}</span>
@@ -95,10 +112,16 @@ function TemplateCard({
 
 function BlankCard({
   template,
+  name,
+  blankLabel,
+  blankDesc,
   selected,
   onSelect,
 }: {
   template: WizardAgentTemplate
+  name: string
+  blankLabel: string
+  blankDesc: string
   selected: boolean
   onSelect: () => void
 }) {
@@ -117,27 +140,22 @@ function BlankCard({
       <Icon className="size-4 text-muted-foreground" />
       <div className="flex flex-col">
         <span className="text-sm font-medium text-muted-foreground">
-          {template.name} — start from scratch
+          {name} {blankLabel}
         </span>
-        <span className="text-xs text-muted-foreground">
-          Skip the templates and configure everything yourself.
-        </span>
+        <span className="text-xs text-muted-foreground">{blankDesc}</span>
       </div>
     </button>
   )
 }
 
-export function suggestDatasetName(template: WizardAgentTemplate): string {
-  switch (template.id) {
-    case "contract-drafter":
-      return "Firm contract archive"
-    case "jurisprudence-researcher":
-      return "Case law archive"
-    case "compliance-advisor":
-      return "Internal policies"
-    case "legal-qa":
-      return "Knowledge base"
-    default:
-      return ""
+// Called from index.tsx when seeding the uploadDatasetName from the template.
+export function suggestDatasetName(
+  templateId: string,
+  t: ReturnType<typeof useTranslations<"wizard">>,
+): string {
+  try {
+    return t(`suggestedDataset_${templateId}` as never)
+  } catch {
+    return ""
   }
 }
