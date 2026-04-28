@@ -8,7 +8,7 @@ import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflow
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { loadEnabledMcpConfigs } from "@/lib/mcps"
 import { ok, notFound, unauthorized, unprocessable } from "@/lib/api-response"
-import { parseBody, updateAgentBodySchema } from "../../_validators"
+import { parseBody, updateAgentBodySchema, patchVisibilityBodySchema } from "../../_validators"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -153,6 +153,32 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     ...updated,
     starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [],
   })
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) return unauthorized()
+
+  const { id } = await context.params
+  const existing = await db.query.agents.findFirst({
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
+  })
+  if (!existing) return notFound("Agent not found")
+
+  const parsed = await parseBody(request, patchVisibilityBodySchema)
+  if (parsed instanceof Response) return parsed
+
+  await db
+    .update(agents)
+    .set({ isPublic: parsed.isPublic, updatedAt: new Date() })
+    .where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
+
+  const updated = await db.query.agents.findFirst({
+    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
+    with: { subagents: true },
+  })
+  if (!updated) return notFound("Agent not found")
+  return ok({ ...updated, starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [] })
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {

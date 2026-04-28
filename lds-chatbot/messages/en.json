@@ -65,7 +65,12 @@
     "chat": "Chat",
     "created": "Created {date}",
     "notFound": "Agent not found.",
-    "backToAgents": "Back to agents"
+    "backToAgents": "Back to agents",
+    "publicSection": "Public Agents",
+    "makePublic": "Make Public",
+    "makePrivate": "Make Private",
+    "published": "Agent published",
+    "madePrivate": "Agent set to private"
   },
   "agentForm": {
     "newTitle": "New Agent",
@@ -123,7 +128,13 @@
     "failedLoad": "Failed to load datasets",
     "confirmDelete": "Delete dataset \"{name}\"? This cannot be undone.",
     "datasetDeleted": "Dataset deleted",
-    "failedDelete": "Failed to delete dataset"
+    "failedDelete": "Failed to delete dataset",
+    "publicSection": "Public Datasets",
+    "makePublic": "Make Public",
+    "makePrivate": "Make Private",
+    "published": "Dataset published",
+    "madePrivate": "Dataset set to private",
+    "failedUpdate": "Failed to update dataset"
   },
   "datasetNew": {
     "title": "New Dataset",
@@ -274,7 +285,8 @@
     "madePrivate": "{resource} set to private",
     "failed": "Failed to update {resource}",
     "resources": {
-      "specialist": "Specialist"
+      "specialist": "Specialist",
+      "agent": "Agent"
     }
   },
   "wizard": {

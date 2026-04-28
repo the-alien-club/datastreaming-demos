@@ -9,7 +9,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { apiFetch } from "@/lib/api-fetch"
 
-type ResourceKey = "specialist"
+type ResourceKey = "specialist" | "agent"
 
 interface PublishCardActionProps {
   resource: ResourceKey

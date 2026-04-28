@@ -9,9 +9,10 @@ import { and, desc, eq, ne } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Bot, Plus, MessageSquare, Settings } from "lucide-react"
+import { Bot, Globe, Plus, MessageSquare, Settings } from "lucide-react"
 import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-context"
 import { DeleteCardAction } from "@/components/delete-card-action"
+import { PublishCardAction } from "@/components/publish-card-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export default async function AgentsPage() {
@@ -54,7 +55,7 @@ export default async function AgentsPage() {
         </Button>
       </div>
 
-      {agentList.length === 0 ? (
+      {ownAgents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Bot className="h-12 w-12 text-muted-foreground mb-4" />
           <h2 className="text-lg font-semibold mb-2">{t("emptyTitle")}</h2>
@@ -68,11 +69,9 @@ export default async function AgentsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {agentList.map((agent) => {
+          {ownAgents.map((agent) => {
             const steps = agent.steps ? JSON.parse(agent.steps) as { name: string; prompt: string }[] : []
-            const createdAt = agent.createdAt
-              ? new Date(agent.createdAt).toLocaleDateString()
-              : "—"
+            const createdAt = agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : "—"
 
             return (
               <Card key={agent.id} className="flex flex-col">
@@ -80,58 +79,104 @@ export default async function AgentsPage() {
                   <CardTitle className="text-base flex items-center gap-2">
                     <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="truncate">{agent.name}</span>
+                    {agent.isPublic && (
+                      <Globe className="h-3.5 w-3.5 text-blue-500 shrink-0" aria-label="Public" />
+                    )}
                   </CardTitle>
                   {agent.description && (
-                    <CardDescription className="line-clamp-2 text-sm">
-                      {agent.description}
-                    </CardDescription>
+                    <CardDescription className="line-clamp-2 text-sm">{agent.description}</CardDescription>
                   )}
                 </CardHeader>
                 <CardContent className="pb-2 flex-1">
                   <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-xs">
-                      {agent.model ?? DEFAULT_MODEL_SLUG}
-                    </Badge>
+                    <Badge variant="secondary" className="text-xs">{agent.model ?? DEFAULT_MODEL_SLUG}</Badge>
                     {steps.length > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {t("stepsCount", { count: steps.length })}
-                      </Badge>
+                      <Badge variant="outline" className="text-xs">{t("stepsCount", { count: steps.length })}</Badge>
                     )}
                     {agent.subagents.length > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {t("specialistsCount", { count: agent.subagents.length })}
-                      </Badge>
+                      <Badge variant="outline" className="text-xs">{t("specialistsCount", { count: agent.subagents.length })}</Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">{t("created", { date: createdAt })}</p>
                 </CardContent>
-                <CardFooter className="pt-2 gap-2">
+                <CardFooter className="pt-2 gap-2 flex-wrap">
                   <Button asChild variant="default" size="sm" className="flex-1">
                     <Link href={`/agents/${agent.id}/chat`}>
                       <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
                       {t("chat")}
                     </Link>
                   </Button>
-                  {agent.isOwn && (
-                    <>
-                      <Button asChild variant="outline" size="sm" className="flex-1">
-                        <Link href={`/agents/${agent.id}`}>
-                          <Settings className="h-3.5 w-3.5 mr-1.5" />
-                          {tCommon("edit")}
-                        </Link>
-                      </Button>
-                      <DeleteCardAction
-                        resource="agent"
-                        name={agent.name}
-                        endpoint={`/api/agents/${agent.id}`}
-                      />
-                    </>
-                  )}
+                  <Button asChild variant="outline" size="sm" className="flex-1">
+                    <Link href={`/agents/${agent.id}`}>
+                      <Settings className="h-3.5 w-3.5 mr-1.5" />
+                      {tCommon("edit")}
+                    </Link>
+                  </Button>
+                  <PublishCardAction
+                    resource="agent"
+                    endpoint={`/api/agents/${agent.id}`}
+                    isPublic={agent.isPublic}
+                  />
+                  <DeleteCardAction resource="agent" name={agent.name} endpoint={`/api/agents/${agent.id}`} />
                 </CardFooter>
               </Card>
             )
           })}
         </div>
+      )}
+
+      {publicAgents.length > 0 && (
+        <>
+          <div className="flex items-center gap-3 mt-8 mb-4">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5" />
+              {t("publicSection")}
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {publicAgents.map((agent) => {
+              const steps = agent.steps ? JSON.parse(agent.steps) as { name: string; prompt: string }[] : []
+              const createdAt = agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : "—"
+
+              return (
+                <Card key={agent.id} className="flex flex-col">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{agent.name}</span>
+                      <Globe className="h-3.5 w-3.5 text-blue-500 shrink-0" aria-label="Public" />
+                    </CardTitle>
+                    {agent.description && (
+                      <CardDescription className="line-clamp-2 text-sm">{agent.description}</CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="pb-2 flex-1">
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary" className="text-xs">{agent.model ?? DEFAULT_MODEL_SLUG}</Badge>
+                      {steps.length > 0 && (
+                        <Badge variant="outline" className="text-xs">{t("stepsCount", { count: steps.length })}</Badge>
+                      )}
+                      {agent.subagents.length > 0 && (
+                        <Badge variant="outline" className="text-xs">{t("specialistsCount", { count: agent.subagents.length })}</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">{t("created", { date: createdAt })}</p>
+                  </CardContent>
+                  <CardFooter className="pt-2">
+                    <Button asChild variant="default" size="sm" className="flex-1">
+                      <Link href={`/agents/${agent.id}/chat`}>
+                        <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                        {t("chat")}
+                      </Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

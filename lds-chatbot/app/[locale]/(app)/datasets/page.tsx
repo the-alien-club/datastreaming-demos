@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Database, Plus, Trash2, Eye, Loader2 } from "lucide-react"
+import { Database, Globe, Lock, Plus, Trash2, Eye, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { timeAgo } from "@/lib/time"
@@ -18,6 +18,7 @@ interface DatasetRecord {
   status: string | null
   attachedAgentCount: number
   isOwn: boolean
+  isPublic: boolean
   createdAt: number | null
   updatedAt: number | null
 }
@@ -36,6 +37,7 @@ export default function DatasetsPage() {
   const [datasets, setDatasets] = useState<DatasetRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState<string | null>(null)
 
   useEffect(() => {
     apiFetch("/api/datasets")
@@ -44,6 +46,25 @@ export default function DatasetsPage() {
       .catch(() => toast.error(t("failedLoad")))
       .finally(() => setLoading(false))
   }, [t])
+
+  async function handleTogglePublic(dataset: DatasetRecord) {
+    setPublishing(dataset.id)
+    try {
+      const res = await apiFetch(`/api/datasets/${dataset.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: !dataset.isPublic }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const updated: DatasetRecord = await res.json()
+      setDatasets((prev) => prev.map((d) => (d.id === updated.id ? { ...d, isPublic: updated.isPublic } : d)))
+      toast.success(updated.isPublic ? t("published") : t("madePrivate"))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("failedUpdate"))
+    } finally {
+      setPublishing(null)
+    }
+  }
 
   async function handleDelete(id: string, name: string) {
     if (!confirm(t("confirmDelete", { name }))) return
@@ -85,7 +106,7 @@ export default function DatasetsPage() {
         </Button>
       </div>
 
-      {datasets.length === 0 ? (
+      {datasets.filter((d) => d.isOwn).length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <Database className="h-10 w-10 text-muted-foreground mb-4" />
           <p className="text-muted-foreground font-medium mb-4">{t("emptyDescription")}</p>
@@ -98,7 +119,7 @@ export default function DatasetsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {datasets.map((dataset) => (
+          {datasets.filter((d) => d.isOwn).map((dataset) => (
             <div
               key={dataset.id}
               className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
@@ -108,6 +129,12 @@ export default function DatasetsPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold truncate">{dataset.name}</p>
                   <StatusBadge status={dataset.status} />
+                  {dataset.isPublic && (
+                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
+                      <Globe className="h-3 w-3" />
+                      public
+                    </Badge>
+                  )}
                   {dataset.attachedAgentCount > 0 && (
                     <Badge variant="outline" className="text-xs">
                       {t("agentsCount", { count: dataset.attachedAgentCount })}
@@ -115,43 +142,92 @@ export default function DatasetsPage() {
                   )}
                 </div>
                 {dataset.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                    {dataset.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{dataset.description}</p>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  {timeAgo(dataset.createdAt)}
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">{timeAgo(dataset.createdAt)}</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {dataset.isOwn && (
-                  <>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                      <Link href={`/datasets/${dataset.id}`}>
-                        <Eye className="h-4 w-4" />
-                        <span className="sr-only">{tCommon("edit")}</span>
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      disabled={deleting === dataset.id}
-                      onClick={() => handleDelete(dataset.id, dataset.name)}
-                    >
-                      {deleting === dataset.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                      <span className="sr-only">{tCommon("delete")}</span>
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={publishing === dataset.id}
+                  onClick={() => handleTogglePublic(dataset)}
+                >
+                  {publishing === dataset.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : dataset.isPublic ? (
+                    <><Lock className="h-3 w-3 mr-1" />{t("makePrivate")}</>
+                  ) : (
+                    <><Globe className="h-3 w-3 mr-1" />{t("makePublic")}</>
+                  )}
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                  <Link href={`/datasets/${dataset.id}`}>
+                    <Eye className="h-4 w-4" />
+                    <span className="sr-only">{tCommon("edit")}</span>
+                  </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  disabled={deleting === dataset.id}
+                  onClick={() => handleDelete(dataset.id, dataset.name)}
+                >
+                  {deleting === dataset.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">{tCommon("delete")}</span>
+                </Button>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {datasets.filter((d) => !d.isOwn).length > 0 && (
+        <>
+          <div className="flex items-center gap-3 mt-8 mb-4">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5" />
+              {t("publicSection")}
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="space-y-3">
+            {datasets.filter((d) => !d.isOwn).map((dataset) => (
+              <div
+                key={dataset.id}
+                className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
+              >
+                <Database className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold truncate">{dataset.name}</p>
+                    <StatusBadge status={dataset.status} />
+                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
+                      <Globe className="h-3 w-3" />
+                      public
+                    </Badge>
+                    {dataset.attachedAgentCount > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {t("agentsCount", { count: dataset.attachedAgentCount })}
+                      </Badge>
+                    )}
+                  </div>
+                  {dataset.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{dataset.description}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">{timeAgo(dataset.createdAt)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

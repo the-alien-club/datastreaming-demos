@@ -65,7 +65,12 @@
     "chat": "Discuter",
     "created": "Créé le {date}",
     "notFound": "Agent introuvable.",
-    "backToAgents": "Retour aux agents"
+    "backToAgents": "Retour aux agents",
+    "publicSection": "Agents publics",
+    "makePublic": "Rendre public",
+    "makePrivate": "Rendre privé",
+    "published": "Agent publié",
+    "madePrivate": "Agent rendu privé"
   },
   "agentForm": {
     "newTitle": "Nouvel agent",
@@ -123,7 +128,13 @@
     "failedLoad": "Impossible de charger les jeux de données",
     "confirmDelete": "Supprimer le jeu de données « {name} » ? Cette action est irréversible.",
     "datasetDeleted": "Jeu de données supprimé",
-    "failedDelete": "Impossible de supprimer le jeu de données"
+    "failedDelete": "Impossible de supprimer le jeu de données",
+    "publicSection": "Jeux de données publics",
+    "makePublic": "Rendre public",
+    "makePrivate": "Rendre privé",
+    "published": "Jeu de données publié",
+    "madePrivate": "Jeu de données rendu privé",
+    "failedUpdate": "Échec de la mise à jour"
   },
   "datasetNew": {
     "title": "Nouveau jeu de données",
@@ -274,7 +285,8 @@
     "madePrivate": "{resource} passé en privé",
     "failed": "Impossible de mettre à jour {resource}",
     "resources": {
-      "specialist": "Spécialiste"
+      "specialist": "Spécialiste",
+      "agent": "Agent"
     }
   },
   "wizard": {

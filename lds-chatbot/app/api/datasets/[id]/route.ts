@@ -4,6 +4,7 @@ import { db } from "@/lib/db"
 import { datasets, agentSubagents, agents } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { ok, notFound, unauthorized } from "@/lib/api-response"
+import { parseBody, patchVisibilityBodySchema } from "../../_validators"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -32,6 +33,31 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const attachedAgents = subagentRows.map((r) => ({ id: r.agentId, name: r.agentName }))
 
   return ok({ ...dataset, attachedAgents })
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) return unauthorized()
+
+  const { id } = await context.params
+  const existing = await db.query.datasets.findFirst({
+    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
+  })
+  if (!existing) return notFound("Dataset not found")
+
+  const parsed = await parseBody(request, patchVisibilityBodySchema)
+  if (parsed instanceof Response) return parsed
+
+  await db
+    .update(datasets)
+    .set({ isPublic: parsed.isPublic, updatedAt: new Date() })
+    .where(and(eq(datasets.id, id), eq(datasets.userId, session.user.id)))
+
+  const updated = await db.query.datasets.findFirst({
+    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
+  })
+  if (!updated) return notFound("Dataset not found")
+  return ok(updated)
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
