@@ -79,18 +79,18 @@ describe("dateGroup", () => {
   })
 
   it("returns Today for the current day", () => {
-    expect(dateGroup(new Date(FIXED_NOW - 60_000))).toBe("Today")
+    expect(dateGroup(new Date(FIXED_NOW - 60_000))).toBe("today")
   })
 
   it("returns Yesterday for the previous day", () => {
-    expect(dateGroup(new Date(FIXED_NOW - 24 * 60 * 60_000))).toBe("Yesterday")
+    expect(dateGroup(new Date(FIXED_NOW - 24 * 60 * 60_000))).toBe("yesterday")
   })
 
   it("returns Older for >2 days ago", () => {
-    expect(dateGroup(new Date(FIXED_NOW - 5 * 24 * 60 * 60_000))).toBe("Older")
+    expect(dateGroup(new Date(FIXED_NOW - 5 * 24 * 60 * 60_000))).toBe("older")
   })
 
   it("returns Older for null", () => {
-    expect(dateGroup(null)).toBe("Older")
+    expect(dateGroup(null)).toBe("older")
   })
 })

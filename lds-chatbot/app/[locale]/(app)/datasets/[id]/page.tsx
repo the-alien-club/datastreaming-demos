@@ -146,9 +146,8 @@ export default function DatasetDetailPage({
       } finally {
         if (!cancelled) setLoadingDataset(false)
       }
+      await fetchEntries()
     })()
-
-    void fetchEntries()
 
     return () => {
       cancelled = true
