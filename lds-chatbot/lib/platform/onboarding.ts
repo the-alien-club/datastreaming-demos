@@ -55,7 +55,10 @@ async function platformPost<T>(path: string, body: unknown, token: string): Prom
     body: JSON.stringify(body),
   })
 
-  if (!res.ok) throw new Error(`Platform POST ${path} → ${res.status}`)
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "(no body)")
+    throw new Error(`Platform POST ${path} → ${res.status}: ${detail}`)
+  }
 
   const json = (await res.json()) as { data: T }
 
@@ -113,7 +116,7 @@ export async function ensureOrgMembership(userId: string): Promise<void> {
         ADMIN_TOKEN,
         me.email,
         me.firstName ?? me.email.split("@")[0],
-        me.lastName ?? "",
+        me.lastName || "-",
       )
     }
 
