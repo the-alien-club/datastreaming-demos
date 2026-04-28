@@ -389,6 +389,8 @@
     "mcpUrlLabel": "URL",
     "mcpAddButton": "Add server",
     "mcpNameUrlRequired": "Name and URL are required",
+    "mcpNameRequired": "Name is required",
+    "mcpUrlRequired": "URL is required",
     "mcpFailedAdd": "Failed to add MCP",
     "mcpAdded": "MCP server added",
     "knowledgeSkip": "Skip",

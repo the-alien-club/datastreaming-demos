@@ -389,6 +389,8 @@
     "mcpUrlLabel": "URL",
     "mcpAddButton": "Ajouter le serveur",
     "mcpNameUrlRequired": "Le nom et l'URL sont obligatoires",
+    "mcpNameRequired": "Le nom est obligatoire",
+    "mcpUrlRequired": "L'URL est obligatoire",
     "mcpFailedAdd": "Impossible d'ajouter le MCP",
     "mcpAdded": "Serveur MCP ajouté",
     "knowledgeSkip": "Ignorer",
