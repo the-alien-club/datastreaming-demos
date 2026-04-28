@@ -11,6 +11,9 @@ import type { WizardState } from "../state"
 interface DoneStepContentProps {
   state: WizardState
   onClose: () => void
+  /** Called instead of onClose when the user navigates to advanced settings,
+   *  so the wizard cleanup effect knows the agent should NOT be deleted. */
+  onComplete: () => void
 }
 
 interface DatasetStatusResponse {
@@ -20,7 +23,7 @@ interface DatasetStatusResponse {
   overall: "empty" | "uploading" | "processing" | "processed" | "error"
 }
 
-export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
+export function DoneStepContent({ state, onClose, onComplete }: DoneStepContentProps) {
   const t = useTranslations("wizard")
   const [statusByDataset, setStatusByDataset] = useState<Record<string, DatasetStatusResponse>>({})
 
@@ -118,7 +121,7 @@ export function DoneStepContent({ state, onClose }: DoneStepContentProps) {
         <div className="text-xs">
           <Link
             href={`/agents/${state.agentId}`}
-            onClick={onClose}
+            onClick={onComplete}
             className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
           >
             <Settings className="size-3.5" /> {t("doneAdvancedSettings")}

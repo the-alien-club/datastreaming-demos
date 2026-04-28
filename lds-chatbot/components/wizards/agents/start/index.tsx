@@ -297,7 +297,15 @@ export function StartWizard({ onClose }: StartWizardProps) {
           return false
         }}
       >
-        <DoneStepContent state={state} onClose={onClose} />
+        <DoneStepContent
+          state={state}
+          onClose={onClose}
+          onComplete={() => {
+            completedRef.current = true
+            markWizardSeen()
+            onClose()
+          }}
+        />
       </Step>
     </Wizard>
   )
