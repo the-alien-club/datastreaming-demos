@@ -21,6 +21,10 @@ spec:
       parameters:
         - name: istio.sharedGatewayName
           value: demo-openaire-prod-gateway
+        - name: config.orgId
+          value: "3"
+        - name: secrets.chatbot.scalewaySecretName
+          value: lds-chatbot-prod
 
   destination:
     server: https://kubernetes.default.svc
