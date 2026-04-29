@@ -702,7 +702,7 @@ export default function AgentEditorPage({
 
             {/* New tab */}
             <TabsContent value="new">
-              <div className="space-y-4 py-2">
+              <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
                 <div className="space-y-1.5">
                   <Label htmlFor="sa-name">{tDialog("nameLabel")}</Label>
                   <Input
@@ -771,7 +771,7 @@ export default function AgentEditorPage({
                   {mcpList.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2">{tCommon("noMcps")}</p>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-4 max-h-52 overflow-y-auto pr-1">
                       {Array.from(new Set(mcpList.map((m) => m.category ?? "other"))).map((cat) => (
                         <div key={cat}>
                           <p className="text-xs font-medium text-muted-foreground capitalize tracking-wide mb-1.5">
