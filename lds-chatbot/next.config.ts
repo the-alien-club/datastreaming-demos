@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     // Redirect the basePath root to the default locale agents page.
     // Without this, the [locale]/page.tsx redirect loops on itself.
-    return [{ source: "/", destination: "/en/agents", permanent: false }]
+    return [{ source: "/", destination: "/fr/agents", permanent: false }]
   },
 }
 

@@ -27,10 +27,10 @@ export default async function AgentsPage() {
     isOrgClient
       ? Promise.resolve([])
       : db.query.agents.findMany({
-          where: eq(agents.userId, session.user.id),
-          orderBy: [desc(agents.createdAt)],
-          with: { subagents: true },
-        }),
+        where: eq(agents.userId, session.user.id),
+        orderBy: [desc(agents.createdAt)],
+        with: { subagents: true },
+      }),
     db.query.agents.findMany({
       where: and(eq(agents.isPublic, true), ne(agents.userId, session.user.id)),
       orderBy: [desc(agents.createdAt)],
@@ -62,10 +62,10 @@ export default async function AgentsPage() {
 
               return (
                 <Card key={agent.id} className="flex flex-col">
-                  <CardHeader className="pb-2">
+                  <CardHeader className="pb-2 overflow-hidden">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="truncate">{agent.name}</span>
+                      <span className="text-wrap">{agent.name}</span>
                     </CardTitle>
                     {agent.description && (
                       <CardDescription className="line-clamp-2 text-sm">{agent.description}</CardDescription>
