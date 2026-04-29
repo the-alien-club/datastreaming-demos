@@ -42,6 +42,7 @@ import { apiFetch } from "@/lib/api-fetch"
 import type { PublicAIModel } from "@/lib/platform/client"
 import { providerLabelFromModel } from "@/lib/platform/client"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import { DatasetRecord } from "../../datasets/datasets-view"
 
 type AIModel = PublicAIModel
 
@@ -141,14 +142,20 @@ export default function AgentEditorPage({
   const [subagentForm, setSubagentForm] = useState<SubagentFormState>(emptySubagentForm())
   const [dialogTab, setDialogTab] = useState<"library" | "new">("library")
 
+  const [attachOpen, setAttachOpen] = useState(false)
+  const [attaching, setAttaching] = useState(false)
+  const [datasets, setDatasets] = useState<DatasetRecord[]>([])
+  const [selectedDatasetId, setSelectedDatasetId] = useState("")
+
   useEffect(() => {
     Promise.all([
       apiFetch(`/api/agents/${id}`).then((r) => r.json()),
       apiFetch("/api/models").then((r) => r.json()).catch(() => []),
       apiFetch("/api/specialists").then((r) => r.json()).catch(() => []),
       apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
+      apiFetch("/api/datasets").then((r) => r.json()).catch(() => []),
     ])
-      .then(([agentData, modelsData, specialistsData, mcpsData]: [AgentRecord, AIModel[], LibrarySpecialist[], McpConfig[]]) => {
+      .then(([agentData, modelsData, specialistsData, mcpsData, datasetsData]: [AgentRecord, AIModel[], LibrarySpecialist[], McpConfig[], DatasetRecord[]]) => {
         setAgent(agentData)
         setName(agentData.name)
         setDescription(agentData.description ?? "")
@@ -168,6 +175,7 @@ export default function AgentEditorPage({
         setModels(Array.isArray(modelsData) ? modelsData : [])
         setLibrarySpecialists(Array.isArray(specialistsData) ? specialistsData : [])
         setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
+        setDatasets(Array.isArray(datasetsData) ? datasetsData : [])
       })
       .catch(() => toast.error(t("failedLoad")))
       .finally(() => setLoading(false))
@@ -249,7 +257,7 @@ export default function AgentEditorPage({
       const next = [...prev]
       const target = index + direction
       if (target < 0 || target >= next.length) return prev
-      ;[next[index], next[target]] = [next[target], next[index]]
+        ;[next[index], next[target]] = [next[target], next[index]]
       return next
     })
   }
@@ -334,6 +342,48 @@ export default function AgentEditorPage({
   function removeSubagent(index: number) {
     setSubagents((prev) => prev.filter((_, i) => i !== index))
   }
+
+
+  async function handleAttach() {
+    if (!id) {
+      toast.error(t("selectAgent"))
+      return
+    }
+    setAttaching(true)
+    try {
+      const res = await apiFetch(`/api/datasets/${selectedDatasetId}/attach`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: id }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown error" }))
+        throw new Error(err.error ?? `HTTP ${res.status}`)
+      }
+      toast.success(t("attached"))
+      setAttachOpen(false)
+      setSelectedDatasetId("")
+      await apiFetch(`/api/datasets/${selectedDatasetId}`).then((r) => r.json())
+      await apiFetch(`/api/agents/${id}`).then(async (r) => {
+        const agentData = await r.json() as AgentRecord
+        setSubagents(
+          agentData.subagents.map((sa) => ({
+            name: sa.name,
+            description: "",
+            systemPrompt: sa.systemPrompt,
+            model: sa.model ?? DEFAULT_MODEL,
+            mcpIds: sa.mcpIds ? JSON.parse(sa.mcpIds) : [],
+            datasetId: sa.datasetId ?? null,
+          }))
+        )
+      })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("failedAttach"))
+    } finally {
+      setAttaching(false)
+    }
+  }
+
 
   if (loading) {
     return (
@@ -546,15 +596,21 @@ export default function AgentEditorPage({
 
         {/* Subagents */}
         <div>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-2">
             <div>
               <h2 className="text-base font-semibold">{t("specialistsTitle")}</h2>
               <p className="text-xs text-muted-foreground">{t("specialistsSubtitle")}</p>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={openSubagentDialog}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              {t("addSpecialist")}
-            </Button>
+            <div className="flex gap-2 flex-col">
+              <Button type="button" variant="outline" size="sm" onClick={openSubagentDialog}>
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                {t("addSpecialist")}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setAttachOpen(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                {t("addDataset")}
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -822,6 +878,48 @@ export default function AgentEditorPage({
               </DialogFooter>
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={attachOpen} onOpenChange={setAttachOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("datasetAttachDialog.title")}</DialogTitle>
+            <DialogDescription>{t("datasetAttachDialog.description")}</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {t("datasetAttachDialog.body", { name: agent.name })}
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="dataset-select">{t("datasetAttachDialog.label")}</Label>
+              {datasets.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-1">{t("datasetAttachDialog.noDatasets")}</p>
+              ) : (
+                <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
+                  <SelectTrigger id="dataset-select">
+                    <SelectValue placeholder={t("datasetAttachDialog.selectDataset")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {datasets.map((dataset) => (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        {dataset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAttachOpen(false)} disabled={attaching}>
+              {tCommon("cancel")}
+            </Button>
+            <Button onClick={handleAttach} disabled={attaching || !selectedDatasetId}>
+              {attaching && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {t("datasetAttachDialog.attach")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

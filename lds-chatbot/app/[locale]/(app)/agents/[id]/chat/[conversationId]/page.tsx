@@ -18,7 +18,7 @@ export default async function ExistingChatPage({ params }: ExistingChatPageProps
 
   // Load agent (scoped to caller).
   const agent = await db.query.agents.findFirst({
-    where: and(eq(agents.id, agentId), eq(agents.userId, session.user.id)),
+    where: and(eq(agents.id, agentId)),
   })
   if (!agent) notFound()
 

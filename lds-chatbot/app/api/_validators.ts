@@ -13,7 +13,7 @@ import { badRequest } from "@/lib/api-response"
 const ID = z.string().trim().min(1, "must be non-empty")
 const NAME = z.string().trim().min(1, "must be non-empty").max(120, "max 120 chars")
 const SHORT_TEXT = z.string().max(2_000, "max 2000 chars")
-const LONG_TEXT = z.string().max(64_000, "max 64000 chars")
+const LONG_TEXT = z.string().max(128_000, "max 128000 chars")
 const STARTER_PROMPT = z.string().trim().min(1).max(500)
 
 // Pre-built MCP transport union — the platform accepts a fixed set.
@@ -46,7 +46,7 @@ export const stepSchema = z.object({
 export const subagentConfigSchema = z.object({
   name: NAME,
   description: SHORT_TEXT.optional(),
-  systemPrompt: z.string().trim().min(1, "systemPrompt is required").max(LONG_TEXT.maxLength ?? 64_000),
+  systemPrompt: z.string().trim().min(1, "systemPrompt is required").max(LONG_TEXT.maxLength ?? 128_000),
   model: z.string().trim().min(1).max(120),
   mcpIds: z.array(ID).default([]),
   // `datasetId` is preserved end-to-end so corpus attachments survive a

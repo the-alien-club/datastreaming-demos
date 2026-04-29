@@ -10,7 +10,7 @@ import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { timeAgo } from "@/lib/time"
 
-interface DatasetRecord {
+export interface DatasetRecord {
   id: string
   clusterDatasetId: number | null
   name: string

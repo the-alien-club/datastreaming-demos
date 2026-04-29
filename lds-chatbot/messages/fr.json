@@ -86,6 +86,7 @@
     "stepsTitle": "Étapes",
     "stepsSubtitle": "Instructions séquentielles ajoutées au prompt système.",
     "addStep": "Ajouter une étape",
+    "addDataset": "Ajouter un jeu de données",
     "stepNamePlaceholder": "Nom de l'étape",
     "stepInstructionsPlaceholder": "Instructions de l'étape (optionnel)",
     "noSteps": "Aucune étape définie.",
@@ -102,7 +103,17 @@
     "failedSave": "Impossible d'enregistrer l'agent",
     "failedDelete": "Impossible de supprimer l'agent",
     "failedCreate": "Impossible de créer l'agent",
-    "confirmDelete": "Supprimer cet agent ? Cette action est irréversible."
+    "attached": "Jeu de données associé à l'agent en tant que spécialiste corpus",
+    "confirmDelete": "Supprimer cet agent ? Cette action est irréversible.",
+      "datasetAttachDialog": {
+      "title": "Associer un jeu de données",
+      "description": "Choisissez un jeu de données à associer à cet agent. Un spécialiste corpus pour ce jeu de données sera ajouté à son workflow.",
+      "body": "Cela ajoutera un sous-agent spécialiste corpus à l'agent sélectionné, limité au jeu de données {name}.",
+      "label": "Jeu de données",
+      "noDatasets": "Aucun jeu de données trouvé.",
+      "selectDataset": "Sélectionner un jeu de données",
+      "attach": "Associer"
+    }
   },
   "specialistDialog": {
     "title": "Ajouter un spécialiste",
@@ -122,6 +133,7 @@
     "addedFromLibrary": "« {name} » ajouté depuis la bibliothèque",
     "failedCreate": "Impossible de créer le spécialiste"
   },
+  
   "datasets": {
     "title": "Jeux de données",
     "subtitle": "Importez et gérez vos corpus de documents pour vos agents.",

@@ -155,6 +155,12 @@ export async function ensureOrgMembership(userId: string): Promise<void> {
 
     // Always switch to the chatbot org when the user's current org differs.
     // This is what makes WorkflowPolicy.execute pass for org-client users.
+    console.debug("[onboarding] ensuring org membership and switch for user", {
+      userId,
+      email: me.email,
+      currentOrg: me.currentOrganizationId,
+      targetOrg: ORG_ID,
+    })
     if (me.currentOrganizationId !== Number(ORG_ID)) {
       await switchUserOrg(ORG_ID, userToken)
     }
