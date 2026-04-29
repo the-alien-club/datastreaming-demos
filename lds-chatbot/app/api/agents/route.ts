@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   // Build workflow graph
   const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
-  const { nodes, edges } = buildAgentWorkflow({
+  const { nodes, edges, subagentNodeIds } = buildAgentWorkflow({
     name,
     systemPrompt,
     steps,
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
   // Persist subagents (datasetId preserved if the caller passed one)
   if (body.subagents.length > 0) {
     await db.insert(agentSubagents).values(
-      body.subagents.map((sa) => ({
+      body.subagents.map((sa, i) => ({
         id: crypto.randomUUID(),
         agentId,
         name: sa.name,
@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
         model: sa.model,
         mcpIds: JSON.stringify(sa.mcpIds),
         datasetId: sa.datasetId ?? null,
+        nodeId: subagentNodeIds[i] ?? null,
         createdAt: now,
       }))
     )

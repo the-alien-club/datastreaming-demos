@@ -266,6 +266,8 @@ export function assembleSystemPrompt(
 export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[]): {
   nodes: unknown[]
   edges: unknown[]
+  /** Node IDs in the same order as `config.subagents`. */
+  subagentNodeIds: string[]
 } {
   const assembledSystemPrompt = assembleSystemPrompt(config.systemPrompt, config.steps)
 
@@ -295,10 +297,12 @@ export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[])
 
   // Dynamic subagent nodes start at index 6
   let nextNodeIndex = 6
+  const subagentNodeIds: string[] = []
 
   config.subagents.forEach((subagent, subIdx) => {
     const subagentNodeId = `subagent-${nextNodeIndex}`
     const subagentIdx = nextNodeIndex
+    subagentNodeIds.push(subagentNodeId)
     nextNodeIndex++
 
     const subagentYOffset = 300 + subIdx * 200
@@ -377,5 +381,5 @@ export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[])
     },
   ]
 
-  return { nodes: outerNodes, edges: outerEdges }
+  return { nodes: outerNodes, edges: outerEdges, subagentNodeIds }
 }

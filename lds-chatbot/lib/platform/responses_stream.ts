@@ -130,6 +130,8 @@ export interface RunPlatformResponseOptions {
   writer: StreamWriter
   conversationId: string
   signal?: AbortSignal
+  /** Maps workflow node IDs (e.g. "subagent-6") to human-readable names. */
+  subagentNames?: Map<string, string>
 }
 
 /**
@@ -146,7 +148,7 @@ export interface RunPlatformResponseOptions {
 export async function runPlatformResponse(
   opts: RunPlatformResponseOptions,
 ): Promise<PlatformResponseResult> {
-  const { provider, prompt, previousResponseId, writer, conversationId, signal } = opts
+  const { provider, prompt, previousResponseId, writer, conversationId, signal, subagentNames } = opts
 
   // [DIAG] Track TTFT breakdown — remove once latency root cause is confirmed.
   const tStreamTextCall = Date.now()
@@ -171,7 +173,7 @@ export async function runPlatformResponse(
     data: conversationId,
   } as WriterEvent)
 
-  const sidecarState = new SidecarState(writer)
+  const sidecarState = new SidecarState(writer, subagentNames)
 
   // Single pass: one iterator over fullStream. TextStreamPart variants are
   // translated to UIMessageChunk and written; `raw` parts and `tool-call`
@@ -313,10 +315,11 @@ class SidecarState {
   private _activeSubagentId: string | null = null
 
   private readonly _registry: Map<string, AgentRegistryEntry> = new Map()
-  private readonly _announcedSubagents: Set<string> = new Set()
+  private readonly _subagentNames: Map<string, string>
 
-  constructor(writer: StreamWriter) {
+  constructor(writer: StreamWriter, subagentNames?: Map<string, string>) {
     this._writer = writer
+    this._subagentNames = subagentNames ?? new Map()
   }
 
   // ── Text tracking ──────────────────────────────────────────────────────────
@@ -350,7 +353,7 @@ class SidecarState {
       }
       case "response.output_item.added": {
         const item = payload.item as OutputItem | undefined
-        this._maybeAnnounceSubagent(item?.id)
+        this._maybeAnnounceSubagent(item?.id, item?.type)
         break
       }
       case "response.completed": {
@@ -444,21 +447,24 @@ class SidecarState {
     return match ? (match[1] ?? null) : null
   }
 
-  private _maybeAnnounceSubagent(itemId: string | undefined): void {
+  private _maybeAnnounceSubagent(itemId: string | undefined, itemType?: string): void {
     const agentId = this._decodeAgentFromItemId(itemId)
     if (!agentId) return
     if (this._rootAgentId !== null && agentId === this._rootAgentId) {
-      // Root agent added a new output item — if a subagent panel was open, close it.
-      if (this._activeSubagentId !== null) {
+      // Tool calls are attributed to MAIN in item IDs even when logically dispatched
+      // by a subagent — do not close the fold for them, only for message items.
+      if (itemType !== "function_call" && this._activeSubagentId !== null) {
         this._writer.write({ type: "data-subagent-end", data: {} } as WriterEvent)
         this._activeSubagentId = null
       }
       return
     }
-    if (this._announcedSubagents.has(agentId)) return
+    // Already the active subagent — nothing to announce.
+    if (this._activeSubagentId === agentId) return
 
+    // New subagent, or a known subagent resuming after a MAIN interlude.
     const entry = this._registry.get(agentId)
-    const displayName = entry?.name ?? agentId
+    const displayName = entry?.name ?? this._subagentNames.get(agentId) ?? agentId
 
     this._writer.write({
       type: "data-subagent",
@@ -470,7 +476,6 @@ class SidecarState {
         dispatchedByToolCallId: entry?.dispatched_by_tool_call_id ?? null,
       },
     } as WriterEvent)
-    this._announcedSubagents.add(agentId)
     this._activeSubagentId = agentId
   }
 

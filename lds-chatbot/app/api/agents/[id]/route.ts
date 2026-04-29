@@ -92,7 +92,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   // Rebuild workflow graph from the full-replace payload.
   const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
-  const { nodes, edges } = buildAgentWorkflow({
+  const { nodes, edges, subagentNodeIds } = buildAgentWorkflow({
     name,
     systemPrompt,
     steps,
@@ -127,7 +127,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   await db.delete(agentSubagents).where(eq(agentSubagents.agentId, id))
   if (subagentConfigs.length > 0) {
     await db.insert(agentSubagents).values(
-      subagentConfigs.map((sa) => ({
+      subagentConfigs.map((sa, i) => ({
         id: crypto.randomUUID(),
         agentId: id,
         name: sa.name,
@@ -135,6 +135,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         model: sa.model,
         mcpIds: JSON.stringify(sa.mcpIds),
         datasetId: sa.datasetId,
+        nodeId: subagentNodeIds[i] ?? null,
         createdAt: now,
       })),
     )

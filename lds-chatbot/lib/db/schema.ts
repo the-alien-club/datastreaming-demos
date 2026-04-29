@@ -62,6 +62,10 @@ export const agentSubagents = pgTable("agent_subagents", {
   // when its dataset is deleted; the corpus link silently breaks but the
   // workflow keeps running so a user can re-attach a different dataset.
   datasetId: text("dataset_id").references(() => datasets.id, { onDelete: "set null" }),
+  // Workflow graph node ID (e.g. "subagent-6"). Written by buildAgentWorkflow
+  // and kept in sync on every workflow rebuild so the stream translator can
+  // map node IDs back to human-readable names.
+  nodeId: text("node_id"),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
 })
 

@@ -86,6 +86,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const agent = await db.query.agents.findFirst({
     where: and(eq(agents.id, body.agentId), eq(agents.userId, session.user.id)),
+    with: { subagents: true },
   })
   const t3 = Date.now()
   if (!agent) return notFound("Agent not found")
@@ -149,6 +150,12 @@ export async function POST(request: Request): Promise<Response> {
     accessToken,
   })
 
+  const subagentNames = new Map<string, string>(
+    agent.subagents
+      .filter((sa) => sa.nodeId !== null)
+      .map((sa) => [sa.nodeId!, sa.name])
+  )
+
   // Wire the request's abort signal through to the upstream call. When
   // the client closes the tab mid-stream the platform connection is
   // cancelled instead of being held open until the workflow finishes.
@@ -167,6 +174,7 @@ export async function POST(request: Request): Promise<Response> {
         writer,
         conversationId,
         signal,
+        subagentNames,
       })
     },
     onError: error => {

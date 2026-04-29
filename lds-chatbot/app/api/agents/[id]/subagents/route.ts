@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Rebuild graph.
   const steps = existing.steps ? JSON.parse(existing.steps) : []
   const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
-  const { nodes, edges } = buildAgentWorkflow({
+  const { nodes, edges, subagentNodeIds } = buildAgentWorkflow({
     name: existing.name,
     systemPrompt: existing.systemPrompt ?? "",
     steps,
@@ -67,6 +67,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const now = new Date()
   const subagentId = crypto.randomUUID()
 
+  // Update nodeIds for existing subagents (their positions may have shifted).
+  await Promise.all(
+    existing.subagents.map((row, i) =>
+      db.update(agentSubagents)
+        .set({ nodeId: subagentNodeIds[i] ?? null })
+        .where(eq(agentSubagents.id, row.id))
+    )
+  )
+
   await db.insert(agentSubagents).values({
     id: subagentId,
     agentId: id,
@@ -75,6 +84,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     model: newSubagentConfig.model,
     mcpIds: JSON.stringify(newSubagentConfig.mcpIds),
     datasetId: body.datasetId ?? null,
+    nodeId: subagentNodeIds[existing.subagents.length] ?? null,
     createdAt: now,
   })
 
@@ -119,7 +129,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   const steps = existing.steps ? JSON.parse(existing.steps) : []
   const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
-  const { nodes, edges } = buildAgentWorkflow({
+  const { nodes, edges, subagentNodeIds } = buildAgentWorkflow({
     name: existing.name,
     systemPrompt: existing.systemPrompt ?? "",
     steps,
@@ -132,6 +142,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   await updateWorkflow(existing.workflowId, { nodes, edges }, token)
 
   await db.delete(agentSubagents).where(eq(agentSubagents.id, body.subagentId))
+
+  // Update nodeIds for remaining subagents — positions shift after a delete.
+  const remainingRows = existing.subagents.filter((sa) => sa.id !== body.subagentId)
+  await Promise.all(
+    remainingRows.map((row, i) =>
+      db.update(agentSubagents)
+        .set({ nodeId: subagentNodeIds[i] ?? null })
+        .where(eq(agentSubagents.id, row.id))
+    )
+  )
 
   return new Response(null, { status: 204 })
 }
