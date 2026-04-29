@@ -14,31 +14,93 @@ import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-contex
 import { DeleteCardAction } from "@/components/delete-card-action"
 import { PublishCardAction } from "@/components/publish-card-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function AgentsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const [ownAgents, publicAgents, t] = await Promise.all([
-    db.query.agents.findMany({
-      where: eq(agents.userId, session.user.id),
-      orderBy: [desc(agents.createdAt)],
-      with: { subagents: true },
-    }),
+  const orgRole = await getUserOrgRole(session.user.id)
+  const isOrgClient = orgRole === "org-client"
+
+  const [ownAgents, publicAgents, t, tCommon] = await Promise.all([
+    isOrgClient
+      ? Promise.resolve([])
+      : db.query.agents.findMany({
+          where: eq(agents.userId, session.user.id),
+          orderBy: [desc(agents.createdAt)],
+          with: { subagents: true },
+        }),
     db.query.agents.findMany({
       where: and(eq(agents.isPublic, true), ne(agents.userId, session.user.id)),
       orderBy: [desc(agents.createdAt)],
       with: { subagents: true },
     }),
     getTranslations("agents"),
+    getTranslations("common"),
   ])
-  const agentList = [
-    ...ownAgents.map((a) => ({ ...a, isOwn: true })),
-    ...publicAgents.map((a) => ({ ...a, isOwn: false })),
-  ]
 
-  const tCommon = await getTranslations("common")
+  // org_client: show only public agents as the primary list
+  if (isOrgClient) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">{t("title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("subtitle")}</p>
+        </div>
 
+        {publicAgents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Bot className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">{t("noPublicAgents")}</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {publicAgents.map((agent) => {
+              const steps = agent.steps ? JSON.parse(agent.steps) as { name: string; prompt: string }[] : []
+              const createdAt = agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : "—"
+
+              return (
+                <Card key={agent.id} className="flex flex-col">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{agent.name}</span>
+                    </CardTitle>
+                    {agent.description && (
+                      <CardDescription className="line-clamp-2 text-sm">{agent.description}</CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="pb-2 flex-1">
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary" className="text-xs">{agent.model ?? DEFAULT_MODEL_SLUG}</Badge>
+                      {steps.length > 0 && (
+                        <Badge variant="outline" className="text-xs">{t("stepsCount", { count: steps.length })}</Badge>
+                      )}
+                      {agent.subagents.length > 0 && (
+                        <Badge variant="outline" className="text-xs">{t("specialistsCount", { count: agent.subagents.length })}</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">{t("created", { date: createdAt })}</p>
+                  </CardContent>
+                  <CardFooter className="pt-2">
+                    <Button asChild variant="default" size="sm" className="flex-1">
+                      <Link href={`/agents/${agent.id}/chat`}>
+                        <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
+                        {t("chat")}
+                      </Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Full view for org_admin / org_owner and unconfigured installs
   return (
     <div className="p-4 sm:p-6">
       <AutoOpenIfEmpty agentCount={ownAgents.length} />

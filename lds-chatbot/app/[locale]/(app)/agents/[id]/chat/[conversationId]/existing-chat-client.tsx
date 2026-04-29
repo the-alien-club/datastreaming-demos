@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, readUIMessageStream, type UIMessage, type UIMessageChunk } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
-import { apiUrl } from "@/lib/api-fetch"
+import { apiFetch, apiUrl } from "@/lib/api-fetch"
 import {
   clearStreamProgress,
   loadStreamProgress,
@@ -59,7 +59,7 @@ export function ExistingChatClient({
     [agentId, conversationId],
   )
 
-  const { messages, sendMessage, setMessages, status, error } = useChat({
+  const { messages, sendMessage, setMessages, stop, status, error } = useChat({
     messages: initialMessages as UIMessage[],
     transport,
     onData: (dataPart) => {
@@ -70,6 +70,8 @@ export function ExistingChatClient({
       const beacon = dataPart.data as Partial<StreamProgressBeacon> | undefined
       if (!beacon || typeof beacon.responseId !== "string") return
       if (typeof beacon.sequenceNumber !== "number") return
+
+      responseIdRef.current = beacon.responseId
 
       if (beacon.terminal) {
         clearStreamProgress(conversationId)
@@ -92,6 +94,7 @@ export function ExistingChatClient({
   // token) and fold the resulting AI SDK UI message stream into our
   // local messages list. The effect runs once per mount — `setMessages`
   // and the conversation/agent ids are stable references for this page.
+  const responseIdRef = useRef<string | null>(null)
   const resumedRef = useRef(false)
   useEffect(() => {
     if (resumedRef.current) return
@@ -119,6 +122,17 @@ export function ExistingChatClient({
     sendMessage({ text })
   }
 
+  function handleStop() {
+    stop()
+    const responseId = responseIdRef.current
+    if (!responseId) return
+    apiFetch("/api/chat/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId, responseId }),
+    }).catch(() => undefined)
+  }
+
   function handleNewChat() {
     router.push(`/agents/${agentId}/chat`)
   }
@@ -132,6 +146,7 @@ export function ExistingChatClient({
       error={error}
       conversationId={conversationId}
       onSend={handleSend}
+      onStop={handleStop}
       onNewChat={handleNewChat}
     />
   )

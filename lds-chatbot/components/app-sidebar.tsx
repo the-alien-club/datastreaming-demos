@@ -30,27 +30,34 @@ interface AppSidebarProps {
     email: string
     image?: string | null
   }
+  isOrgClient?: boolean
 }
 
 // The inner navigation content, shared between the persistent sidebar and the mobile sheet.
 function SidebarContent({
   user,
+  isOrgClient,
   onNavigate,
 }: {
   user: AppSidebarProps["user"]
+  isOrgClient?: boolean
   onNavigate?: () => void
 }) {
   const t = useTranslations("nav")
   const pathname = usePathname()
   const { openWizard } = useWizardStart()
 
-  const navigation = [
-    { name: t("agents"), href: "/agents" as const, icon: Bot },
-    { name: t("specialists"), href: "/specialists" as const, icon: BrainCircuit },
-    { name: t("conversations"), href: "/conversations" as const, icon: MessageSquare },
-    { name: t("datasets"), href: "/datasets" as const, icon: Database },
-    { name: t("mcpServers"), href: "/mcps" as const, icon: Server },
+  const allNavigation = [
+    { name: t("agents"), href: "/agents" as const, icon: Bot, clientVisible: true },
+    { name: t("conversations"), href: "/conversations" as const, icon: MessageSquare, clientVisible: true },
+    { name: t("specialists"), href: "/specialists" as const, icon: BrainCircuit, clientVisible: false },
+    { name: t("datasets"), href: "/datasets" as const, icon: Database, clientVisible: false },
+    { name: t("mcpServers"), href: "/mcps" as const, icon: Server, clientVisible: false },
   ]
+
+  const navigation = isOrgClient
+    ? allNavigation.filter((item) => item.clientVisible)
+    : allNavigation
 
   const handleSignOut = async () => {
     await authClient.signOut()
@@ -67,17 +74,21 @@ function SidebarContent({
         </Link>
         <LocaleSwitcher />
       </div>
-      <Separator />
-      <div className="px-3 py-3">
-        <Button
-          type="button"
-          onClick={() => { openWizard(); onNavigate?.() }}
-          className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
-        >
-          <Sparkles className="h-4 w-4" />
-          {t("start")}
-        </Button>
-      </div>
+      {!isOrgClient && (
+        <>
+          <Separator />
+          <div className="px-3 py-3">
+            <Button
+              type="button"
+              onClick={() => { openWizard(); onNavigate?.() }}
+              className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
+            >
+              <Sparkles className="h-4 w-4" />
+              {t("start")}
+            </Button>
+          </div>
+        </>
+      )}
       <Separator />
       <nav className="flex-1 space-y-1 px-2 py-4">
         {navigation.map((item) => {
@@ -140,7 +151,7 @@ function SidebarContent({
   )
 }
 
-export function AppSidebar({ user }: AppSidebarProps) {
+export function AppSidebar({ user, isOrgClient }: AppSidebarProps) {
   const [open, setOpen] = useState(false)
   const t = useTranslations("nav")
 
@@ -148,7 +159,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
     <>
       {/* Desktop sidebar — hidden on mobile */}
       <aside className="hidden md:flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-        <SidebarContent user={user} />
+        <SidebarContent user={user} isOrgClient={isOrgClient} />
       </aside>
 
       {/* Mobile top bar with hamburger */}
@@ -161,7 +172,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </SheetTrigger>
           <SheetContent side="left" className="w-72 p-0">
             <SheetTitle>{t("navigation")}</SheetTitle>
-            <SidebarContent user={user} onNavigate={() => setOpen(false)} />
+            <SidebarContent user={user} isOrgClient={isOrgClient} onNavigate={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
 

@@ -68,6 +68,7 @@
     "created": "Created {date}",
     "notFound": "Agent not found.",
     "backToAgents": "Back to agents",
+    "noPublicAgents": "No agents are available yet.",
     "publicSection": "Public Agents",
     "makePublic": "Make Public",
     "makePrivate": "Make Private",

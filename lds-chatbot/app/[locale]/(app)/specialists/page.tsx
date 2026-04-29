@@ -13,10 +13,14 @@ import { BrainCircuit, Globe, Plus, Settings } from "lucide-react"
 import { DeleteCardAction } from "@/components/delete-card-action"
 import { PublishCardAction } from "@/components/publish-card-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function SpecialistsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
+
+  const orgRole = await getUserOrgRole(session.user.id)
+  if (orgRole === "org-client") redirect("/agents")
 
   const [ownSpecialists, publicSpecialists, mcpRows, t] = await Promise.all([
     db.query.specialists.findMany({

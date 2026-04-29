@@ -23,7 +23,7 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
-import { and, eq } from "drizzle-orm"
+import { and, eq, or } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { db } from "@/lib/db"
@@ -85,7 +85,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!body.agentId) return badRequest("agentId required")
 
   const agent = await db.query.agents.findFirst({
-    where: and(eq(agents.id, body.agentId), eq(agents.userId, session.user.id)),
+    where: and(
+      eq(agents.id, body.agentId),
+      or(eq(agents.userId, session.user.id), eq(agents.isPublic, true)),
+    ),
     with: { subagents: true },
   })
   const t3 = Date.now()

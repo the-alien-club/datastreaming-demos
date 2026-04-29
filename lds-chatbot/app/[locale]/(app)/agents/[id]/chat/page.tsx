@@ -25,6 +25,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
   // read it lazily inside `prepareSendMessagesRequest` (also an event-handler
   // path — invoked by the transport, never during render).
   const conversationIdRef = useRef<string | null>(null)
+  const responseIdRef = useRef<string | null>(null)
   const [agentName, setAgentName] = useState<string | undefined>(undefined)
   const [starterPrompts, setStarterPrompts] = useState<string[]>([])
 
@@ -66,7 +67,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
   )
   /* eslint-enable react-hooks/refs */
 
-  const { messages, setMessages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, sendMessage, stop, status, error } = useChat({
     transport,
     onData: (dataPart) => {
       // Capture the conversation id assigned by the server on the first turn.
@@ -85,6 +86,9 @@ export default function NewChatPage({ params }: ChatPageProps) {
         const beacon = dataPart.data as Partial<StreamProgressBeacon> | undefined
         if (!beacon || typeof beacon.responseId !== "string") return
         if (typeof beacon.sequenceNumber !== "number") return
+
+        responseIdRef.current = beacon.responseId
+
         if (beacon.terminal) {
           clearStreamProgress(conversationIdRef.current)
           return
@@ -120,6 +124,17 @@ export default function NewChatPage({ params }: ChatPageProps) {
     sendMessage({ text })
   }
 
+  function handleStop() {
+    stop()
+    const responseId = responseIdRef.current
+    if (!responseId) return
+    apiFetch("/api/chat/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId, responseId }),
+    }).catch(() => undefined)
+  }
+
   // "New chat" resets the in-memory session: drop the conversation ref and
   // clear messages. The URL is already at /agents/${agentId}/chat so no
   // navigation is needed.
@@ -137,6 +152,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
       error={error}
       starterPrompts={starterPrompts}
       onSend={handleSend}
+      onStop={handleStop}
       onNewChat={handleNewChat}
     />
   )

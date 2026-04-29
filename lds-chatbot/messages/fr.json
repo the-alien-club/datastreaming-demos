@@ -68,6 +68,7 @@
     "created": "Créé le {date}",
     "notFound": "Agent introuvable.",
     "backToAgents": "Retour aux agents",
+    "noPublicAgents": "Aucun agent disponible pour le moment.",
     "publicSection": "Agents publics",
     "makePublic": "Rendre public",
     "makePrivate": "Rendre privé",

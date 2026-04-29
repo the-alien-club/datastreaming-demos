@@ -23,6 +23,7 @@ interface PlatformUser {
   firstName: string | null
   lastName: string | null
   currentOrganizationId: number | null
+  roles?: { slug: string; organizationId?: number | null }[]
 }
 
 interface ManagedUserSummary {
@@ -92,39 +93,72 @@ async function switchUserOrg(orgId: string, userToken: string): Promise<void> {
 }
 
 /**
+ * Return the user's role slug for the configured org (e.g. "org-client",
+ * "org-owner"), or null when no ORG_ID is set, the platform is unreachable,
+ * or the user has no role assignment for that org.
+ *
+ * Never throws — callers should default to full-access when null is returned.
+ */
+export async function getUserOrgRole(userId: string): Promise<string | null> {
+  if (!ADMIN_TOKEN || !ORG_ID) return null
+  try {
+    const userToken = await resolveAccessToken(userId)
+    const me = await getMe(userToken)
+    const orgId = Number(ORG_ID)
+    const match = me.roles?.find((r) => r.organizationId === orgId)
+    return match?.slug ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Ensure the user is provisioned in the chatbot's org and has it selected
  * as their current organization.
  *
  * No-op if ADMIN_TOKEN or ORG_ID are not configured.
  * Errors are caught and logged — never thrown — so a platform outage does
  * not block sign-in or page loads.
+ *
+ * The provisioning step (member-list + create) is isolated in its own
+ * try/catch so a failure there — e.g. admin token lacking list scope, or
+ * the user was added manually as org-client — does NOT prevent the org
+ * switch.  The switch is what sets `currentOrganizationId` on the platform
+ * user record and is required for WorkflowPolicy.execute to pass.
  */
 export async function ensureOrgMembership(userId: string): Promise<void> {
   if (!ADMIN_TOKEN || !ORG_ID) return
 
   try {
     const userToken = await resolveAccessToken(userId)
-
     const me = await getMe(userToken)
 
-    const members = await listOrgUsers(ORG_ID, ADMIN_TOKEN)
-    const isMember = members.some((m) => m.email === me.email)
-
-    if (!isMember) {
-      await provisionUserInOrg(
-        ORG_ID,
-        ADMIN_TOKEN,
-        me.email,
-        me.firstName ?? me.email.split("@")[0],
-        me.lastName || "-",
-      )
+    // Best-effort: provision the user if they are not yet in the org.
+    // Isolated so a failure here never blocks the org-switch below.
+    try {
+      const members = await listOrgUsers(ORG_ID, ADMIN_TOKEN)
+      const isMember = members.some((m) => m.email === me.email)
+      if (!isMember) {
+        await provisionUserInOrg(
+          ORG_ID,
+          ADMIN_TOKEN,
+          me.email,
+          me.firstName ?? me.email.split("@")[0],
+          me.lastName || "-",
+        )
+      }
+    } catch (provisionErr) {
+      // Non-fatal: user may have been added manually as org-client, or the
+      // admin token may lack list-users scope.  Continue to the switch below.
+      console.error("[onboarding] member check/provision failed:", provisionErr)
     }
 
+    // Always switch to the chatbot org when the user's current org differs.
+    // This is what makes WorkflowPolicy.execute pass for org-client users.
     if (me.currentOrganizationId !== Number(ORG_ID)) {
       await switchUserOrg(ORG_ID, userToken)
     }
   } catch (err) {
-    // Non-fatal: user still signs in; the layout guard will retry on next render
     console.error("[onboarding] ensureOrgMembership failed:", err)
   }
 }

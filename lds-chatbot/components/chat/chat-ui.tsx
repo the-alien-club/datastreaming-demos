@@ -2,6 +2,7 @@
 
 import {
   memo,
+  useEffect,
   useState,
   type KeyboardEvent,
   type FormEvent,
@@ -43,6 +44,7 @@ import { Shimmer } from "@/components/ai-elements/shimmer"
 import {
   Bot,
   SendHorizonal,
+  Square,
   SquarePen,
   Sparkles,
   UsersRound,
@@ -61,6 +63,7 @@ export interface ChatUIProps {
   conversationId?: string
   starterPrompts?: string[]
   onSend: (text: string) => void
+  onStop?: () => void
   onNewChat?: () => void
 }
 
@@ -434,11 +437,22 @@ export function ChatUI({
   conversationId: _conversationId,
   starterPrompts,
   onSend,
+  onStop,
   onNewChat,
 }: ChatUIProps) {
   const t = useTranslations("chat")
   const [input, setInput] = useState("")
   const isLoading = status === "submitted" || status === "streaming"
+
+  // Esc cancels a running stream
+  useEffect(() => {
+    if (!onStop) return
+    function handleKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape" && isLoading) onStop?.()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isLoading, onStop])
   const lastMessage = messages[messages.length - 1]
 
   // Standalone "thinking" bubble: shown when the last message is from the user
@@ -573,15 +587,29 @@ export function ChatUI({
             disabled={isLoading}
             rows={1}
           />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={isLoading || !input.trim()}
-            className="h-11 w-11 shrink-0"
-          >
-            <SendHorizonal className="h-4 w-4" />
-            <span className="sr-only">Send</span>
-          </Button>
+          {isLoading && onStop ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={onStop}
+              className="h-11 w-11 shrink-0"
+              title="Stop (Esc)"
+            >
+              <Square className="h-4 w-4 fill-current" />
+              <span className="sr-only">Stop</span>
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              disabled={isLoading || !input.trim()}
+              className="h-11 w-11 shrink-0"
+            >
+              <SendHorizonal className="h-4 w-4" />
+              <span className="sr-only">Send</span>
+            </Button>
+          )}
         </form>
       </div>
     </div>
