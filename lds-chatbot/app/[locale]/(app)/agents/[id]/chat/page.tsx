@@ -1,10 +1,16 @@
 "use client"
 
 import { use, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport, type UIMessage } from "ai"
 import { ChatUI } from "@/components/chat/chat-ui"
 import { apiFetch, apiUrl } from "@/lib/api-fetch"
+import {
+  clearStreamProgress,
+  saveStreamProgress,
+  type StreamProgressBeacon,
+} from "@/lib/chat/stream-resume"
 
 interface ChatPageProps {
   params: Promise<{ id: string }>
@@ -12,6 +18,7 @@ interface ChatPageProps {
 
 export default function NewChatPage({ params }: ChatPageProps) {
   const { id: agentId } = use(params)
+  const router = useRouter()
 
   // Track the conversation id assigned by the server after the first message.
   // Held in a ref because we mutate it from `onData` (an event handler) and
@@ -62,14 +69,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
   const { messages, setMessages, sendMessage, status, error } = useChat({
     transport,
     onData: (dataPart) => {
-      // Receive conversationId from the server stream and store it so the next
-      // turn can pass it as `conversationId` in the request body.
-      // NOTE: we intentionally do NOT call window.history.replaceState here.
-      // In Next.js App Router, replaceState with a different pathname triggers
-      // a soft navigation to the new route ([conversationId]/page.tsx), which
-      // unmounts this component mid-stream and discards all streaming state
-      // before the AI response can be rendered. The conversation is still
-      // persisted to the DB and accessible from the conversations list.
+      // Capture the conversation id assigned by the server on the first turn.
       if (
         dataPart.type === "data-conversationId" &&
         typeof dataPart.data === "string" &&
@@ -77,8 +77,44 @@ export default function NewChatPage({ params }: ChatPageProps) {
       ) {
         conversationIdRef.current = dataPart.data
       }
+
+      // Mirror the stream-progress beacons that ExistingChatClient writes so
+      // that, if the user navigates away mid-stream and returns via the
+      // conversation URL, ExistingChatClient finds the cursor and resumes.
+      if (dataPart.type === "data-streamProgress" && conversationIdRef.current) {
+        const beacon = dataPart.data as Partial<StreamProgressBeacon> | undefined
+        if (!beacon || typeof beacon.responseId !== "string") return
+        if (typeof beacon.sequenceNumber !== "number") return
+        if (beacon.terminal) {
+          clearStreamProgress(conversationIdRef.current)
+          return
+        }
+        saveStreamProgress(conversationIdRef.current, {
+          responseId: beacon.responseId,
+          sequenceNumber: beacon.sequenceNumber,
+          terminal: false,
+        })
+      }
     },
   })
+
+  // Once the stream settles, navigate to the conversation's permanent URL.
+  // This must NOT happen mid-stream: calling router.replace with a new pathname
+  // triggers a Next.js soft navigation that unmounts this component and discards
+  // all streaming state before the response is rendered. Waiting for "ready" or
+  // "error" means the stream is done, so navigation is safe. The resulting URL
+  // points at ExistingChatPage (the [conversationId] route), which loads the
+  // full history from Postgres — enabling "navigate away and come back" to work.
+  const prevStatusRef = useRef(status)
+  useEffect(() => {
+    const wasActive =
+      prevStatusRef.current === "submitted" || prevStatusRef.current === "streaming"
+    prevStatusRef.current = status
+
+    if (wasActive && (status === "ready" || status === "error") && conversationIdRef.current) {
+      router.replace(`/agents/${agentId}/chat/${conversationIdRef.current}`)
+    }
+  }, [status, agentId, router])
 
   function handleSend(text: string) {
     sendMessage({ text })
@@ -86,7 +122,7 @@ export default function NewChatPage({ params }: ChatPageProps) {
 
   // "New chat" resets the in-memory session: drop the conversation ref and
   // clear messages. The URL is already at /agents/${agentId}/chat so no
-  // replaceState is needed.
+  // navigation is needed.
   function handleNewChat() {
     conversationIdRef.current = null
     setMessages([])
