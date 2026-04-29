@@ -102,7 +102,16 @@
     "failedSave": "Failed to save agent",
     "failedDelete": "Failed to delete agent",
     "failedCreate": "Failed to create agent",
-    "confirmDelete": "Delete this agent? This cannot be undone."
+    "confirmDelete": "Delete this agent? This cannot be undone.",
+    "datasetAttachDialog": {
+      "title": "Attach Dataset",
+      "description": "Choose a dataset to attach to this agent. A corpus specialist for this dataset will be added to its workflow.",
+      "body": "This will add a corpus specialist subagent to the selected agent, scoped to the {name} dataset.",
+      "label": "Dataset",
+      "noDatasets": "No datasets found.",
+      "selectDataset": "Select a dataset",
+      "attach": "Attach"
+    }
   },
   "specialistDialog": {
     "title": "Add Specialist",

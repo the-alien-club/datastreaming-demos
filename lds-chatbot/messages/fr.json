@@ -105,7 +105,7 @@
     "failedCreate": "Impossible de créer l'agent",
     "attached": "Jeu de données associé à l'agent en tant que spécialiste corpus",
     "confirmDelete": "Supprimer cet agent ? Cette action est irréversible.",
-      "datasetAttachDialog": {
+    "datasetAttachDialog": {
       "title": "Associer un jeu de données",
       "description": "Choisissez un jeu de données à associer à cet agent. Un spécialiste corpus pour ce jeu de données sera ajouté à son workflow.",
       "body": "Cela ajoutera un sous-agent spécialiste corpus à l'agent sélectionné, limité au jeu de données {name}.",
