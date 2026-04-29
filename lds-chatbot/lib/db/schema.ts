@@ -29,7 +29,7 @@ export const specialists = pgTable("specialists", {
   name: text("name").notNull(),
   description: text("description"),
   systemPrompt: text("system_prompt").notNull(),
-  model: text("model").default("gpt-4.1-mini"),
+  model: text("model").default("mistral-large-2512"),
   mcpIds: text("mcp_ids"),
   isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
@@ -45,7 +45,7 @@ export const agents = pgTable("agents", {
   systemPrompt: text("system_prompt"), // overall system prompt
   steps: text("steps"), // JSON array of {name, prompt} objects
   starterPrompts: text("starter_prompts"), // JSON array of strings — chip-style suggestions for empty conversations
-  model: text("model").default("gpt-4.1-mini"),
+  model: text("model").default("mistral-large-2512"),
   isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),
@@ -56,7 +56,7 @@ export const agentSubagents = pgTable("agent_subagents", {
   agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
   name: text("name").notNull(), // display name / description for the deep agent
   systemPrompt: text("system_prompt").notNull(),
-  model: text("model").default("gpt-4.1-mini"),
+  model: text("model").default("mistral-large-2512"),
   mcpIds: text("mcp_ids"), // JSON array of MCP config IDs from static file
   // FK to datasets.id with ON DELETE SET NULL — preserves the subagent row
   // when its dataset is deleted; the corpus link silently breaks but the

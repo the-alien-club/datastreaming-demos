@@ -20,13 +20,13 @@ const FULL_BODY = {
     { name: "search", prompt: "search the legifrance corpus" },
     { name: "summarise", prompt: "summarise findings" },
   ],
-  model: "claude-sonnet-4-6",
+  model: "mistral-large-2512",
   subagents: [
     {
       name: "Case Law Searcher",
       description: "",
       systemPrompt: "Search case law via the legifrance MCP.",
-      model: "gpt-4.1-mini",
+      model: "mistral-large-2512",
       mcpIds: ["legifrance-mcp-id"],
       datasetId: null,
     },
