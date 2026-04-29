@@ -92,13 +92,13 @@ export default function DatasetsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 max-w-4xl">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{t("title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">{t("subtitle")}</p>
         </div>
-        <Button asChild>
+        <Button asChild className="self-start sm:self-auto">
           <Link href="/datasets/new">
             <Plus className="h-4 w-4 mr-2" />
             {t("newDataset")}
@@ -146,7 +146,7 @@ export default function DatasetsPage() {
                 )}
                 <p className="text-xs text-muted-foreground mt-1">{timeAgo(dataset.createdAt)}</p>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex flex-col items-end gap-1 shrink-0 sm:flex-row sm:items-center">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -162,26 +162,28 @@ export default function DatasetsPage() {
                     <><Globe className="h-3 w-3 mr-1" />{t("makePublic")}</>
                   )}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                  <Link href={`/datasets/${dataset.id}`}>
-                    <Eye className="h-4 w-4" />
-                    <span className="sr-only">{tCommon("edit")}</span>
-                  </Link>
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  disabled={deleting === dataset.id}
-                  onClick={() => handleDelete(dataset.id, dataset.name)}
-                >
-                  {deleting === dataset.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                  <span className="sr-only">{tCommon("delete")}</span>
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                    <Link href={`/datasets/${dataset.id}`}>
+                      <Eye className="h-4 w-4" />
+                      <span className="sr-only">{tCommon("edit")}</span>
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive"
+                    disabled={deleting === dataset.id}
+                    onClick={() => handleDelete(dataset.id, dataset.name)}
+                  >
+                    {deleting === dataset.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    <span className="sr-only">{tCommon("delete")}</span>
+                  </Button>
+                </div>
               </div>
             </div>
           ))}

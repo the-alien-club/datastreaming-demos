@@ -40,14 +40,14 @@ export default async function AgentsPage() {
   const tCommon = await getTranslations("common")
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <AutoOpenIfEmpty agentCount={ownAgents.length} />
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{t("title")}</h1>
           <p className="text-muted-foreground mt-1">{t("subtitle")}</p>
         </div>
-        <Button asChild>
+        <Button asChild className="self-start sm:self-auto">
           <Link href="/agents/new">
             <Plus className="h-4 w-4 mr-2" />
             {t("newAgent")}

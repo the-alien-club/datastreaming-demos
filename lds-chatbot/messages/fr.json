@@ -46,7 +46,9 @@
     "signOutTitle": "Se déconnecter",
     "signOutDescription": "Êtes-vous sûr de vouloir vous déconnecter ?",
     "signOutCancel": "Annuler",
-    "signOutConfirm": "Se déconnecter"
+    "signOutConfirm": "Se déconnecter",
+    "openMenu": "Ouvrir le menu de navigation",
+    "navigation": "Navigation"
   },
   "signIn": {
     "title": "LDS Chatbot",

@@ -46,7 +46,9 @@
     "signOutTitle": "Sign out",
     "signOutDescription": "Are you sure you want to sign out?",
     "signOutCancel": "Cancel",
-    "signOutConfirm": "Sign out"
+    "signOutConfirm": "Sign out",
+    "openMenu": "Open navigation menu",
+    "navigation": "Navigation"
   },
   "signIn": {
     "title": "LDS Chatbot",

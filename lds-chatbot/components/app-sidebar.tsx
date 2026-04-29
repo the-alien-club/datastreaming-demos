@@ -1,8 +1,9 @@
 "use client"
 
+import { useState } from "react"
 import { useTranslations } from "next-intl"
 import { Link, usePathname } from "@/i18n/routing"
-import { Bot, MessageSquare, Database, LogOut, BrainCircuit, Server, Sparkles } from "lucide-react"
+import { Bot, MessageSquare, Database, LogOut, BrainCircuit, Server, Sparkles, Menu } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -19,6 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { useWizardStart } from "@/components/wizards/agents/start/wizard-context"
 import { LocaleSwitcher } from "@/components/locale-switcher"
 
@@ -30,7 +32,14 @@ interface AppSidebarProps {
   }
 }
 
-export function AppSidebar({ user }: AppSidebarProps) {
+// The inner navigation content, shared between the persistent sidebar and the mobile sheet.
+function SidebarContent({
+  user,
+  onNavigate,
+}: {
+  user: AppSidebarProps["user"]
+  onNavigate?: () => void
+}) {
   const t = useTranslations("nav")
   const pathname = usePathname()
   const { openWizard } = useWizardStart()
@@ -45,16 +54,14 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
   const handleSignOut = async () => {
     await authClient.signOut()
-    // window.location.href is a raw browser navigation that does NOT pass through
-    // Next.js's basePath rewriting, so we have to prepend the basePath manually.
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
     window.location.href = `${basePath}/sign-in`
   }
 
   return (
-    <aside className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-4">
-        <Link href="/agents" className="flex flex-col gap-0.5">
+        <Link href="/agents" className="flex flex-col gap-0.5" onClick={onNavigate}>
           <img src="/lds-logo.png" alt="Legal DataSpace" className="h-7 w-auto" />
           <span className="text-[10px] italic text-muted-foreground leading-none">powered by Alien Intelligence</span>
         </Link>
@@ -64,7 +71,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
       <div className="px-3 py-3">
         <Button
           type="button"
-          onClick={openWizard}
+          onClick={() => { openWizard(); onNavigate?.() }}
           className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
         >
           <Sparkles className="h-4 w-4" />
@@ -79,6 +86,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive
@@ -128,6 +136,41 @@ export function AppSidebar({ user }: AppSidebarProps) {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </aside>
+    </div>
+  )
+}
+
+export function AppSidebar({ user }: AppSidebarProps) {
+  const [open, setOpen] = useState(false)
+  const t = useTranslations("nav")
+
+  return (
+    <>
+      {/* Desktop sidebar — hidden on mobile */}
+      <aside className="hidden md:flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+        <SidebarContent user={user} />
+      </aside>
+
+      {/* Mobile top bar with hamburger */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar px-4">
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label={t("openMenu")}>
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            <SheetTitle>{t("navigation")}</SheetTitle>
+            <SidebarContent user={user} onNavigate={() => setOpen(false)} />
+          </SheetContent>
+        </Sheet>
+
+        <Link href="/agents">
+          <img src="/lds-logo.png" alt="Legal DataSpace" className="h-6 w-auto" />
+        </Link>
+
+        <LocaleSwitcher />
+      </div>
+    </>
   )
 }

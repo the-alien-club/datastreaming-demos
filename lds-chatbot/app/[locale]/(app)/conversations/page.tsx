@@ -54,7 +54,7 @@ export default async function ConversationsPage() {
   const orderedGroups = ["today", "yesterday", "older"] as const
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-4 sm:p-6 max-w-3xl">
       <h1 className="text-2xl font-bold mb-6">{t("title")}</h1>
 
       {rows.length === 0 && (

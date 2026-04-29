@@ -230,11 +230,13 @@ const SubagentPanel = memo(function SubagentPanel({
 interface ToolCallCardProps {
   name: string
   args: unknown
+  isStreaming: boolean
 }
 
 const ToolCallCard = memo(function ToolCallCard({
   name,
   args,
+  isStreaming,
 }: ToolCallCardProps) {
   const pretty = cleanToolName(name)
   const toolInput =
@@ -246,7 +248,7 @@ const ToolCallCard = memo(function ToolCallCard({
     <Tool defaultOpen={false}>
       <ToolHeader
         type={"dynamic-tool" as const}
-        state="input-available"
+        state={isStreaming ? "input-available" : "output-available"}
         toolName={pretty}
         title={pretty}
       />
@@ -392,7 +394,7 @@ const AssistantBubble = memo(function AssistantBubble({
               )
             case "toolCall":
               return (
-                <ToolCallCard key={`tc-${idx}`} name={section.name} args={section.args} />
+                <ToolCallCard key={`tc-${idx}`} name={section.name} args={section.args} isStreaming={isLast && isStreaming} />
               )
             case "taskDispatch":
               return (
@@ -479,7 +481,7 @@ export function ChatUI({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b px-6 py-4">
+      <div className="flex shrink-0 items-center justify-between border-b px-3 py-3 sm:px-6 sm:py-4">
         <h1 className="truncate text-lg font-semibold">
           {agentName ?? "Chat"}
         </h1>
@@ -536,7 +538,7 @@ export function ChatUI({
       </Conversation>
 
       {/* Input area */}
-      <div className="shrink-0 border-t px-6 py-4">
+      <div className="shrink-0 border-t px-3 py-3 sm:px-6 sm:py-4">
         {showStarterPrompts && (
           <div
             className="mb-3 flex flex-wrap items-center gap-2"
