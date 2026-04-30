@@ -31,8 +31,12 @@ metadata:
     app.kubernetes.io/component: virtualservice
 spec:
   hosts:
+    {{- $allHosts := list }}
     {{- range .Values.istio.hosts }}
-    - {{ .host }}
+    {{- $allHosts = append $allHosts .host }}
+    {{- end }}
+    {{- range ($allHosts | uniq) }}
+    - {{ . }}
     {{- end }}
   gateways:
     {{- if $hasShared }}
@@ -47,7 +51,7 @@ spec:
     {{- if eq (.gateway | default "shared") "own" }}
     {{- $gwRef = $ownRef }}
     {{- end }}
-    - name: lds-chatbot-route-{{ .host | replace "." "-" }}
+    - name: lds-chatbot-route-{{ .host | replace "." "-" }}{{ if ne .path "/" }}-{{ trimPrefix "/" .path | replace "/" "-" }}{{ else }}-root{{ end }}
       match:
         - uri:
             prefix: {{ .path }}

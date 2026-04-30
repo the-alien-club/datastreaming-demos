@@ -8,22 +8,48 @@ import { ensureOrgMembership } from "@/lib/platform/onboarding"
 // constant-folds it to the build-time placeholder.
 const authentikBaseUrl = process.env.AUTHENTIK_BASE_URL!
 const appSlug = process.env.AUTHENTIK_APP_SLUG || "datastreaming"
-const baseURL = process.env.BETTER_AUTH_URL!
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
+const fallbackBaseURL = process.env.BETTER_AUTH_URL!
+const nextBasePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
 
-// Additional origins better-auth accepts for CSRF/origin checks. baseURL is
-// implicitly trusted; everything else (e.g. alternate demo hostnames pointed
-// at the same deployment) must be listed here or origin-check rejects the
-// request with a 401. Comma-separated for ergonomic ConfigMap wiring.
+// Additional origins better-auth accepts for CSRF/origin checks. The active
+// per-request baseURL is implicitly trusted; everything else (alternate demo
+// hostnames pointed at the same deployment) must be listed here or
+// origin-check rejects the request with a 401.
 const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean)
 
+// Hosts allowed to drive better-auth's per-request baseURL. Derived from the
+// fallback baseURL plus trustedOrigins so a single env knob (TRUSTED_ORIGINS)
+// configures both CSRF allowlist and dynamic baseURL allowlist consistently.
+const allowedHosts = Array.from(
+  new Set(
+    [fallbackBaseURL, ...trustedOrigins]
+      .map((u) => {
+        try {
+          return new URL(u).host
+        } catch {
+          return null
+        }
+      })
+      .filter((h): h is string => Boolean(h)),
+  ),
+)
+
+// `basePath` includes the Next.js basePath so that better-auth's per-request
+// baseURL — and therefore the OAuth redirect_uri it constructs — carries the
+// /agents prefix the app is mounted under. Without this, the redirect_uri
+// would be `${origin}/api/auth/oauth2/callback/...` and ingress would 404
+// (no route exists outside /agents) and Authentik would reject it (the
+// registered callback URL is /agents-prefixed).
+const authBasePath = `${nextBasePath}/api/auth`
+
 export const auth = betterAuth({
   appName: "LDS Chatbot",
   secret: process.env.BETTER_AUTH_SECRET!,
-  baseURL,
+  baseURL: { allowedHosts, fallback: fallbackBaseURL },
+  basePath: authBasePath,
   trustedOrigins,
   database: pool,
   // The default rate limiter trips on sign-in's burst of internal calls.
@@ -58,7 +84,10 @@ export const auth = betterAuth({
           clientId: process.env.AUTHENTIK_CLIENT_ID!,
           clientSecret: process.env.AUTHENTIK_CLIENT_SECRET!,
           discoveryUrl: `${authentikBaseUrl}/application/o/${appSlug}/.well-known/openid-configuration`,
-          redirectURI: `${baseURL}${basePath}/api/auth/oauth2/callback/${OAUTH_PROVIDER_ID}`,
+          // No static redirectURI — better-auth derives it per request from
+          // ctx.baseURL (= dynamic origin + authBasePath), so a sign-in on
+          // demo.legaldataspace.eu uses that domain in redirect_uri instead
+          // of the build-time fallback.
           scopes: ["openid", "email", "profile", "offline_access"],
           accessType: "offline",
           prompt: "consent",

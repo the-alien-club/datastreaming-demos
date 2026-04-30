@@ -1,6 +1,6 @@
 apiVersion: v2
 name: lds-chatbot
-version: 0.2.5
+version: 0.2.6
 description: LDS Chatbot — FDE demo, Alien-backed AI research assistant
 type: application
 appVersion: "0.2.3"

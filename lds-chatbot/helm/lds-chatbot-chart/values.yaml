@@ -37,6 +37,14 @@ istio:
     - host: demo.alien.club
       path: /agents
       gateway: shared
+    # Order matters for legaldataspace.eu: the explicit /agents route must
+    # come before the catch-all rewrite, otherwise a path like /agents/foo
+    # (emitted by the app after the first redirect, since the pod still
+    # carries NEXT_PUBLIC_BASE_PATH=/agents) would match the rewrite and
+    # get double-prefixed to /agents/agents/foo → 404.
+    - host: demo.legaldataspace.eu
+      path: /agents
+      gateway: own
     - host: demo.legaldataspace.eu
       path: /
       rewrite: /agents

@@ -1,10 +1,11 @@
 {{- if .Values.istio.gateway.create }}
-{{- $ownHosts := list }}
+{{- $ownHostsRaw := list }}
 {{- range .Values.istio.hosts }}
   {{- if eq (.gateway | default "shared") "own" }}
-    {{- $ownHosts = append $ownHosts .host }}
+    {{- $ownHostsRaw = append $ownHostsRaw .host }}
   {{- end }}
 {{- end }}
+{{- $ownHosts := $ownHostsRaw | uniq }}
 {{- if $ownHosts }}
 ---
 apiVersion: networking.istio.io/v1beta1
