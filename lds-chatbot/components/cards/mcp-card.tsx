@@ -56,8 +56,8 @@ export function McpCard({
             <Database className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="truncate">{mcp.name}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-wrap grow w-full">{mcp.name}</span>
               <PrivacyBadge isPublic={mcp.isPublic} />
               {mcp.authToken && mcp.isOwn && (
                 <Badge variant="outline" className="text-[10px] gap-1">

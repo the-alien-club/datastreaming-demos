@@ -7,13 +7,8 @@ import { db, getUserNamesByIds } from "@/lib/db"
 import { specialists, mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { BrainCircuit, Plus, Settings } from "lucide-react"
-import { DeleteCardAction } from "@/components/delete-card-action"
-import { PublishCardAction } from "@/components/publish-card-action"
-import { PrivacyBadge } from "@/components/privacy-badge"
-import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import { BrainCircuit, Plus } from "lucide-react"
+import { SpecialistCard } from "@/components/cards/specialist-card"
 import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function SpecialistsPage() {
@@ -64,65 +59,15 @@ export default async function SpecialistsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ownSpecialists.map((specialist) => {
-            const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
-            const createdAt = specialist.createdAt
-              ? new Date(specialist.createdAt).toLocaleDateString()
-              : "—"
-            const author = creatorNames.get(specialist.userId) ?? tCommon("unknownAuthor")
-
-            return (
-              <Card key={specialist.id} className="flex flex-col">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <BrainCircuit className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="truncate">{specialist.name}</span>
-                    <PrivacyBadge isPublic={specialist.isPublic} />
-                  </CardTitle>
-                  {specialist.description && (
-                    <CardDescription className="line-clamp-2 text-sm">
-                      {specialist.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1" />
-                <div className="px-6 pb-3 space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-xs">
-                      {specialist.model ?? DEFAULT_MODEL_SLUG}
-                    </Badge>
-                    {mcpIds.map((mcpId) => (
-                      <Badge key={mcpId} variant="outline" className="text-xs">
-                        {mcpNames.get(mcpId) ?? mcpId}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="truncate">{tCommon("createdBy", { name: author })}</span>
-                    <span className="shrink-0">{t("created", { date: createdAt })}</span>
-                  </div>
-                </div>
-                <CardFooter className="pt-2 gap-2 flex-wrap">
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link href={`/specialists/${specialist.id}`}>
-                      <Settings className="h-3.5 w-3.5 mr-1.5" />
-                      {tCommon("edit")}
-                    </Link>
-                  </Button>
-                  <PublishCardAction
-                    resource="specialist"
-                    endpoint={`/api/specialists/${specialist.id}`}
-                    isPublic={specialist.isPublic}
-                  />
-                  <DeleteCardAction
-                    resource="specialist"
-                    name={specialist.name}
-                    endpoint={`/api/specialists/${specialist.id}`}
-                  />
-                </CardFooter>
-              </Card>
-            )
-          })}
+          {ownSpecialists.map((specialist) => (
+            <SpecialistCard
+              key={specialist.id}
+              specialist={specialist}
+              mcpNames={mcpNames}
+              authorName={creatorNames.get(specialist.userId) ?? tCommon("unknownAuthor")}
+              editable
+            />
+          ))}
         </div>
       )}
     </div>

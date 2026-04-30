@@ -29,7 +29,7 @@ import {
 import { Database, Plus, Loader2, X, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
-import { McpCard, type McpRecord } from "./mcp-card"
+import { McpCard, type McpRecord } from "@/components/cards/mcp-card"
 
 const CATEGORY_OPTIONS = [
   "Gestion des contrats",

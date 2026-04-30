@@ -6,7 +6,7 @@ import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { Database } from "lucide-react"
-import { McpCard, type McpRecord } from "../mcp-card"
+import { McpCard, type McpRecord } from "@/components/cards/mcp-card"
 
 export default async function McpLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })

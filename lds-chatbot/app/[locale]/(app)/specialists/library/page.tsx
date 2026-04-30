@@ -5,11 +5,8 @@ import { getTranslations } from "next-intl/server"
 import { db, getUserNamesByIds } from "@/lib/db"
 import { specialists, mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { BrainCircuit } from "lucide-react"
-import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
-import { PrivacyBadge } from "@/components/privacy-badge"
+import { SpecialistCard } from "@/components/cards/specialist-card"
 
 export default async function SpecialistsLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -43,47 +40,14 @@ export default async function SpecialistsLibraryPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {publicSpecialists.map((specialist) => {
-            const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
-            const createdAt = specialist.createdAt
-              ? new Date(specialist.createdAt).toLocaleDateString()
-              : "—"
-            const author = creatorNames.get(specialist.userId) ?? tCommon("unknownAuthor")
-
-            return (
-              <Card key={specialist.id} className="flex flex-col">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <BrainCircuit className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="truncate">{specialist.name}</span>
-                    <PrivacyBadge isPublic />
-                  </CardTitle>
-                  {specialist.description && (
-                    <CardDescription className="line-clamp-2 text-sm">
-                      {specialist.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1" />
-                <div className="px-6 pb-4 space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-xs">
-                      {specialist.model ?? DEFAULT_MODEL_SLUG}
-                    </Badge>
-                    {mcpIds.map((mcpId) => (
-                      <Badge key={mcpId} variant="outline" className="text-xs">
-                        {mcpNames.get(mcpId) ?? mcpId}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="truncate">{tCommon("createdBy", { name: author })}</span>
-                    <span className="shrink-0">{t("created", { date: createdAt })}</span>
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
+          {publicSpecialists.map((specialist) => (
+            <SpecialistCard
+              key={specialist.id}
+              specialist={specialist}
+              mcpNames={mcpNames}
+              authorName={creatorNames.get(specialist.userId) ?? tCommon("unknownAuthor")}
+            />
+          ))}
         </div>
       )}
     </div>

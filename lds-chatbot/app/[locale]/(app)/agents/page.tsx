@@ -7,14 +7,9 @@ import { db, getUserNamesByIds } from "@/lib/db"
 import { agents } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Bot, Plus, MessageSquare, Settings } from "lucide-react"
+import { Bot, Plus } from "lucide-react"
 import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-context"
-import { DeleteCardAction } from "@/components/delete-card-action"
-import { PublishCardAction } from "@/components/publish-card-action"
-import { PrivacyBadge } from "@/components/privacy-badge"
-import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import { AgentCard } from "@/components/cards/agent-card"
 import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function AgentsPage() {
@@ -65,62 +60,14 @@ export default async function AgentsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ownAgents.map((agent) => {
-            const steps = agent.steps ? JSON.parse(agent.steps) as { name: string; prompt: string }[] : []
-            const createdAt = agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : "—"
-            const author = creatorNames.get(agent.userId) ?? tCommon("unknownAuthor")
-
-            return (
-              <Card key={agent.id} className="flex flex-col">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Bot className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="truncate">{agent.name}</span>
-                    <PrivacyBadge isPublic={agent.isPublic} />
-                  </CardTitle>
-                  {agent.description && (
-                    <CardDescription className="line-clamp-2 text-sm">{agent.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="flex-1" />
-                <div className="px-6 pb-3 space-y-2">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-xs">{agent.model ?? DEFAULT_MODEL_SLUG}</Badge>
-                    {steps.length > 0 && (
-                      <Badge variant="outline" className="text-xs">{t("stepsCount", { count: steps.length })}</Badge>
-                    )}
-                    {agent.subagents.length > 0 && (
-                      <Badge variant="outline" className="text-xs">{t("specialistsCount", { count: agent.subagents.length })}</Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="truncate">{tCommon("createdBy", { name: author })}</span>
-                    <span className="shrink-0">{t("created", { date: createdAt })}</span>
-                  </div>
-                </div>
-                <CardFooter className="pt-2 gap-2 flex-wrap">
-                  <Button asChild variant="default" size="sm" className="flex-1">
-                    <Link href={`/agents/${agent.id}/chat`}>
-                      <MessageSquare className="h-3.5 w-3.5 mr-1.5" />
-                      {t("chat")}
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link href={`/agents/${agent.id}`}>
-                      <Settings className="h-3.5 w-3.5 mr-1.5" />
-                      {tCommon("edit")}
-                    </Link>
-                  </Button>
-                  <PublishCardAction
-                    resource="agent"
-                    endpoint={`/api/agents/${agent.id}`}
-                    isPublic={agent.isPublic}
-                  />
-                  <DeleteCardAction resource="agent" name={agent.name} endpoint={`/api/agents/${agent.id}`} />
-                </CardFooter>
-              </Card>
-            )
-          })}
+          {ownAgents.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              authorName={creatorNames.get(agent.userId) ?? tCommon("unknownAuthor")}
+              editable
+            />
+          ))}
         </div>
       )}
     </div>
