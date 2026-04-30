@@ -1,4 +1,11 @@
 {{- if .Values.istio.certificate.enabled }}
+{{- $ownHosts := list }}
+{{- range .Values.istio.hosts }}
+  {{- if eq (.gateway | default "shared") "own" }}
+    {{- $ownHosts = append $ownHosts .host }}
+  {{- end }}
+{{- end }}
+{{- if $ownHosts }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -15,5 +22,8 @@ spec:
     name: {{ .Values.istio.certificate.issuerName }}
     kind: ClusterIssuer
   dnsNames:
-    - {{ .Values.istio.host }}
+    {{- range $ownHosts }}
+    - {{ . }}
+    {{- end }}
+{{- end }}
 {{- end }}

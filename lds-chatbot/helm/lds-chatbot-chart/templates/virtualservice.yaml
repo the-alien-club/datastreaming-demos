@@ -1,9 +1,25 @@
 {{- if .Values.istio.virtualService.enabled }}
-{{- $gatewayName := "" }}
-{{- if .Values.istio.gateway.create }}
-{{- $gatewayName = printf "%s-gateway" (include "lds-chatbot.fullname" .) }}
-{{- else }}
-{{- $gatewayName = required "istio.sharedGatewayName must be set when istio.gateway.create is false — provide the name of an existing Istio Gateway (in istio.gatewayNamespace) that serves istio.hosts[*].host" .Values.istio.sharedGatewayName }}
+{{- $ns := .Values.istio.gatewayNamespace }}
+{{- $sharedRef := "" }}
+{{- $ownRef := "" }}
+{{- $hasShared := false }}
+{{- $hasOwn := false }}
+{{- range .Values.istio.hosts }}
+  {{- if eq (.gateway | default "shared") "own" }}
+    {{- $hasOwn = true }}
+  {{- else }}
+    {{- $hasShared = true }}
+  {{- end }}
+{{- end }}
+{{- if $hasShared }}
+  {{- $sharedName := required "istio.sharedGatewayName must be set when any host uses gateway: shared — provide the name of an existing Istio Gateway in istio.gatewayNamespace" .Values.istio.sharedGatewayName }}
+  {{- $sharedRef = printf "%s/%s" $ns $sharedName }}
+{{- end }}
+{{- if $hasOwn }}
+  {{- if not .Values.istio.gateway.create }}
+    {{- fail "istio.gateway.create must be true when any host uses gateway: own" }}
+  {{- end }}
+  {{- $ownRef = printf "%s/%s-gateway" $ns (include "lds-chatbot.fullname" .) }}
 {{- end }}
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
@@ -19,15 +35,26 @@ spec:
     - {{ .host }}
     {{- end }}
   gateways:
-    - {{ .Values.istio.gatewayNamespace }}/{{ $gatewayName }}
+    {{- if $hasShared }}
+    - {{ $sharedRef }}
+    {{- end }}
+    {{- if $hasOwn }}
+    - {{ $ownRef }}
+    {{- end }}
   http:
     {{- range .Values.istio.hosts }}
+    {{- $gwRef := $sharedRef }}
+    {{- if eq (.gateway | default "shared") "own" }}
+    {{- $gwRef = $ownRef }}
+    {{- end }}
     - name: lds-chatbot-route-{{ .host | replace "." "-" }}
       match:
         - uri:
             prefix: {{ .path }}
           authority:
             exact: {{ .host }}
+          gateways:
+            - {{ $gwRef }}
       route:
         - destination:
             host: {{ include "lds-chatbot.fullname" $ }}.{{ $.Values.namespace }}.svc.cluster.local

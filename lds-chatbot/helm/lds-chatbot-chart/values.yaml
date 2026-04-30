@@ -16,26 +16,31 @@ service:
 
 namespace: demo-lds-chatbot
 
-# Attaches to an existing Istio Gateway that already serves the listed hosts.
-# Each entry has a `host` and a `path` prefix. The primary path (used for
-# NEXT_PUBLIC_BASE_PATH and liveness/readiness probes) must be set in `config.basePath`.
+# Each entry has `host`, `path` prefix, and `gateway` selector:
+#   - gateway: shared → bind to the existing Gateway named in `sharedGatewayName`
+#   - gateway: own    → bind to the Gateway provisioned by this chart
+#                       (requires gateway.create=true and certificate.enabled=true)
+# The primary path (used for NEXT_PUBLIC_BASE_PATH and liveness/readiness
+# probes) must be set in `config.basePath`.
 istio:
   hosts:
     - host: demo.alien.club
       path: /agents
+      gateway: shared
     - host: demo.legaldataspace.eu
       path: /
+      gateway: own
 
   gatewayNamespace: istio-system
-  # REQUIRED unless gateway.create is true. Name of the existing Istio Gateway
-  # (in gatewayNamespace) that serves `istio.host`. Discover with:
+  # REQUIRED if any host uses `gateway: shared`. Name of an existing Istio
+  # Gateway (in gatewayNamespace) that already serves the host. Discover with:
   #   kubectl get vs -A -o wide | grep <host>
   sharedGatewayName: ""
 
   gateway:
-    # If no shared Gateway exists for istio.host, flip to true and also enable
-    # certificate.enabled below. The chart will provision its own Gateway.
-    create: false
+    # Required true if any host uses `gateway: own`. The chart provisions its
+    # own Gateway covering only the `own` hosts (port 80 + 443).
+    create: true
 
   virtualService:
     enabled: true
@@ -52,8 +57,10 @@ istio:
     retries: null
 
   certificate:
-    # Only needed when gateway.create is true.
-    enabled: false
+    # Required true if any host uses `gateway: own`. The chart issues a
+    # cert-manager Certificate covering all `own` hosts and mounts it as
+    # the Gateway's TLS credential.
+    enabled: true
     issuerName: letsencrypt
 
 # Bundled Postgres StatefulSet — single replica, PVC-backed, no replication.

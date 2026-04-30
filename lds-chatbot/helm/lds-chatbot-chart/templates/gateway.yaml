@@ -1,4 +1,11 @@
 {{- if .Values.istio.gateway.create }}
+{{- $ownHosts := list }}
+{{- range .Values.istio.hosts }}
+  {{- if eq (.gateway | default "shared") "own" }}
+    {{- $ownHosts = append $ownHosts .host }}
+  {{- end }}
+{{- end }}
+{{- if $ownHosts }}
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
@@ -18,24 +25,24 @@ spec:
         name: http-lds-chatbot
         protocol: HTTP
       hosts:
-        {{- range .Values.istio.hosts }}
-        - {{ .host }}
+        {{- range $ownHosts }}
+        - {{ . }}
         {{- end }}
       tls:
         httpsRedirect: false
 
     # HTTPS server with cert-manager issued certificate.
-    # The credential must be a single cert covering all hosts (wildcard or SAN).
+    # The credential covers every `own` host as SANs (see certificate.yaml).
     - port:
         number: 443
         name: https-lds-chatbot
         protocol: HTTPS
       hosts:
-        {{- range .Values.istio.hosts }}
-        - {{ .host }}
+        {{- range $ownHosts }}
+        - {{ . }}
         {{- end }}
       tls:
         mode: SIMPLE
         credentialName: {{ include "lds-chatbot.fullname" . }}-tls
-
+{{- end }}
 {{- end }}
