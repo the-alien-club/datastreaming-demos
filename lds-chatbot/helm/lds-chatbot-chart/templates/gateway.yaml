@@ -18,18 +18,24 @@ spec:
         name: http-lds-chatbot
         protocol: HTTP
       hosts:
-        - {{ .Values.istio.host }}
+        {{- range .Values.istio.hosts }}
+        - {{ .host }}
+        {{- end }}
       tls:
         httpsRedirect: false
 
     # HTTPS server with cert-manager issued certificate.
+    # The credential must be a single cert covering all hosts (wildcard or SAN).
     - port:
         number: 443
         name: https-lds-chatbot
         protocol: HTTPS
       hosts:
-        - {{ .Values.istio.host }}
+        {{- range .Values.istio.hosts }}
+        - {{ .host }}
+        {{- end }}
       tls:
         mode: SIMPLE
         credentialName: {{ include "lds-chatbot.fullname" . }}-tls
+
 {{- end }}

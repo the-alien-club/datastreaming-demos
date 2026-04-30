@@ -5,7 +5,7 @@ image:
   # IfNotPresent — image tags are immutable numeric versions, so re-pulling
   # on every pod start is wasted bandwidth + slower restarts (D-P1.4).
   pullPolicy: Always
-  tag: "0.2.18"
+  tag: "0.2.19"
 
 imagePullSecrets: []
 
@@ -16,12 +16,15 @@ service:
 
 namespace: demo-lds-chatbot
 
-# Attaches to an existing Istio Gateway that already serves `istio.host`.
-# The `/agents` prefix is baked into the Next.js bundle at image build time via
-# NEXT_PUBLIC_BASE_PATH and must match `istio.path` below.
+# Attaches to an existing Istio Gateway that already serves the listed hosts.
+# Each entry has a `host` and a `path` prefix. The primary path (used for
+# NEXT_PUBLIC_BASE_PATH and liveness/readiness probes) must be set in `config.basePath`.
 istio:
-  host: demo.alien.club
-  path: /agents
+  hosts:
+    - host: demo.alien.club
+      path: /agents
+    - host: demo.legaldataspace.eu
+      path: /
 
   gatewayNamespace: istio-system
   # REQUIRED unless gateway.create is true. Name of the existing Istio Gateway
