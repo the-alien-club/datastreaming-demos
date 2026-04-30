@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     name: datasets.name,
     description: datasets.description,
     status: datasets.status,
+    isPublic: datasets.isPublic,
     createdAt: datasets.createdAt,
     updatedAt: datasets.updatedAt,
     attachedAgentCount: sql<number>`count(distinct ${agentSubagents.agentId})`,

@@ -33,13 +33,25 @@
     "error": "Une erreur est survenue",
     "tryAgain": "Réessayer",
     "pageNotFound": "Page introuvable",
-    "goToAgents": "Aller aux agents"
+    "goToAgents": "Aller aux agents",
+    "createdBy": "Créé par : {name}",
+    "unknownAuthor": "Inconnu"
   },
   "nav": {
-    "agents": "Agents",
+    "agents": "Agent IA",
+    "myAgents": "Mes agents",
+    "agentLibrary": "Bibliothèque d'agents",
     "specialists": "Spécialistes",
+    "mySpecialists": "Mes spécialistes",
+    "specialistsLibrary": "Bibliothèque de spécialistes",
     "conversations": "Conversations",
+    "corpus": "Corpus",
+    "myCorpus": "Mes corpus",
+    "corpusLibrary": "Bibliothèque de corpus",
     "datasets": "Jeux de données",
+    "databases": "Base de données",
+    "myDatabases": "Mes sources",
+    "databasesLibrary": "Bibliothèque de sources",
     "mcpServers": "Serveurs MCP",
     "start": "Démarrer",
     "signOut": "Se déconnecter",
@@ -57,7 +69,10 @@
   },
   "agents": {
     "title": "Agents",
+    "myTitle": "Mes agents",
     "subtitle": "Créez et gérez vos agents IA.",
+    "libraryTitle": "Bibliothèque d'agents",
+    "librarySubtitle": "Agents publics disponibles pour tous les membres.",
     "newAgent": "Nouvel agent",
     "emptyTitle": "Aucun agent pour l'instant",
     "emptyDescription": "Créez votre premier agent pour commencer à construire des workflows IA.",
@@ -136,7 +151,11 @@
   
   "datasets": {
     "title": "Jeux de données",
+    "myTitle": "Mes corpus",
+    "mySubtitle": "Importez et gérez vos corpus de documents pour vos agents.",
     "subtitle": "Importez et gérez vos corpus de documents pour vos agents.",
+    "libraryTitle": "Bibliothèque de corpus",
+    "librarySubtitle": "Corpus publics disponibles pour tous les membres.",
     "newDataset": "Nouveau jeu de données",
     "emptyDescription": "Aucun jeu de données. Créez le premier.",
     "agentsCount": "{count, plural, one {# agent} other {# agents}}",
@@ -191,6 +210,10 @@
   },
   "specialists": {
     "title": "Spécialistes",
+    "myTitle": "Mes spécialistes",
+    "mySubtitle": "Agents spécialistes réutilisables à associer à vos agents.",
+    "libraryTitle": "Bibliothèque de spécialistes",
+    "librarySubtitle": "Spécialistes publics disponibles pour tous les membres.",
     "subtitle": "Agents spécialistes réutilisables à associer à vos agents.",
     "newSpecialist": "Nouveau spécialiste",
     "emptyTitle": "Aucun spécialiste pour l'instant",
@@ -225,10 +248,23 @@
     "deleteButton": "Supprimer le spécialiste"
   },
   "mcps": {
-    "title": "Serveurs MCP",
-    "subtitle": "Gérez les serveurs Model Context Protocol disponibles pour vos agents.",
-    "addMcp": "Ajouter MCP",
-    "emptyDescription": "Aucun serveur MCP configuré.",
+    "title": "Bases de données",
+    "myTitle": "Mes sources de données",
+    "mySubtitle": "Sources de données configurées pour vos agents IA",
+    "subtitle": "Sources de données pour vos agents IA",
+    "libraryTitle": "Bibliothèque de sources",
+    "librarySubtitle": "Sources publiques disponibles pour tous les membres.",
+    "addMcp": "Ajouter une source",
+    "emptyDescription": "Aucune source de données configurée.",
+    "typeLabel": "Type",
+    "providerLabel": "Fournisseur",
+    "priceLabel": "Prix/requête",
+    "categoriesLabel": "Catégories",
+    "categoriesPlaceholder": "Sélectionner des catégories…",
+    "categoriesEmpty": "Aucune catégorie sélectionnée.",
+    "categoriesMore": "+{count}",
+    "freeLabel": "Gratuit",
+    "detail": "Détail",
     "failedLoad": "Impossible de charger les serveurs MCP",
     "confirmDelete": "Supprimer le MCP « {name} » ? Les agents l'utilisant perdront cet outil lors de la prochaine reconstruction du workflow.",
     "deleted": "MCP supprimé",
@@ -292,6 +328,10 @@
       "dataset": "Jeu de données",
       "mcp": "MCP"
     }
+  },
+  "privacy": {
+    "public": "Public",
+    "private": "Privé"
   },
   "publish": {
     "makePublic": "Rendre public",

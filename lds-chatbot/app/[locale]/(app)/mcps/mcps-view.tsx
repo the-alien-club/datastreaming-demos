@@ -5,26 +5,58 @@ import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Server, Plus, Trash2, Pencil, Loader2, KeyRound, Globe, Lock } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Database, Plus, Loader2, X, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
+import { McpCard, type McpRecord } from "./mcp-card"
 
-interface McpRecord {
-  id: string
-  name: string
-  serverUrl: string
-  transport: string | null
-  authToken: string | null
-  description: string | null
-  category: string | null
-  enabled: boolean | null
-  isPublic: boolean
-  isOwn: boolean
-  createdAt: number | null
-  updatedAt: number | null
-}
+const CATEGORY_OPTIONS = [
+  "Gestion des contrats",
+  "Droit international",
+  "Droit du numérique",
+  "Droit de la famille",
+  "Droit de l'urbanisme et immobilier",
+  "Generalites",
+  "Droit des affaires",
+  "Droit de la consommation",
+  "Droit des assurances",
+  "Droit public",
+  "Droit fiscal",
+  "Droit de l'environnement",
+  "Droit des sociétés",
+  "Contentieux",
+  "Propriété intellectuelle",
+  "Projets stratégiques",
+  "Droit social",
+  "Formation et Documentation",
+  "Conformité réglementaire",
+  "Droit de l'urbanisme",
+] as const
+
+const TYPE_OPTIONS = ["Logiciels tier", "Open Data", "Ontologies"] as const
+
+const MAX_VISIBLE_CATEGORIES = 2
 
 const EMPTY_FORM = {
   name: "",
@@ -32,11 +64,88 @@ const EMPTY_FORM = {
   transport: "streamable_http",
   authToken: "",
   description: "",
-  category: "",
+  categories: [] as string[],
+  type: "",
+  provider: "",
+  pricePerQuery: "",
   enabled: true,
 }
 
 type FormState = typeof EMPTY_FORM
+
+function CategoriesMultiSelect({
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  value: string[]
+  onChange: (next: string[]) => void
+  disabled?: boolean
+  placeholder: string
+}) {
+  function toggle(category: string, checked: boolean) {
+    if (checked) onChange(Array.from(new Set([...value, category])))
+    else onChange(value.filter((c) => c !== category))
+  }
+
+  return (
+    <div className="space-y-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            className="w-full justify-between font-normal"
+          >
+            <span className={value.length === 0 ? "text-muted-foreground" : ""}>
+              {value.length === 0 ? placeholder : `${value.length} sélectionnée(s)`}
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-(--radix-dropdown-menu-trigger-width) max-h-72 overflow-y-auto"
+        >
+          {CATEGORY_OPTIONS.map((cat) => (
+            <DropdownMenuCheckboxItem
+              key={cat}
+              checked={value.includes(cat)}
+              onCheckedChange={(checked) => toggle(cat, checked === true)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              {cat}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((cat) => (
+            <Badge
+              key={cat}
+              variant="outline"
+              className="gap-1 pr-1 border-primary/30 bg-primary/5 text-primary"
+            >
+              {cat}
+              <button
+                type="button"
+                onClick={() => onChange(value.filter((c) => c !== cat))}
+                disabled={disabled}
+                className="hover:bg-primary/15 rounded-sm p-0.5 disabled:opacity-50"
+                aria-label={`Remove ${cat}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function McpDialog({
   open,
@@ -63,7 +172,10 @@ function McpDialog({
             transport: m.transport ?? "streamable_http",
             authToken: m.authToken ?? "",
             description: m.description ?? "",
-            category: m.category ?? "",
+            categories: m.categories ?? [],
+            type: m.type ?? "",
+            provider: m.provider ?? "",
+            pricePerQuery: m.pricePerQuery ?? "",
             enabled: m.enabled ?? true,
           }
         })(),
@@ -90,7 +202,10 @@ function McpDialog({
         transport: form.transport,
         authToken: form.authToken.trim() || null,
         description: form.description.trim() || null,
-        category: form.category.trim() || null,
+        categories: form.categories,
+        type: form.type.trim() || null,
+        provider: form.provider.trim() || null,
+        pricePerQuery: form.pricePerQuery.trim() || null,
         enabled: form.enabled,
       }
 
@@ -135,27 +250,31 @@ function McpDialog({
             <Input
               placeholder={t("namePlaceholder")}
               value={form.name}
-              onChange={(e) => { field("name", e.target.value); if (nameError) setNameError(false) }}
+              onChange={(e) => {
+                field("name", e.target.value)
+                if (nameError) setNameError(false)
+              }}
               aria-invalid={nameError}
               disabled={saving}
             />
-            {nameError && (
-              <p className="text-sm text-destructive">{t("nameRequired")}</p>
-            )}
+            {nameError && <p className="text-sm text-destructive">{t("nameRequired")}</p>}
           </div>
+
           <div className="space-y-1">
             <label className="text-sm font-medium">{t("serverUrlLabel")}</label>
             <Input
               placeholder={t("serverUrlPlaceholder")}
               value={form.serverUrl}
-              onChange={(e) => { field("serverUrl", e.target.value); if (urlError) setUrlError(false) }}
+              onChange={(e) => {
+                field("serverUrl", e.target.value)
+                if (urlError) setUrlError(false)
+              }}
               aria-invalid={urlError}
               disabled={saving}
             />
-            {urlError && (
-              <p className="text-sm text-destructive">{t("serverUrlRequired")}</p>
-            )}
+            {urlError && <p className="text-sm text-destructive">{t("serverUrlRequired")}</p>}
           </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("transportLabel")}</label>
@@ -175,18 +294,57 @@ function McpDialog({
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-sm font-medium">
-                {t("categoryLabel")}{" "}
-                <span className="text-muted-foreground font-normal">{t("categoryHint")}</span>
-              </label>
+              <label className="text-sm font-medium">{t("typeLabel")}</label>
+              <Select
+                value={form.type || undefined}
+                onValueChange={(v) => field("type", v)}
+                disabled={saving}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("providerLabel")}</label>
               <Input
-                placeholder={t("categoryPlaceholder")}
-                value={form.category}
-                onChange={(e) => field("category", e.target.value)}
+                placeholder="EUR-Lex, Etat, Infogreffe…"
+                value={form.provider}
+                onChange={(e) => field("provider", e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">{t("priceLabel")}</label>
+              <Input
+                placeholder="Gratuit, 0,01 €…"
+                value={form.pricePerQuery}
+                onChange={(e) => field("pricePerQuery", e.target.value)}
                 disabled={saving}
               />
             </div>
           </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium">{t("categoriesLabel")}</label>
+            <CategoriesMultiSelect
+              value={form.categories}
+              onChange={(next) => field("categories", next)}
+              disabled={saving}
+              placeholder={t("categoriesPlaceholder")}
+            />
+          </div>
+
           <div className="space-y-1">
             <label className="text-sm font-medium">
               {t("authTokenLabel")}{" "}
@@ -200,6 +358,7 @@ function McpDialog({
               disabled={saving}
             />
           </div>
+
           <div className="space-y-1">
             <label className="text-sm font-medium">
               {t("descriptionLabel")}{" "}
@@ -212,6 +371,7 @@ function McpDialog({
               disabled={saving}
             />
           </div>
+
           <div className="flex items-center gap-2">
             <input
               id="enabled"
@@ -221,8 +381,11 @@ function McpDialog({
               disabled={saving}
               className="h-4 w-4 rounded border"
             />
-            <label htmlFor="enabled" className="text-sm font-medium">{t("enabledLabel")}</label>
+            <label htmlFor="enabled" className="text-sm font-medium">
+              {t("enabledLabel")}
+            </label>
           </div>
+
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
               {tCommon("cancel")}
@@ -237,6 +400,7 @@ function McpDialog({
     </Dialog>
   )
 }
+
 
 export default function McpsPage() {
   const t = useTranslations("mcps")
@@ -325,12 +489,14 @@ export default function McpsPage() {
     )
   }
 
+  const ownMcps = mcps.filter((m) => m.isOwn)
+
   return (
-    <div className="p-4 sm:p-6 max-w-4xl">
+    <div className="p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{t("title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("subtitle")}</p>
+          <h1 className="text-2xl font-bold">{t("myTitle")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("mySubtitle")}</p>
         </div>
         <Button onClick={() => setDialog({ isNew: true })} className="self-start sm:self-auto">
           <Plus className="h-4 w-4 mr-2" />
@@ -338,9 +504,9 @@ export default function McpsPage() {
         </Button>
       </div>
 
-      {mcps.filter((m) => m.isOwn).length === 0 ? (
+      {ownMcps.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
-          <Server className="h-10 w-10 text-muted-foreground mb-4" />
+          <Database className="h-10 w-10 text-muted-foreground mb-4" />
           <p className="text-muted-foreground font-medium mb-4">{t("emptyDescription")}</p>
           <Button onClick={() => setDialog({ isNew: true })}>
             <Plus className="h-4 w-4 mr-2" />
@@ -348,160 +514,23 @@ export default function McpsPage() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {mcps.filter((m) => m.isOwn).map((mcp) => (
-            <div
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {ownMcps.map((mcp) => (
+            <McpCard
               key={mcp.id}
-              className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
-            >
-              <Server className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold truncate">{mcp.name}</p>
-                  {mcp.category && (
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {mcp.category}
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="text-xs font-mono">
-                    {mcp.transport ?? "streamable_http"}
-                  </Badge>
-                  {mcp.authToken && (
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <KeyRound className="h-3 w-3" />
-                      auth
-                    </Badge>
-                  )}
-                  {mcp.enabled ? (
-                    <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/20 text-xs">
-                      enabled
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">disabled</Badge>
-                  )}
-                  {mcp.isPublic && (
-                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
-                      <Globe className="h-3 w-3" />
-                      public
-                    </Badge>
-                  )}
-                </div>
-                {mcp.isOwn && (
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate font-mono">
-                    {mcp.serverUrl}
-                  </p>
-                )}
-                {mcp.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                    {mcp.description}
-                  </p>
-                )}
-              </div>
-              {mcp.isOwn && (
-                <div className="flex flex-col items-end gap-1 shrink-0 sm:flex-row sm:items-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={publishing === mcp.id}
-                    onClick={() => handleTogglePublic(mcp)}
-                  >
-                    {publishing === mcp.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : mcp.isPublic ? (
-                      <><Lock className="h-3 w-3 mr-1" />{t("makePrivate")}</>
-                    ) : (
-                      <><Globe className="h-3 w-3 mr-1" />{t("makePublic")}</>
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={toggling === mcp.id}
-                    onClick={() => handleToggle(mcp)}
-                  >
-                    {toggling === mcp.id ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : mcp.enabled ? (
-                      t("disable")
-                    ) : (
-                      t("enable")
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setDialog(mcp)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    <span className="sr-only">{t("dialogEditTitle")}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    disabled={deleting === mcp.id}
-                    onClick={() => handleDelete(mcp.id, mcp.name)}
-                  >
-                    {deleting === mcp.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                    <span className="sr-only">{t("deleted")}</span>
-                  </Button>
-                </div>
-              )}
-            </div>
+              mcp={mcp}
+              onEdit={() => setDialog(mcp)}
+              onDelete={() => handleDelete(mcp.id, mcp.name)}
+              onToggleEnabled={() => handleToggle(mcp)}
+              onTogglePublic={() => handleTogglePublic(mcp)}
+              busy={{
+                delete: deleting === mcp.id,
+                enabled: toggling === mcp.id,
+                publish: publishing === mcp.id,
+              }}
+            />
           ))}
         </div>
-      )}
-
-      {mcps.filter((m) => !m.isOwn).length > 0 && (
-        <>
-          <div className="flex items-center gap-3 mt-8 mb-4">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5" />
-              {t("publicSection")}
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className="space-y-3">
-            {mcps.filter((m) => !m.isOwn).map((mcp) => (
-              <div
-                key={mcp.id}
-                className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
-              >
-                <Server className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold truncate">{mcp.name}</p>
-                    {mcp.category && (
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {mcp.category}
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {mcp.transport ?? "streamable_http"}
-                    </Badge>
-                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
-                      <Globe className="h-3 w-3" />
-                      public
-                    </Badge>
-                  </div>
-                  {mcp.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                      {mcp.description}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
       )}
 
       {dialog && (

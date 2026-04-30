@@ -9,6 +9,7 @@ import { Database, Globe, Lock, Plus, Trash2, Eye, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { timeAgo } from "@/lib/time"
+import { PrivacyBadge } from "@/components/privacy-badge"
 
 export interface DatasetRecord {
   id: string
@@ -95,8 +96,8 @@ export default function DatasetsPage() {
     <div className="p-4 sm:p-6 max-w-4xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{t("title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("subtitle")}</p>
+          <h1 className="text-2xl font-bold">{t("myTitle")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("mySubtitle")}</p>
         </div>
         <Button asChild className="self-start sm:self-auto">
           <Link href="/datasets/new">
@@ -129,12 +130,7 @@ export default function DatasetsPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold truncate">{dataset.name}</p>
                   <StatusBadge status={dataset.status} />
-                  {dataset.isPublic && (
-                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
-                      <Globe className="h-3 w-3" />
-                      public
-                    </Badge>
-                  )}
+                  <PrivacyBadge isPublic={dataset.isPublic} />
                   {dataset.attachedAgentCount > 0 && (
                     <Badge variant="outline" className="text-xs">
                       {t("agentsCount", { count: dataset.attachedAgentCount })}
@@ -190,47 +186,6 @@ export default function DatasetsPage() {
         </div>
       )}
 
-      {datasets.filter((d) => !d.isOwn).length > 0 && (
-        <>
-          <div className="flex items-center gap-3 mt-8 mb-4">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5" />
-              {t("publicSection")}
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className="space-y-3">
-            {datasets.filter((d) => !d.isOwn).map((dataset) => (
-              <div
-                key={dataset.id}
-                className="rounded-lg border p-4 flex items-start gap-4 hover:bg-muted/20 transition-colors"
-              >
-                <Database className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold truncate">{dataset.name}</p>
-                    <StatusBadge status={dataset.status} />
-                    <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 text-xs gap-1">
-                      <Globe className="h-3 w-3" />
-                      public
-                    </Badge>
-                    {dataset.attachedAgentCount > 0 && (
-                      <Badge variant="outline" className="text-xs">
-                        {t("agentsCount", { count: dataset.attachedAgentCount })}
-                      </Badge>
-                    )}
-                  </div>
-                  {dataset.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{dataset.description}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">{timeAgo(dataset.createdAt)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 }

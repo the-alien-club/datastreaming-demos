@@ -1,70 +1,49 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { Link } from "@/i18n/routing"
 import { getTranslations } from "next-intl/server"
 import { db, getUserNamesByIds } from "@/lib/db"
 import { specialists, mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { BrainCircuit, Plus, Settings } from "lucide-react"
-import { DeleteCardAction } from "@/components/delete-card-action"
-import { PublishCardAction } from "@/components/publish-card-action"
-import { PrivacyBadge } from "@/components/privacy-badge"
+import { BrainCircuit } from "lucide-react"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
-import { getUserOrgRole } from "@/lib/platform/onboarding"
+import { PrivacyBadge } from "@/components/privacy-badge"
 
-export default async function SpecialistsPage() {
+export default async function SpecialistsLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const orgRole = await getUserOrgRole(session.user.id)
-  if (orgRole === "org-client") redirect("/agents")
-
-  const [ownSpecialists, mcpRows, t, tCommon] = await Promise.all([
+  const [publicSpecialists, mcpRows, t, tCommon] = await Promise.all([
     db.query.specialists.findMany({
-      where: eq(specialists.userId, session.user.id),
+      where: eq(specialists.isPublic, true),
       orderBy: [desc(specialists.createdAt)],
     }),
-    db.select({ id: mcps.id, name: mcps.name }).from(mcps).where(eq(mcps.userId, session.user.id)),
+    // Names for any MCP referenced by these specialists, regardless of owner —
+    // public specialists may reference public MCPs the viewer doesn't own.
+    db.select({ id: mcps.id, name: mcps.name }).from(mcps),
     getTranslations("specialists"),
     getTranslations("common"),
   ])
   const mcpNames = new Map(mcpRows.map((m) => [m.id, m.name]))
-  const creatorNames = await getUserNamesByIds(ownSpecialists.map((s) => s.userId))
+  const creatorNames = await getUserNamesByIds(publicSpecialists.map((s) => s.userId))
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{t("myTitle")}</h1>
-          <p className="text-muted-foreground mt-1">{t("mySubtitle")}</p>
-        </div>
-        <Button asChild className="self-start sm:self-auto">
-          <Link href="/specialists/new">
-            <Plus className="h-4 w-4 mr-2" />
-            {t("newSpecialist")}
-          </Link>
-        </Button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">{t("libraryTitle")}</h1>
+        <p className="text-muted-foreground mt-1">{t("librarySubtitle")}</p>
       </div>
 
-      {ownSpecialists.length === 0 ? (
+      {publicSpecialists.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <BrainCircuit className="h-12 w-12 text-muted-foreground mb-4" />
-          <h2 className="text-lg font-semibold mb-2">{t("emptyTitle")}</h2>
-          <p className="text-muted-foreground mb-6 max-w-sm">{t("emptyDescription")}</p>
-          <Button asChild>
-            <Link href="/specialists/new">
-              <Plus className="h-4 w-4 mr-2" />
-              {t("createFirst")}
-            </Link>
-          </Button>
+          <p className="text-muted-foreground">{t("emptyDescription")}</p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ownSpecialists.map((specialist) => {
+          {publicSpecialists.map((specialist) => {
             const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
             const createdAt = specialist.createdAt
               ? new Date(specialist.createdAt).toLocaleDateString()
@@ -77,7 +56,7 @@ export default async function SpecialistsPage() {
                   <CardTitle className="text-base flex items-center gap-2">
                     <BrainCircuit className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="truncate">{specialist.name}</span>
-                    <PrivacyBadge isPublic={specialist.isPublic} />
+                    <PrivacyBadge isPublic />
                   </CardTitle>
                   {specialist.description && (
                     <CardDescription className="line-clamp-2 text-sm">
@@ -86,7 +65,7 @@ export default async function SpecialistsPage() {
                   )}
                 </CardHeader>
                 <CardContent className="flex-1" />
-                <div className="px-6 pb-3 space-y-2">
+                <div className="px-6 pb-4 space-y-2">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant="secondary" className="text-xs">
                       {specialist.model ?? DEFAULT_MODEL_SLUG}
@@ -102,24 +81,6 @@ export default async function SpecialistsPage() {
                     <span className="shrink-0">{t("created", { date: createdAt })}</span>
                   </div>
                 </div>
-                <CardFooter className="pt-2 gap-2 flex-wrap">
-                  <Button asChild variant="outline" size="sm" className="flex-1">
-                    <Link href={`/specialists/${specialist.id}`}>
-                      <Settings className="h-3.5 w-3.5 mr-1.5" />
-                      {tCommon("edit")}
-                    </Link>
-                  </Button>
-                  <PublishCardAction
-                    resource="specialist"
-                    endpoint={`/api/specialists/${specialist.id}`}
-                    isPublic={specialist.isPublic}
-                  />
-                  <DeleteCardAction
-                    resource="specialist"
-                    name={specialist.name}
-                    endpoint={`/api/specialists/${specialist.id}`}
-                  />
-                </CardFooter>
               </Card>
             )
           })}

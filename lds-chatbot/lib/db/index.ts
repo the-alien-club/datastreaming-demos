@@ -38,3 +38,21 @@ export async function getUserIdFromToken(accessToken: string): Promise<string | 
   )
   return result.rows[0]?.userId ?? null
 }
+
+/**
+ * Resolves a list of better-auth user IDs to display names. Returns a Map
+ * keyed by user id, with the user's `name` (falling back to email) as value.
+ * IDs absent from the result map could not be resolved.
+ *
+ * The `user` table is owned by better-auth and not declared in our Drizzle
+ * schema, hence raw SQL.
+ */
+export async function getUserNamesByIds(userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map()
+  const unique = Array.from(new Set(userIds))
+  const idList = sql.join(unique.map((id) => sql`${id}`), sql`, `)
+  const result = await db.execute<{ id: string; name: string | null; email: string }>(
+    sql`SELECT "id", "name", "email" FROM "user" WHERE "id" IN (${idList})`
+  )
+  return new Map(result.rows.map((r) => [r.id, r.name?.trim() || r.email]))
+}
