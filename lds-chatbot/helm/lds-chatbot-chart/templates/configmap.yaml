@@ -22,3 +22,6 @@ data:
   {{- with .Values.config.orgId }}
   ORG_ID: {{ . | quote }}
   {{- end }}
+  {{- with .Values.config.betterAuthTrustedOrigins }}
+  BETTER_AUTH_TRUSTED_ORIGINS: {{ . | quote }}
+  {{- end }}

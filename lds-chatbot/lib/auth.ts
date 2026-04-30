@@ -11,10 +11,20 @@ const appSlug = process.env.AUTHENTIK_APP_SLUG || "datastreaming"
 const baseURL = process.env.BETTER_AUTH_URL!
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
 
+// Additional origins better-auth accepts for CSRF/origin checks. baseURL is
+// implicitly trusted; everything else (e.g. alternate demo hostnames pointed
+// at the same deployment) must be listed here or origin-check rejects the
+// request with a 401. Comma-separated for ergonomic ConfigMap wiring.
+const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 export const auth = betterAuth({
   appName: "LDS Chatbot",
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL,
+  trustedOrigins,
   database: pool,
   // The default rate limiter trips on sign-in's burst of internal calls.
   rateLimit: { enabled: false },

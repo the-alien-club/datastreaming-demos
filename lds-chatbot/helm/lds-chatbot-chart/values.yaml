@@ -16,12 +16,22 @@ service:
 
 namespace: demo-lds-chatbot
 
-# Each entry has `host`, `path` prefix, and `gateway` selector:
-#   - gateway: shared → bind to the existing Gateway named in `sharedGatewayName`
-#   - gateway: own    → bind to the Gateway provisioned by this chart
-#                       (requires gateway.create=true and certificate.enabled=true)
-# The primary path (used for NEXT_PUBLIC_BASE_PATH and liveness/readiness
-# probes) must be set in `config.basePath`.
+# Each entry has `host`, `path` prefix, optional `rewrite`, and `gateway` selector:
+#   - path:    URI prefix the VirtualService matches inbound requests against
+#   - rewrite: optional URI prefix to substitute the matched `path` with before
+#              forwarding to the pod. Use it when a host serves the chatbot at
+#              a different prefix than the app's NEXT_PUBLIC_BASE_PATH. The pod
+#              still expects basePath-prefixed routes (asset URLs, redirects,
+#              etc. all carry the basePath), so this rewrite makes a bare-domain
+#              host work without redeploying the app — at the cost of the
+#              browser ending up on the basePath-prefixed URL after the first
+#              redirect (acceptable for a demo entry point).
+#   - gateway: `shared` → bind to the existing Gateway in `sharedGatewayName`
+#              `own`    → bind to the Gateway provisioned by this chart
+#                         (requires gateway.create=true and certificate.enabled=true)
+# `config.basePath` MUST equal the path the app is built with
+# (NEXT_PUBLIC_BASE_PATH); the liveness/readiness probes hit basePath directly
+# inside the pod, so they bypass any istio rewrite.
 istio:
   hosts:
     - host: demo.alien.club
@@ -29,6 +39,7 @@ istio:
       gateway: shared
     - host: demo.legaldataspace.eu
       path: /
+      rewrite: /agents
       gateway: own
 
   gatewayNamespace: istio-system
@@ -117,6 +128,11 @@ config:
   # Must be set alongside secrets.chatbot.scalewaySecretName. Leave empty
   # to disable org auto-provisioning (chatbot works in standalone mode).
   orgId: ""
+  # Comma-separated list of additional origins better-auth accepts for
+  # CSRF/origin checks beyond `betterAuthUrl` (which is auto-trusted).
+  # Required when serving the chatbot under multiple hostnames so that
+  # sign-in / API calls from those hosts pass origin validation.
+  betterAuthTrustedOrigins: "https://demo.legaldataspace.eu"
 
 # Scaleway Secret Manager references for secrets.
 secrets:

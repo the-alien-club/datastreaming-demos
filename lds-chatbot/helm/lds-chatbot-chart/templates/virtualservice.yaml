@@ -55,6 +55,10 @@ spec:
             exact: {{ .host }}
           gateways:
             - {{ $gwRef }}
+      {{- with .rewrite }}
+      rewrite:
+        uri: {{ . }}
+      {{- end }}
       route:
         - destination:
             host: {{ include "lds-chatbot.fullname" $ }}.{{ $.Values.namespace }}.svc.cluster.local
