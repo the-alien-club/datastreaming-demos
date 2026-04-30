@@ -9,7 +9,6 @@ export interface AvailableMcp {
   id: string
   name: string
   description: string | null
-  category: string | null
   source: "builtin" | "user"
 }
 
@@ -46,7 +45,6 @@ export async function GET(request: NextRequest) {
     id: r.id,
     name: r.name,
     description: r.description ?? null,
-    category: r.category ?? null,
     source: builtinSlug(r.id) !== null ? "builtin" : "user",
   })
 
@@ -55,8 +53,11 @@ export async function GET(request: NextRequest) {
     ...publicRows.map(toAvailable),
   ]
 
-  const legal = all.filter((m) => m.source === "builtin" && m.category === "legal")
-  const otherBuiltin = all.filter((m) => m.source === "builtin" && m.category !== "legal")
+  // All seeded built-ins are legal MCPs (the slug allow-list is the source of
+  // truth). The previous implementation also filtered by `category === 'legal'`
+  // which was redundant — and broke after the schema migration to multi-category.
+  const legal = all.filter((m) => m.source === "builtin")
+  const otherBuiltin: AvailableMcp[] = []
   const userMcps = all.filter((m) => m.source === "user")
 
   return ok({ legal, otherBuiltin, userMcps })

@@ -16,7 +16,14 @@ export const mcps = pgTable("mcps", {
   transport: text("transport").default("streamable_http"),
   authToken: text("auth_token"),
   description: text("description"),
-  category: text("category"), // e.g. 'data', 'research', 'legal'
+  // Multi-select legal categories (e.g. "Droit des sociétés", "Gestion des contrats").
+  categories: text("categories").array().notNull().default([]),
+  // "Logiciels tier" | "Open Data" | "Ontologies" — free-form to allow future values.
+  type: text("type"),
+  // Data provider (e.g. "EUR-Lex", "Etat", "Infogreffe").
+  provider: text("provider"),
+  // Price per query as displayed (e.g. "Gratuit", "0,01 €").
+  pricePerQuery: text("price_per_query"),
   enabled: boolean("enabled").default(true),
   isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),

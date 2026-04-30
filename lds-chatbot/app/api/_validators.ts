@@ -101,13 +101,21 @@ export const subagentDeleteBodySchema = z.object({
 
 // ── MCPs ───────────────────────────────────────────────────────────────────
 
+const CATEGORY = z.string().trim().min(1).max(80)
+const MCP_TYPE = z.string().trim().max(40)
+const MCP_PROVIDER = z.string().trim().max(80)
+const MCP_PRICE = z.string().trim().max(40)
+
 export const createMcpBodySchema = z.object({
   name: NAME,
   serverUrl: HTTP_URL,
   transport: TRANSPORT.default("streamable_http"),
   authToken: z.string().nullable().optional(),
   description: SHORT_TEXT.nullable().optional(),
-  category: z.string().trim().max(50).nullable().optional(),
+  categories: z.array(CATEGORY).max(20).default([]),
+  type: MCP_TYPE.nullable().optional(),
+  provider: MCP_PROVIDER.nullable().optional(),
+  pricePerQuery: MCP_PRICE.nullable().optional(),
   enabled: z.boolean().optional(),
 })
 
@@ -117,7 +125,10 @@ export const updateMcpBodySchema = z.object({
   transport: TRANSPORT.optional(),
   authToken: z.string().nullable().optional(),
   description: SHORT_TEXT.nullable().optional(),
-  category: z.string().trim().max(50).nullable().optional(),
+  categories: z.array(CATEGORY).max(20).optional(),
+  type: MCP_TYPE.nullable().optional(),
+  provider: MCP_PROVIDER.nullable().optional(),
+  pricePerQuery: MCP_PRICE.nullable().optional(),
   enabled: z.boolean().optional(),
   isPublic: z.boolean().optional(),
 })

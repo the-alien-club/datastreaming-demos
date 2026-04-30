@@ -16,7 +16,6 @@ interface AvailableMcp {
   id: string
   name: string
   description: string | null
-  category: string | null
   source: "builtin" | "user"
 }
 
@@ -119,13 +118,11 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
         id: string
         name: string
         description: string | null
-        category: string | null
       }
       const newMcp: AvailableMcp = {
         id: created.id,
         name: created.name,
         description: created.description,
-        category: created.category,
         source: "user",
       }
       setAvailable((prev) => ({ ...prev, userMcps: [newMcp, ...prev.userMcps] }))

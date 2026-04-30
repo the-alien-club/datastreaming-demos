@@ -29,7 +29,10 @@ const SEED_MCPS = [
       "https://mcp.openlegi.fr/legifrance/mcp?token=af110fc295684c0bc558ed34cb7ab126b6af1c1774aa132bf7cbe03739e1092b",
     transport: "streamable_http",
     description: "French legal code: laws, regulations, and official codes",
-    category: "legal",
+    categories: ["Generalites", "Droit public"],
+    type: "Open Data",
+    provider: "Etat",
+    pricePerQuery: "Gratuit",
   },
   {
     slug: "convention-collective",
@@ -38,7 +41,10 @@ const SEED_MCPS = [
       "https://kali-mcp.super-novia.io/mcp?api_key=mcpf_BR4wu70C_S_K4fdFfwb0z5Hq76G7Kz_q",
     transport: "streamable_http",
     description: "French collective bargaining agreements (Kali database)",
-    category: "legal",
+    categories: ["Droit social"],
+    type: "Open Data",
+    provider: "Etat",
+    pricePerQuery: "Gratuit",
   },
 ]
 
@@ -63,14 +69,17 @@ try {
     for (const mcp of SEED_MCPS) {
       const id = `${mcp.slug}:${user.id}`
       const result = await pool.query(
-        `INSERT INTO mcps (id, user_id, name, server_url, transport, description, category, enabled, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW())
+        `INSERT INTO mcps (id, user_id, name, server_url, transport, description, categories, type, provider, price_per_query, enabled, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, NOW(), NOW())
          ON CONFLICT (id) DO UPDATE
          SET name = EXCLUDED.name,
              server_url = EXCLUDED.server_url,
              transport = EXCLUDED.transport,
              description = EXCLUDED.description,
-             category = EXCLUDED.category,
+             categories = EXCLUDED.categories,
+             type = EXCLUDED.type,
+             provider = EXCLUDED.provider,
+             price_per_query = EXCLUDED.price_per_query,
              enabled = true,
              updated_at = NOW()
          RETURNING (xmax = 0) AS inserted`,
@@ -81,7 +90,10 @@ try {
           mcp.serverUrl,
           mcp.transport,
           mcp.description ?? null,
-          mcp.category ?? null,
+          mcp.categories ?? [],
+          mcp.type ?? null,
+          mcp.provider ?? null,
+          mcp.pricePerQuery ?? null,
         ],
       )
       if (result.rows[0]?.inserted) inserted += 1
