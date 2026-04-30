@@ -228,7 +228,109 @@ Migrations live in `drizzle/` and are generated with `npm run db:generate` after
 | `lib/db/schema.ts` | Drizzle table definitions |
 | `lib/auth.ts` | better-auth session config |
 | `lib/auth-helpers.ts` | Access token resolution |
-| `lib/mcps/config.json` | Static MCP server registry |
 | `app/api/chat/route.ts` | Internal chat endpoint (auth proxy → platform Responses API) |
 | `app/api/datasets/` | Dataset CRUD and upload proxy routes |
 | `app/api/agents/` | Agent CRUD — creates/updates platform workflow on every save |
+
+---
+
+## Routing Structure
+
+```
+/ → redirect to /fr/agents (next.config.ts)
+
+/[locale]/                              → LocaleLayout (html/body, ThemeProvider, Toaster)
+  /sign-in                              → OAuth2 sign-in card
+  /(app)/                               → AppLayout (sidebar + auth guard + WizardStartProvider)
+    /agents                             → Agent list grid
+    /agents/new                         → Simple agent creation form
+    /agents/[agentId]                   → Agent detail/edit
+    /agents/[agentId]/chat              → New conversation with agent
+    /agents/[agentId]/chat/[convId]     → Existing conversation
+    /conversations                      → All conversations, date-grouped
+    /datasets                           → Dataset list + status badges
+    /specialists                        → Reusable subagent templates list
+    /mcps                               → MCP server CRUD
+
+API routes (no locale prefix):
+  POST   /api/chat                      → Streaming chat turn
+  POST   /api/chat/resume               → Mid-stream reconnect
+  GET/POST /api/agents                  → Agent list + create
+  GET/PATCH/DELETE /api/agents/:id      → Agent CRUD
+  POST   /api/agents/:id/subagents      → Add subagent to agent
+  GET/POST /api/datasets                → Dataset list + create
+  POST   /api/datasets/:id/entries      → File upload
+  POST   /api/datasets/:id/attach       → Attach dataset to agent
+  GET/POST/PUT/DELETE /api/mcps         → MCP server CRUD
+  GET    /api/models                    → AI model list from platform
+  DELETE /api/conversations/:id         → Delete conversation
+  /api/auth/[...all]                    → better-auth OAuth2 handler
+```
+
+i18n: French (`fr`) is the default locale with no URL prefix (`as-needed` strategy). English gets `/en/` prefix. All `<Link>` and `useRouter` are imported from `@/i18n/routing`, not `next/navigation`.
+
+---
+
+## UI / Component Architecture
+
+### Design System
+
+- **Component library**: shadcn/ui (Radix UI primitives + CVA for variants)
+- **Styling**: TailwindCSS v4 + `cn()` (tailwind-merge) for class composition
+- **Icons**: lucide-react
+- **Animation**: motion (framer-motion successor)
+- **Toasts**: sonner
+- **Markdown**: streamdown (streaming) + react-markdown + remark-gfm
+- **Theme**: `next-themes`, `defaultTheme="light"`, `enableSystem={false}`
+- **Primary color**: `--primary: hsl(218, 100%, 44%)` (Alien blue) in `app/globals.css`
+
+### State Management
+
+No global store. Three tiers:
+
+1. **Server state**: Next.js Server Components query Drizzle directly — Agent list, Conversations list, Specialists list.
+2. **Client-local**: `useState` + `useEffect` + `apiFetch()` for interactive pages — `datasets-view.tsx`, `mcps-view.tsx`, `new-agent-form.tsx`.
+3. **Streaming chat**: Vercel AI SDK `useChat` hook, backed by `POST /api/chat` SSE.
+4. **Wizard state**: Single `WizardState` object in `useState` inside `StartWizard`, passed as `state + setState` to each step. Accessible anywhere via `useWizardStart()` context.
+
+### Key UI Components for UX Work
+
+| File | What it renders |
+|---|---|
+| `app/globals.css` | All CSS variables (colors, spacing, theme) |
+| `components/app-sidebar.tsx` | Global navigation sidebar (desktop) + Sheet (mobile) |
+| `app/[locale]/(app)/layout.tsx` | Main app shell: sidebar + content area |
+| `app/[locale]/(app)/agents/page.tsx` | Agent cards grid |
+| `app/[locale]/(app)/conversations/page.tsx` | Conversation history, date-grouped |
+| `app/[locale]/(app)/datasets/datasets-view.tsx` | Dataset list with status badges |
+| `app/[locale]/(app)/mcps/mcps-view.tsx` | MCP server CRUD with Dialog |
+| `components/wizards/agents/start/index.tsx` | 6-step agent creation wizard (Dialog) |
+| `components/wizards/agents/start/templates.ts` | Preset agent + specialist templates |
+| `components/ui/wizard.tsx` | Generic multi-step Wizard component |
+| `components/ui/wizard-steps.tsx` | Step indicator visual |
+| `components/chat/` | Chat UI components (messages, input, subagent panels) |
+
+### Wizard (6-step agent creation)
+
+Rendered in a Dialog, opened via `useWizardStart()` → `openWizard()` from anywhere. Auto-opens on first visit (`localStorage` key `lds-chatbot:start-wizard-seen`).
+
+Steps: **Template → Identity → Specialist → MCP → Knowledge → Done**
+
+Each step uses the generic `Wizard` + `Step` components. Steps gate progression with `canProceed()` and call the platform API in `onBeforeNext()`. On cancel mid-wizard, cleanup fires `DELETE /api/agents/:id` to remove the orphaned workflow.
+
+### Role Gating
+
+`isOrgClient` is computed server-side in `(app)/layout.tsx` from `getUserOrgRole()` (calls `GET /users/me` on the platform). Navigation items with `clientVisible: false` are filtered in `app-sidebar.tsx`.
+
+- `org-client`: sees only Agents + Conversations; Chat button only on public agents; no create/edit
+- Full users: own agents with Chat, Settings, Publish, Delete; plus Specialists, Datasets, MCP management
+
+### Notable Patterns
+
+**`apiFetch()`** (`lib/api-fetch.ts`): All client-side API calls use this — it prepends `NEXT_PUBLIC_BASE_PATH` so the app works when mounted at a sub-path (e.g. `/agents/`). Never use `fetch()` directly from client components.
+
+**Dual-stream in `/api/chat`**: `ReadableStream.tee()` splits the AI SDK chunk stream — one copy to SSE response, one drained asynchronously by `persistAssistantMessage()`. Persistence failures don't interrupt the live stream.
+
+**Streaming resume**: `SidecarState` emits `data-streamProgress` chunks (transient) with `sequence_number`; the chat client stores these in `localStorage` as resume cursor. `POST /api/chat/resume` accepts `{ conversationId, responseId, startingAfter }`.
+
+**Wizard cleanup**: `StartWizard` registers a `useEffect` cleanup that fires `DELETE /api/agents/:agentId` when the component unmounts without completion, preventing orphaned platform workflows.
