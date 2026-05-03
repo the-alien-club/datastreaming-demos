@@ -9,7 +9,7 @@ import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { Bot, Plus } from "lucide-react"
 import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-context"
-import { AgentCard } from "@/components/cards/agent-card"
+import { AgentsGrid } from "@/components/grids/agents-grid"
 import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function AgentsPage() {
@@ -19,16 +19,16 @@ export default async function AgentsPage() {
   const orgRole = await getUserOrgRole(session.user.id)
   if (orgRole === "org-client") redirect("/agents/library")
 
-  const [ownAgents, t, tCommon] = await Promise.all([
+  const [ownAgents, t] = await Promise.all([
     db.query.agents.findMany({
       where: eq(agents.userId, session.user.id),
       orderBy: [desc(agents.createdAt)],
       with: { subagents: true },
     }),
     getTranslations("agents"),
-    getTranslations("common"),
   ])
-  const creatorNames = await getUserNamesByIds(ownAgents.map((a) => a.userId))
+  const creatorMap = await getUserNamesByIds(ownAgents.map((a) => a.userId))
+  const authorNames = Object.fromEntries(creatorMap.entries())
 
   return (
     <div className="p-4 sm:p-6">
@@ -59,16 +59,7 @@ export default async function AgentsPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ownAgents.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              authorName={creatorNames.get(agent.userId) ?? tCommon("unknownAuthor")}
-              editable
-            />
-          ))}
-        </div>
+        <AgentsGrid agents={ownAgents} authorNames={authorNames} editable />
       )}
     </div>
   )

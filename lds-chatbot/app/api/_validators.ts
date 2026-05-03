@@ -59,7 +59,9 @@ export const subagentConfigSchema = z.object({
 export const createAgentBodySchema = z.object({
   name: NAME,
   description: SHORT_TEXT.optional(),
-  systemPrompt: LONG_TEXT.optional().default(""),
+  // systemPrompt is required at creation per UX requirement: an assistant
+  // without a system prompt has no defined behaviour.
+  systemPrompt: z.string().trim().min(1, "systemPrompt is required").max(128_000),
   steps: z.array(stepSchema).default([]),
   model: z.string().trim().min(1).max(120).optional(),
   subagents: z.array(subagentConfigSchema).default([]),
@@ -157,6 +159,14 @@ export const specialistBodySchema = z.object({
 export const createDatasetBodySchema = z.object({
   name: NAME,
   description: SHORT_TEXT.optional(),
+})
+
+// PATCH /api/datasets/:id — partial update. Any subset of fields is valid;
+// unknown fields are ignored by the route handler.
+export const updateDatasetBodySchema = z.object({
+  name: NAME.optional(),
+  description: SHORT_TEXT.nullable().optional(),
+  isPublic: z.boolean().optional(),
 })
 
 export const datasetAttachBodySchema = z.object({

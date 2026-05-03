@@ -8,7 +8,7 @@ import { specialists, mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { Button } from "@/components/ui/button"
 import { BrainCircuit, Plus } from "lucide-react"
-import { SpecialistCard } from "@/components/cards/specialist-card"
+import { SpecialistsGrid } from "@/components/grids/specialists-grid"
 import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function SpecialistsPage() {
@@ -18,17 +18,17 @@ export default async function SpecialistsPage() {
   const orgRole = await getUserOrgRole(session.user.id)
   if (orgRole === "org-client") redirect("/agents")
 
-  const [ownSpecialists, mcpRows, t, tCommon] = await Promise.all([
+  const [ownSpecialists, mcpRows, t] = await Promise.all([
     db.query.specialists.findMany({
       where: eq(specialists.userId, session.user.id),
       orderBy: [desc(specialists.createdAt)],
     }),
     db.select({ id: mcps.id, name: mcps.name }).from(mcps).where(eq(mcps.userId, session.user.id)),
     getTranslations("specialists"),
-    getTranslations("common"),
   ])
-  const mcpNames = new Map(mcpRows.map((m) => [m.id, m.name]))
-  const creatorNames = await getUserNamesByIds(ownSpecialists.map((s) => s.userId))
+  const mcpNames = Object.fromEntries(mcpRows.map((m) => [m.id, m.name]))
+  const creatorMap = await getUserNamesByIds(ownSpecialists.map((s) => s.userId))
+  const authorNames = Object.fromEntries(creatorMap.entries())
 
   return (
     <div className="p-4 sm:p-6">
@@ -58,17 +58,12 @@ export default async function SpecialistsPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ownSpecialists.map((specialist) => (
-            <SpecialistCard
-              key={specialist.id}
-              specialist={specialist}
-              mcpNames={mcpNames}
-              authorName={creatorNames.get(specialist.userId) ?? tCommon("unknownAuthor")}
-              editable
-            />
-          ))}
-        </div>
+        <SpecialistsGrid
+          specialists={ownSpecialists}
+          mcpNames={mcpNames}
+          authorNames={authorNames}
+          editable
+        />
       )}
     </div>
   )

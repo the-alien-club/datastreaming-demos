@@ -4,7 +4,7 @@ import { db } from "@/lib/db"
 import { datasets, agentSubagents, agents } from "@/lib/db/schema"
 import { and, eq } from "drizzle-orm"
 import { ok, notFound, unauthorized } from "@/lib/api-response"
-import { parseBody, patchVisibilityBodySchema } from "../../_validators"
+import { parseBody, updateDatasetBodySchema } from "../../_validators"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -45,12 +45,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   })
   if (!existing) return notFound("Dataset not found")
 
-  const parsed = await parseBody(request, patchVisibilityBodySchema)
+  const parsed = await parseBody(request, updateDatasetBodySchema)
   if (parsed instanceof Response) return parsed
+
+  // Partial update — only apply fields the client actually sent.
+  const updates: Partial<typeof datasets.$inferInsert> = { updatedAt: new Date() }
+  if (parsed.name !== undefined) updates.name = parsed.name.trim()
+  if ("description" in parsed) updates.description = parsed.description ?? null
+  if (parsed.isPublic !== undefined) updates.isPublic = parsed.isPublic
 
   await db
     .update(datasets)
-    .set({ isPublic: parsed.isPublic, updatedAt: new Date() })
+    .set(updates)
     .where(and(eq(datasets.id, id), eq(datasets.userId, session.user.id)))
 
   const updated = await db.query.datasets.findFirst({

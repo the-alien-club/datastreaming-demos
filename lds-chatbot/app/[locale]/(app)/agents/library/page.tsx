@@ -6,22 +6,22 @@ import { db, getUserNamesByIds } from "@/lib/db"
 import { agents } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { Bot } from "lucide-react"
-import { AgentCard } from "@/components/cards/agent-card"
+import { AgentsGrid } from "@/components/grids/agents-grid"
 
 export default async function AgentLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const [publicAgents, t, tCommon] = await Promise.all([
+  const [publicAgents, t] = await Promise.all([
     db.query.agents.findMany({
       where: eq(agents.isPublic, true),
       orderBy: [desc(agents.createdAt)],
       with: { subagents: true },
     }),
     getTranslations("agents"),
-    getTranslations("common"),
   ])
-  const creatorNames = await getUserNamesByIds(publicAgents.map((a) => a.userId))
+  const creatorMap = await getUserNamesByIds(publicAgents.map((a) => a.userId))
+  const authorNames = Object.fromEntries(creatorMap.entries())
 
   return (
     <div className="p-4 sm:p-6">
@@ -36,15 +36,7 @@ export default async function AgentLibraryPage() {
           <p className="text-muted-foreground">{t("noPublicAgents")}</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {publicAgents.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              authorName={creatorNames.get(agent.userId) ?? tCommon("unknownAuthor")}
-            />
-          ))}
-        </div>
+        <AgentsGrid agents={publicAgents} authorNames={authorNames} />
       )}
     </div>
   )

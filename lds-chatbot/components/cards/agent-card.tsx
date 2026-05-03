@@ -1,5 +1,5 @@
 import { Link } from "@/i18n/routing"
-import { useTranslations } from "next-intl"
+import { useFormatter, useTranslations } from "next-intl"
 import {
   Card,
   CardContent,
@@ -47,11 +47,12 @@ export function AgentCard({
 }) {
   const t = useTranslations("agents")
   const tCommon = useTranslations("common")
+  const format = useFormatter()
   const steps = agent.steps
     ? (JSON.parse(agent.steps) as { name: string; prompt: string }[])
     : []
   const createdAt = agent.createdAt
-    ? new Date(agent.createdAt).toLocaleDateString()
+    ? format.dateTime(new Date(agent.createdAt), { dateStyle: "medium" })
     : "—"
 
   return (

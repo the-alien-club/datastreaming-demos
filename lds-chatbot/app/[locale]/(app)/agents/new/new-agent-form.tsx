@@ -55,6 +55,10 @@ export default function NewAgentPage() {
       toast.error(tCommon("nameRequired"))
       return
     }
+    if (!systemPrompt.trim()) {
+      toast.error(tCommon("systemPromptRequired"))
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -64,7 +68,7 @@ export default function NewAgentPage() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || undefined,
-          systemPrompt: systemPrompt.trim() || undefined,
+          systemPrompt: systemPrompt.trim(),
           model,
         }),
       })
@@ -118,13 +122,14 @@ export default function NewAgentPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="systemPrompt">{tCommon("systemPromptLabel")}</Label>
+          <Label htmlFor="systemPrompt">{tCommon("systemPromptLabel")} *</Label>
           <Textarea
             id="systemPrompt"
             placeholder={t("systemPromptPlaceholder")}
             className="min-h-32 resize-y"
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
+            required
           />
         </div>
 

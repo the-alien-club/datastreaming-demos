@@ -21,7 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Upload, Loader2, RefreshCw, Link2 } from "lucide-react"
+import { ArrowLeft, Upload, Loader2, RefreshCw, Link2, Pencil, Check, X } from "lucide-react"
+import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { timeAgo } from "@/lib/time"
@@ -114,6 +115,41 @@ export default function DatasetDetailPage({
   const [agents, setAgents] = useState<AgentRecord[]>([])
   const [selectedAgentId, setSelectedAgentId] = useState("")
   const [attaching, setAttaching] = useState(false)
+
+  const [renameDraft, setRenameDraft] = useState<string | null>(null)
+  const [savingName, setSavingName] = useState(false)
+
+  async function handleRename() {
+    if (renameDraft === null || !dataset) return
+    const next = renameDraft.trim()
+    if (!next) {
+      toast.error(tCommon("nameRequired"))
+      return
+    }
+    if (next === dataset.name) {
+      setRenameDraft(null)
+      return
+    }
+    setSavingName(true)
+    try {
+      const res = await apiFetch(`/api/datasets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: next }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`)
+      }
+      const updated = await res.json()
+      setDataset((prev) => (prev ? { ...prev, name: updated.name } : prev))
+      setRenameDraft(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("failedLoadDataset"))
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -268,7 +304,59 @@ export default function DatasetDetailPage({
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-2xl font-bold truncate">{dataset.name}</h1>
+            {renameDraft !== null ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleRename()
+                    } else if (e.key === "Escape") {
+                      e.preventDefault()
+                      setRenameDraft(null)
+                    }
+                  }}
+                  disabled={savingName}
+                  className="h-9 text-2xl font-bold w-72 max-w-full"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleRename}
+                  disabled={savingName}
+                  aria-label={tCommon("save")}
+                >
+                  {savingName ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setRenameDraft(null)}
+                  disabled={savingName}
+                  aria-label={tCommon("cancel")}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold truncate">{dataset.name}</h1>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setRenameDraft(dataset.name)}
+                  aria-label={tCommon("edit")}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
             <DatasetStatusBadge status={dataset.status} />
             {(dataset.attachedAgents ?? []).map((a) => (
               <Badge key={a.id} variant="outline" className="text-xs">{a.name}</Badge>

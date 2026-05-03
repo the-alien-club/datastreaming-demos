@@ -1,5 +1,5 @@
 import { Link } from "@/i18n/routing"
-import { useTranslations } from "next-intl"
+import { useFormatter, useTranslations } from "next-intl"
 import {
   Card,
   CardContent,
@@ -45,9 +45,10 @@ export function SpecialistCard({
 }) {
   const t = useTranslations("specialists")
   const tCommon = useTranslations("common")
+  const format = useFormatter()
   const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
   const createdAt = specialist.createdAt
-    ? new Date(specialist.createdAt).toLocaleDateString()
+    ? format.dateTime(new Date(specialist.createdAt), { dateStyle: "medium" })
     : "—"
 
   return (

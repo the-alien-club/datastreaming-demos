@@ -43,6 +43,11 @@ import type { PublicAIModel } from "@/lib/platform/client"
 import { providerLabelFromModel } from "@/lib/platform/client"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 import { DatasetRecord } from "../../datasets/datasets-view"
+import {
+  ConversationsListGrouped,
+  type ConversationRow,
+} from "@/components/conversations-list-grouped"
+import { ListToolbarCompact } from "@/components/list-toolbar-compact"
 
 type AIModel = PublicAIModel
 
@@ -55,7 +60,7 @@ interface McpConfig {
   id: string
   name: string
   description: string | null
-  category: string | null
+  categories: string[] | null
 }
 
 interface SubagentRecord {
@@ -115,6 +120,7 @@ export default function AgentEditorPage({
   const tCommon = useTranslations("common")
   const tDialog = useTranslations("specialistDialog")
   const tAgents = useTranslations("agents")
+  const tConversations = useTranslations("conversations")
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -146,6 +152,31 @@ export default function AgentEditorPage({
   const [attaching, setAttaching] = useState(false)
   const [datasets, setDatasets] = useState<DatasetRecord[]>([])
   const [selectedDatasetId, setSelectedDatasetId] = useState("")
+
+  // Search filters inside the subagent dialog (Library tab + MCP Tools list)
+  const [librarySearch, setLibrarySearch] = useState("")
+  const [mcpSearch, setMcpSearch] = useState("")
+
+  const [conversationRows, setConversationRows] = useState<ConversationRow[]>([])
+  const [loadingConversations, setLoadingConversations] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`/api/agents/${id}/conversations`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: ConversationRow[]) => {
+        if (!cancelled) setConversationRows(Array.isArray(rows) ? rows : [])
+      })
+      .catch(() => {
+        if (!cancelled) setConversationRows([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingConversations(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   useEffect(() => {
     Promise.all([
@@ -676,6 +707,21 @@ export default function AgentEditorPage({
             {t("deleteButton")}
           </Button>
         </div>
+
+        <Separator />
+
+        {/* Conversations history for this assistant */}
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold">{tConversations("title")}</h2>
+          {loadingConversations ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {tCommon("loading")}
+            </div>
+          ) : (
+            <ConversationsListGrouped rows={conversationRows} showAgentName={false} />
+          )}
+        </div>
       </div>
 
       {/* Subagent dialog */}
@@ -714,9 +760,25 @@ export default function AgentEditorPage({
                     {tDialog("createOne")}
                   </Button>
                 </div>
-              ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto py-1 pr-1">
-                  {librarySpecialists.map((s) => {
+              ) : (() => {
+                const ls = librarySearch.trim().toLowerCase()
+                const filteredLib = ls
+                  ? librarySpecialists.filter((s) =>
+                      s.name.toLowerCase().includes(ls),
+                    )
+                  : librarySpecialists
+                return (
+                <div className="space-y-2 py-1">
+                  <ListToolbarCompact
+                    query={librarySearch}
+                    onQueryChange={setLibrarySearch}
+                  />
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {filteredLib.length === 0 ? (
+                      <p className="py-6 text-center text-sm text-muted-foreground">
+                        {tCommon("noResults")}
+                      </p>
+                    ) : filteredLib.map((s) => {
                     const mcpIds: string[] = s.mcpIds ? JSON.parse(s.mcpIds) : []
                     return (
                       <button
@@ -747,8 +809,10 @@ export default function AgentEditorPage({
                       </button>
                     )
                   })}
+                  </div>
                 </div>
-              )}
+                )
+              })()}
               <DialogFooter className="mt-4">
                 <Button variant="outline" onClick={() => setSubagentDialogOpen(false)}>
                   {tCommon("cancel")}
@@ -826,15 +890,28 @@ export default function AgentEditorPage({
                   <Label>{tCommon("mcpToolsLabel")}</Label>
                   {mcpList.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2">{tCommon("noMcps")}</p>
-                  ) : (
-                    <div className="space-y-4 max-h-52 overflow-y-auto pr-1">
-                      {Array.from(new Set(mcpList.map((m) => m.category ?? "other"))).map((cat) => (
+                  ) : (() => {
+                    const ms = mcpSearch.trim().toLowerCase()
+                    const filteredMcps = ms
+                      ? mcpList.filter((m) => m.name.toLowerCase().includes(ms))
+                      : mcpList
+                    const primaryCat = (m: McpConfig) => m.categories?.[0] ?? "other"
+                    const cats = Array.from(new Set(filteredMcps.map(primaryCat)))
+                    return (
+                    <div className="space-y-2">
+                      <ListToolbarCompact query={mcpSearch} onQueryChange={setMcpSearch} />
+                      <div className="space-y-4 max-h-52 overflow-y-auto pr-1">
+                        {filteredMcps.length === 0 ? (
+                          <p className="py-4 text-center text-sm text-muted-foreground">
+                            {tCommon("noResults")}
+                          </p>
+                        ) : cats.map((cat) => (
                         <div key={cat}>
                           <p className="text-xs font-medium text-muted-foreground capitalize tracking-wide mb-1.5">
                             {cat}
                           </p>
                           <div className="space-y-1.5">
-                            {mcpList.filter((m) => (m.category ?? "other") === cat).map((mcp) => {
+                            {filteredMcps.filter((m) => primaryCat(m) === cat).map((mcp) => {
                               const checked = subagentForm.mcpIds.includes(mcp.id)
                               return (
                                 <label
@@ -859,8 +936,10 @@ export default function AgentEditorPage({
                           </div>
                         </div>
                       ))}
+                      </div>
                     </div>
-                  )}
+                    )
+                  })()}
                 </div>
               </div>
               <DialogFooter>

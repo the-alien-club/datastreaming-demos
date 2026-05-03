@@ -6,7 +6,8 @@ import { db } from "@/lib/db"
 import { mcps } from "@/lib/db/schema"
 import { desc, eq } from "drizzle-orm"
 import { Database } from "lucide-react"
-import { McpCard, type McpRecord } from "@/components/cards/mcp-card"
+import { type McpRecord } from "@/components/cards/mcp-card"
+import { McpsReadonlyGrid } from "@/components/grids/mcps-readonly-grid"
 
 export default async function McpLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -48,11 +49,7 @@ export default async function McpLibraryPage() {
           <p className="text-muted-foreground font-medium">{t("emptyDescription")}</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {records.map((mcp) => (
-            <McpCard key={mcp.id} mcp={mcp} />
-          ))}
-        </div>
+        <McpsReadonlyGrid mcps={records} />
       )}
     </div>
   )

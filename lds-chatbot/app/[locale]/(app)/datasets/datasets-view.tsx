@@ -1,13 +1,21 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/routing"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Database, Globe, Lock, Plus, Trash2, Eye, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { DatasetRow, type DatasetRowData } from "@/components/cards/dataset-row"
+import { ListToolbar } from "@/components/list-toolbar"
 
 export interface DatasetRecord extends DatasetRowData {
   clusterDatasetId: number | null
@@ -30,6 +38,10 @@ export default function DatasetsPage() {
       .catch(() => toast.error(t("failedLoad")))
       .finally(() => setLoading(false))
   }, [t])
+
+  // Filter state
+  const [query, setQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
 
   async function handleTogglePublic(dataset: DatasetRecord) {
     setPublishing(dataset.id)
@@ -67,6 +79,18 @@ export default function DatasetsPage() {
     }
   }
 
+  const ownDatasets = useMemo(() => datasets.filter((d) => d.isOwn), [datasets])
+  const normalisedQuery = query.trim().toLowerCase()
+  const filteredDatasets = useMemo(() => {
+    return ownDatasets.filter((d) => {
+      if (statusFilter !== "all" && (d.status ?? "pending") !== statusFilter) {
+        return false
+      }
+      if (!normalisedQuery) return true
+      return d.name.toLowerCase().includes(normalisedQuery)
+    })
+  }, [ownDatasets, normalisedQuery, statusFilter])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -74,8 +98,6 @@ export default function DatasetsPage() {
       </div>
     )
   }
-
-  const ownDatasets = datasets.filter((d) => d.isOwn)
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl">
@@ -104,8 +126,33 @@ export default function DatasetsPage() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {ownDatasets.map((dataset) => (
+        <>
+          <ListToolbar
+            query={query}
+            onQueryChange={setQuery}
+            resultCount={{ total: ownDatasets.length, shown: filteredDatasets.length }}
+            filters={
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{tCommon("filterAll")}</SelectItem>
+                  <SelectItem value="ready">ready</SelectItem>
+                  <SelectItem value="processing">processing</SelectItem>
+                  <SelectItem value="pending">pending</SelectItem>
+                  <SelectItem value="error">error</SelectItem>
+                </SelectContent>
+              </Select>
+            }
+          />
+          {filteredDatasets.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              {tCommon("noResults")}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {filteredDatasets.map((dataset) => (
             <DatasetRow
               key={dataset.id}
               dataset={dataset}
@@ -157,8 +204,10 @@ export default function DatasetsPage() {
                 </>
               }
             />
-          ))}
-        </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

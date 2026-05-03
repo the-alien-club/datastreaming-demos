@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -30,31 +30,8 @@ import { Database, Plus, Loader2, X, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { McpCard, type McpRecord } from "@/components/cards/mcp-card"
-
-const CATEGORY_OPTIONS = [
-  "Gestion des contrats",
-  "Droit international",
-  "Droit du numérique",
-  "Droit de la famille",
-  "Droit de l'urbanisme et immobilier",
-  "Generalites",
-  "Droit des affaires",
-  "Droit de la consommation",
-  "Droit des assurances",
-  "Droit public",
-  "Droit fiscal",
-  "Droit de l'environnement",
-  "Droit des sociétés",
-  "Contentieux",
-  "Propriété intellectuelle",
-  "Projets stratégiques",
-  "Droit social",
-  "Formation et Documentation",
-  "Conformité réglementaire",
-  "Droit de l'urbanisme",
-] as const
-
-const TYPE_OPTIONS = ["Logiciels tier", "Open Data", "Ontologies"] as const
+import { ListToolbar } from "@/components/list-toolbar"
+import { CATEGORY_OPTIONS, TYPE_OPTIONS } from "@/lib/mcp-options"
 
 const MAX_VISIBLE_CATEGORIES = 2
 
@@ -404,12 +381,18 @@ function McpDialog({
 
 export default function McpsPage() {
   const t = useTranslations("mcps")
+  const tCommon = useTranslations("common")
   const [mcps, setMcps] = useState<McpRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [publishing, setPublishing] = useState<string | null>(null)
   const [dialog, setDialog] = useState<null | { isNew: true } | McpRecord>(null)
+
+  // Filter state
+  const [query, setQuery] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [typeFilter, setTypeFilter] = useState<string>("all")
 
   useEffect(() => {
     apiFetch("/api/mcps")
@@ -481,6 +464,21 @@ export default function McpsPage() {
     })
   }
 
+  const ownMcps = useMemo(() => mcps.filter((m) => m.isOwn), [mcps])
+  const normalisedQuery = query.trim().toLowerCase()
+  const filteredOwnMcps = useMemo(() => {
+    return ownMcps.filter((m) => {
+      if (typeFilter !== "all" && (m.type ?? "") !== typeFilter) return false
+      if (selectedCategories.length > 0 && !selectedCategories.some((c) => m.categories.includes(c))) {
+        return false
+      }
+      if (!normalisedQuery) return true
+      // Name + provider only — descriptions cross-reference too much.
+      const haystack = `${m.name} ${m.provider ?? ""}`.toLowerCase()
+      return haystack.includes(normalisedQuery)
+    })
+  }, [ownMcps, normalisedQuery, typeFilter, selectedCategories])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -488,8 +486,6 @@ export default function McpsPage() {
       </div>
     )
   }
-
-  const ownMcps = mcps.filter((m) => m.isOwn)
 
   return (
     <div className="p-4 sm:p-6">
@@ -514,23 +510,76 @@ export default function McpsPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ownMcps.map((mcp) => (
-            <McpCard
-              key={mcp.id}
-              mcp={mcp}
-              onEdit={() => setDialog(mcp)}
-              onDelete={() => handleDelete(mcp.id, mcp.name)}
-              onToggleEnabled={() => handleToggle(mcp)}
-              onTogglePublic={() => handleTogglePublic(mcp)}
-              busy={{
-                delete: deleting === mcp.id,
-                enabled: toggling === mcp.id,
-                publish: publishing === mcp.id,
-              }}
-            />
-          ))}
-        </div>
+        <>
+          <ListToolbar
+            query={query}
+            onQueryChange={setQuery}
+            resultCount={{ total: ownMcps.length, shown: filteredOwnMcps.length }}
+            filters={
+              <>
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder={t("typeLabel")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("typeLabel")}: {tCommon("filterAll")}</SelectItem>
+                    {TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2">
+                      {t("categoriesLabel")}
+                      {selectedCategories.length > 0 && (
+                        <Badge variant="secondary" className="h-5 px-1.5">{selectedCategories.length}</Badge>
+                      )}
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto w-64">
+                    {CATEGORY_OPTIONS.map((cat) => (
+                      <DropdownMenuCheckboxItem
+                        key={cat}
+                        checked={selectedCategories.includes(cat)}
+                        onCheckedChange={(checked) =>
+                          setSelectedCategories((prev) =>
+                            checked === true ? [...prev, cat] : prev.filter((c) => c !== cat),
+                          )
+                        }
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        {cat}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            }
+          />
+          {filteredOwnMcps.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">{tCommon("noResults")}</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredOwnMcps.map((mcp) => (
+                <McpCard
+                  key={mcp.id}
+                  mcp={mcp}
+                  onEdit={() => setDialog(mcp)}
+                  onDelete={() => handleDelete(mcp.id, mcp.name)}
+                  onToggleEnabled={() => handleToggle(mcp)}
+                  onTogglePublic={() => handleTogglePublic(mcp)}
+                  busy={{
+                    delete: deleting === mcp.id,
+                    enabled: toggling === mcp.id,
+                    publish: publishing === mcp.id,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {dialog && (

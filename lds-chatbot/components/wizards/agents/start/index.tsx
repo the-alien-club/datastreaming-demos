@@ -57,6 +57,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
   }, [])
 
   const trimmedName = state.name.trim()
+  const trimmedPrompt = state.systemPrompt.trim()
   const trimmedSpecialistName = state.specialistName.trim()
 
   const template = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)
@@ -124,7 +125,7 @@ export function StartWizard({ onClose }: StartWizardProps) {
 
       <Step
         label={t("step2Label")}
-        canProceed={() => trimmedName.length >= 3}
+        canProceed={() => trimmedName.length >= 3 && trimmedPrompt.length > 0}
         onBeforeNext={async () => {
           if (state.agentId) return true
           const tpl = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)

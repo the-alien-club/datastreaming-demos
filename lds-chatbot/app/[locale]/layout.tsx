@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { NextIntlClientProvider } from "next-intl"
-import { getMessages } from "next-intl/server"
+import { getMessages, getTranslations } from "next-intl/server"
 import { ThemeProvider } from "next-themes"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -14,9 +14,17 @@ const inter = Inter({
   subsets: ["latin"],
 })
 
-export const metadata: Metadata = {
-  title: "LDS Chatbot",
-  description: "AI-powered research assistant for literature datasets",
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "meta" })
+  return {
+    title: t("title"),
+    description: t("description"),
+  }
 }
 
 export default async function LocaleLayout({

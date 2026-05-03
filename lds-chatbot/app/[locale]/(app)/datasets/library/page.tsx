@@ -6,7 +6,8 @@ import { db } from "@/lib/db"
 import { datasets, agentSubagents } from "@/lib/db/schema"
 import { desc, eq, sql } from "drizzle-orm"
 import { Database } from "lucide-react"
-import { DatasetRow, type DatasetRowData } from "@/components/cards/dataset-row"
+import { type DatasetRowData } from "@/components/cards/dataset-row"
+import { DatasetsReadonlyGrid } from "@/components/grids/datasets-readonly-grid"
 
 export default async function CorpusLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -54,11 +55,7 @@ export default async function CorpusLibraryPage() {
           <p className="text-muted-foreground font-medium">{t("emptyDescription")}</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {rows.map((dataset) => (
-            <DatasetRow key={dataset.id} dataset={dataset} />
-          ))}
-        </div>
+        <DatasetsReadonlyGrid datasets={rows} />
       )}
     </div>
   )

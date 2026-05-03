@@ -30,11 +30,12 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
   const tCommon = useTranslations("common")
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const trimmedName = state.name.trim()
+  const trimmedPrompt = state.systemPrompt.trim()
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="wizard-agent-name">{tCommon("nameLabel")}</Label>
+        <Label htmlFor="wizard-agent-name">{tCommon("nameLabel")} *</Label>
         <Input
           id="wizard-agent-name"
           value={state.name}
@@ -57,6 +58,19 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
         />
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="wizard-agent-system-prompt">{t("systemPromptLabel")} *</Label>
+        <Textarea
+          id="wizard-agent-system-prompt"
+          value={state.systemPrompt}
+          onChange={(e) => setState((prev) => ({ ...prev, systemPrompt: e.target.value }))}
+          className="min-h-32 resize-y text-xs"
+        />
+        {trimmedPrompt.length === 0 && (
+          <p className="text-xs text-destructive">{tCommon("systemPromptRequired")}</p>
+        )}
+      </div>
+
       <button
         type="button"
         onClick={() => setAdvancedOpen((v) => !v)}
@@ -68,16 +82,6 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
 
       {advancedOpen && (
         <div className="space-y-4 rounded-md border bg-muted/30 p-4">
-          <div className="space-y-2">
-            <Label htmlFor="wizard-agent-system-prompt">{t("systemPromptLabel")}</Label>
-            <Textarea
-              id="wizard-agent-system-prompt"
-              value={state.systemPrompt}
-              onChange={(e) => setState((prev) => ({ ...prev, systemPrompt: e.target.value }))}
-              className="min-h-32 resize-y text-xs"
-            />
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="wizard-agent-model">{t("modelLabel")}</Label>
             {models.length === 0 ? (
