@@ -64,15 +64,25 @@ export function StartWizard({ onClose }: StartWizardProps) {
   const knowledgeRequired = template?.knowledgeRequired ?? false
 
   const knowledgeCanProceed = (() => {
-    if (state.knowledgeMode === "skip") return !knowledgeRequired
-    if (state.knowledgeMode === "existing") return state.selectedExistingDatasetIds.length > 0
-    if (state.knowledgeMode === "upload") {
-      return (
-        state.uploadedDatasetIds.length > 0 ||
-        (state.uploadFiles.length > 0 && state.uploadDatasetName.trim().length > 0)
-      )
+    // Leaving both tabs empty is the effective "skip" — allowed unless the
+    // template flags knowledge as required.
+    const hasExisting = state.selectedExistingDatasetIds.length > 0
+    const hasUpload =
+      state.uploadedDatasetIds.length > 0 ||
+      (state.uploadFiles.length > 0 && state.uploadDatasetName.trim().length > 0)
+
+    if (knowledgeRequired) return hasExisting || hasUpload
+
+    // Optional: block only the half-filled upload state (files picked but
+    // no dataset name) which would 400 the upload endpoint.
+    if (
+      state.knowledgeMode === "upload" &&
+      state.uploadFiles.length > 0 &&
+      state.uploadDatasetName.trim().length === 0
+    ) {
+      return false
     }
-    return false
+    return true
   })()
 
   return (

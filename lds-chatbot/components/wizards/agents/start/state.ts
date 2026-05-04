@@ -1,6 +1,6 @@
 import { DEFAULT_AGENT_MODEL } from "./templates"
 
-export type KnowledgeMode = "skip" | "existing" | "upload"
+export type KnowledgeMode = "existing" | "upload"
 
 export interface WizardState {
   templateId: string | null
@@ -45,7 +45,7 @@ export function createInitialState(): WizardState {
     selectedMcpIds: [],
     specialistSubagentId: null,
 
-    knowledgeMode: "skip",
+    knowledgeMode: "existing",
     selectedExistingDatasetIds: [],
     uploadDatasetName: "",
     uploadFiles: [],

@@ -93,22 +93,9 @@ export function KnowledgeStepContent({
     <div className="space-y-4">
       <Tabs value={state.knowledgeMode} onValueChange={(v) => setMode(v as KnowledgeMode)}>
         <TabsList>
-          <TabsTrigger value="skip" disabled={knowledgeRequired}>
-            {t("knowledgeSkip")}
-          </TabsTrigger>
           <TabsTrigger value="existing">{t("knowledgeExisting")}</TabsTrigger>
           <TabsTrigger value="upload">{t("knowledgeUpload")}</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="skip">
-          <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
-            {knowledgeRequired ? (
-              <p>{t("knowledgeRequiredSwitch")}</p>
-            ) : (
-              <p>{t("knowledgeSkipHint")}</p>
-            )}
-          </div>
-        </TabsContent>
 
         <TabsContent value="existing">
           {loadingDatasets ? (
@@ -233,6 +220,10 @@ export function KnowledgeStepContent({
           </div>
         </TabsContent>
       </Tabs>
+
+      <p className="text-xs text-muted-foreground italic">
+        {knowledgeRequired ? t("knowledgeRequiredSwitch") : t("knowledgeSkipHint")}
+      </p>
     </div>
   )
 }
