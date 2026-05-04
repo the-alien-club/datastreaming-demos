@@ -19,14 +19,31 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { id } = await context.params
 
   const agent = await db.query.agents.findFirst({
-    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
+    where: (a, { eq }) => eq(a.id, id),
     with: { subagents: true },
   })
 
   if (!agent) {
-    // 404 (not 403) on missing-or-not-owned: don't disclose existence of
-    // other users' resources to a potential attacker probing for IDs.
+    // 404 (not 403) on missing: don't disclose existence of other users'
+    // resources to a potential attacker probing for IDs.
     return notFound("Agent not found")
+  }
+
+  const isOwner = agent.userId === session.user.id
+
+  // Non-owners can only read public agents, and only the chat-relevant
+  // fields (name, description, starter prompts, model). Internals like
+  // `systemPrompt`, subagent configs, and `workflowId` are owner-only.
+  if (!isOwner) {
+    if (!agent.isPublic) return notFound("Agent not found")
+    return ok({
+      id: agent.id,
+      name: agent.name,
+      description: agent.description,
+      model: agent.model,
+      isPublic: agent.isPublic,
+      starterPrompts: agent.starterPrompts ? JSON.parse(agent.starterPrompts) : [],
+    })
   }
 
   return ok({
