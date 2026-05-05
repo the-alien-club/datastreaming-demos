@@ -83,6 +83,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const name = body.name.trim()
   const description = "description" in body ? (body.description ?? null) : existing.description
   const author = "author" in body ? (body.author?.trim() || null) : existing.author
+  const createdAt =
+    body.createdAt ? new Date(body.createdAt) : existing.createdAt
   const systemPrompt = body.systemPrompt
   const steps = body.steps
   const model = body.model
@@ -134,6 +136,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       name,
       description,
       author,
+      createdAt,
       systemPrompt,
       steps: JSON.stringify(steps),
       starterPrompts: parsedStarterPrompts ? JSON.stringify(parsedStarterPrompts) : null,

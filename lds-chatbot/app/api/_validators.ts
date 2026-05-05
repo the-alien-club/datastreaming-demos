@@ -91,6 +91,9 @@ export const updateAgentBodySchema = z.object({
   name: NAME,
   description: SHORT_TEXT.nullable().optional(),
   author: z.string().trim().max(120).nullable().optional(),
+  // ISO date string (YYYY-MM-DD) sent from the date picker. The route
+  // handler converts it to a Date before writing to Postgres.
+  createdAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD").optional(),
   systemPrompt: LONG_TEXT,
   steps: z.array(stepSchema),
   starterPrompts: z.array(STARTER_PROMPT).optional(),

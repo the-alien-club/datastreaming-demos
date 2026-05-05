@@ -136,6 +136,7 @@ export default function AgentEditorPage({
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [author, setAuthor] = useState("")
+  const [createdAtDate, setCreatedAtDate] = useState("") // YYYY-MM-DD
   const [systemPrompt, setSystemPrompt] = useState("")
   const [model, setModel] = useState(DEFAULT_MODEL)
   const [steps, setSteps] = useState<Step[]>([])
@@ -193,6 +194,9 @@ export default function AgentEditorPage({
         setName(agentData.name)
         setDescription(agentData.description ?? "")
         setAuthor(agentData.author ?? "")
+        if (agentData.createdAt) {
+          setCreatedAtDate(new Date(agentData.createdAt).toISOString().slice(0, 10))
+        }
         setSystemPrompt(agentData.systemPrompt ?? "")
         setModel(agentData.model ?? DEFAULT_MODEL)
         setSteps(agentData.steps ? JSON.parse(agentData.steps) : [])
@@ -229,6 +233,7 @@ export default function AgentEditorPage({
           name: name.trim(),
           description: description.trim() || null,
           author: author.trim() || null,
+          createdAt: createdAtDate || undefined,
           systemPrompt: systemPrompt.trim(),
           steps,
           model,
@@ -477,15 +482,27 @@ export default function AgentEditorPage({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="author">{t("authorLabel")}</Label>
-          <Input
-            id="author"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder={t("authorPlaceholder")}
-          />
-          <p className="text-xs text-muted-foreground">{t("authorHint")}</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="author">{t("authorLabel")}</Label>
+            <Input
+              id="author"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder={t("authorPlaceholder")}
+            />
+            <p className="text-xs text-muted-foreground">{t("authorHint")}</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="createdAt">{t("createdAtLabel")}</Label>
+            <Input
+              id="createdAt"
+              type="date"
+              value={createdAtDate}
+              onChange={(e) => setCreatedAtDate(e.target.value)}
+              className="block"
+            />
+          </div>
         </div>
 
         <div className="space-y-2">
