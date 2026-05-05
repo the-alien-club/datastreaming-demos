@@ -74,6 +74,11 @@ async function platformFetch(
     ...options,
     headers: {
       "Content-Type": "application/json",
+      // Disable HTTP keep-alive so UNDICI never picks a stale pooled connection
+      // for state-mutating methods (PATCH, POST, DELETE). Without this, UNDICI
+      // retries on a fresh socket when the platform closes an idle connection
+      // mid-flight, causing every PATCH /workflows/:id to fire twice.
+      "connection": "close",
       ...authHeader,
       ...(options.headers as Record<string, string> | undefined),
     },
@@ -133,6 +138,7 @@ export async function deleteWorkflow(id: number, token: string): Promise<void> {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
+      "connection": "close",
       [PLATFORM_OAUTH_TOKEN_HEADER]: token,
     },
   })

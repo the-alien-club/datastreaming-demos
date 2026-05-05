@@ -39,7 +39,7 @@ function authHeader(token: string): Record<string, string> {
 
 async function platformGet<T>(path: string, token: string): Promise<T> {
   const res = await fetch(`${PLATFORM_API_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeader(token) },
+    headers: { "Content-Type": "application/json", "connection": "close", ...authHeader(token) },
   })
 
   if (!res.ok) throw new Error(`Platform GET ${path} → ${res.status}`)
@@ -52,7 +52,7 @@ async function platformGet<T>(path: string, token: string): Promise<T> {
 async function platformPost<T>(path: string, body: unknown, token: string): Promise<T> {
   const res = await fetch(`${PLATFORM_API_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeader(token) },
+    headers: { "Content-Type": "application/json", "connection": "close", ...authHeader(token) },
     body: JSON.stringify(body),
   })
 
