@@ -53,6 +53,9 @@ export const agents = pgTable("agents", {
   steps: text("steps"), // JSON array of {name, prompt} objects
   starterPrompts: text("starter_prompts"), // JSON array of strings — chip-style suggestions for empty conversations
   model: text("model").default("mistral-medium-3.5"),
+  // Optional display name shown on cards instead of the account username.
+  // Useful for branding (e.g. "LDS Legal Team" rather than a personal name).
+  author: text("author"),
   isPublic: boolean("is_public").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at", { withTimezone: false }).$defaultFn(() => new Date()),

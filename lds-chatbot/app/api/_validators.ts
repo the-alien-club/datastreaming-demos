@@ -62,6 +62,7 @@ export const createAgentBodySchema = z.object({
   // systemPrompt is required at creation per UX requirement: an assistant
   // without a system prompt has no defined behaviour.
   systemPrompt: z.string().trim().min(1, "systemPrompt is required").max(128_000),
+  author: z.string().trim().max(120).nullable().optional(),
   steps: z.array(stepSchema).default([]),
   model: z.string().trim().min(1).max(120).optional(),
   subagents: z.array(subagentConfigSchema).default([]),
@@ -89,6 +90,7 @@ export const createAgentBodySchema = z.object({
 export const updateAgentBodySchema = z.object({
   name: NAME,
   description: SHORT_TEXT.nullable().optional(),
+  author: z.string().trim().max(120).nullable().optional(),
   systemPrompt: LONG_TEXT,
   steps: z.array(stepSchema),
   starterPrompts: z.array(STARTER_PROMPT).optional(),

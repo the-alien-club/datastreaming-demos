@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
     name,
     description,
     systemPrompt,
+    author: body.author?.trim() || null,
     steps: JSON.stringify(steps),
     starterPrompts: starterPrompts ? JSON.stringify(starterPrompts) : null,
     model,

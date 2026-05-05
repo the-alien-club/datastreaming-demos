@@ -74,7 +74,7 @@
   "signIn": {
     "title": "Legal Data Space",
     "description": "Connectez-vous pour créer et discuter avec des assistants IA",
-    "button": "Se connecter avec Authentik"
+    "button": "Se connecter avec Alien Intelligence"
   },
   "agents": {
     "title": "Assistants",
@@ -105,6 +105,9 @@
     "descriptionPlaceholder": "Que fait cet assistant ?",
     "systemPromptPlaceholder": "Vous êtes un assistant de recherche utile…",
     "createButton": "Créer l'assistant",
+    "authorLabel": "Auteur",
+    "authorPlaceholder": "ex. Équipe juridique LDS",
+    "authorHint": "Affiché sur la carte à la place du nom du compte.",
     "saveButton": "Enregistrer",
     "deleteButton": "Supprimer l'assistant",
     "stepsTitle": "Étapes",

@@ -74,7 +74,7 @@
   "signIn": {
     "title": "Legal Data Space",
     "description": "Sign in to create and chat with AI assistants",
-    "button": "Sign in with Authentik"
+    "button": "Connect with Alien Intelligence"
   },
   "agents": {
     "title": "Assistants",
@@ -105,6 +105,9 @@
     "descriptionPlaceholder": "What does this assistant do?",
     "systemPromptPlaceholder": "You are a helpful research assistant…",
     "createButton": "Create Assistant",
+    "authorLabel": "Author",
+    "authorPlaceholder": "e.g. LDS Legal Team",
+    "authorHint": "Displayed on the card instead of the account name.",
     "saveButton": "Save changes",
     "deleteButton": "Delete assistant",
     "stepsTitle": "Steps",

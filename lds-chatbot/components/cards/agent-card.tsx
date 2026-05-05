@@ -25,6 +25,7 @@ export type AgentCardData = {
   name: string
   description: string | null
   model: string | null
+  author: string | null
   steps: string | null
   subagents: { id: string }[]
   isPublic: boolean
@@ -88,7 +89,7 @@ export function AgentCard({
       </CardContent>
       <CardFooter className="pt-2 gap-2 flex-wrap">
         <div className="flex w-full items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span className="text-wrap font-bold">{tCommon("createdBy", { name: authorName })}</span>
+          <span className="text-wrap font-bold">{tCommon("createdBy", { name: agent.author?.trim() || authorName })}</span>
           <span className="shrink-0">{t("created", { date: createdAt })}</span>
         </div>
         <div className="flex w-full justify-between gap-2">
