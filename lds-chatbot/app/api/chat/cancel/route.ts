@@ -7,7 +7,7 @@ import { badRequest, notFound, unauthorized } from "@/lib/api-response"
 
 export const dynamic = "force-dynamic"
 
-const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
+const PLATFORM_API_URL = (process.env.PLATFORM_API_URL ?? "").replace(/\/$/, "")
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: req.headers })

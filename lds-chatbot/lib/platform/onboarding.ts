@@ -13,7 +13,7 @@
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { PLATFORM_OAUTH_TOKEN_HEADER } from "@/lib/constants"
 
-const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
+const PLATFORM_API_URL = (process.env.PLATFORM_API_URL ?? "").replace(/\/$/, "")
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN
 const ORG_ID = process.env.ORG_ID
 

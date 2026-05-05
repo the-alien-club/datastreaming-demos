@@ -41,7 +41,7 @@ import {
 
 export const dynamic = "force-dynamic"
 
-const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
+const PLATFORM_API_URL = (process.env.PLATFORM_API_URL ?? "").replace(/\/$/, "")
 
 interface ChatRequestBody {
   messages?: Array<{

@@ -1,6 +1,8 @@
 import { PLATFORM_OAUTH_TOKEN_HEADER } from "@/lib/constants"
 
-const PLATFORM_API_URL = process.env.PLATFORM_API_URL!
+// Strip any accidental trailing slash so path concatenation never produces
+// a double-slash URL (e.g. https://api.example.com//users/me).
+const PLATFORM_API_URL = (process.env.PLATFORM_API_URL ?? "").replace(/\/$/, "")
 
 export interface PublicAIModel {
   id: number
