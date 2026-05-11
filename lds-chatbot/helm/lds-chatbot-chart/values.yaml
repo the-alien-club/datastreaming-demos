@@ -118,9 +118,9 @@ resources:
 config:
   # Pointed at alpha while the lds-chatbot platform-side code (workflow engine
   # changes for this demo) hasn't been promoted to prod yet.
-  platformApiUrl: https://api.alpha.alien.club
-  clusterId: "155"
-  datalclusterMcpUrl: https://mcp-legaldataspace-eu-1776167705541.mcp.alpha.alien.club/mcp
+  platformApiUrl: https://api.alien.club
+  clusterId: "32"
+  datalclusterMcpUrl: https://mcp-legaldataspace-eu-1776173212459.mcp.alien.club/mcp
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
   # better-auth's baseURL is the bare host — basePath is added at the
