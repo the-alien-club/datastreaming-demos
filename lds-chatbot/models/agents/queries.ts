@@ -3,8 +3,10 @@ import "server-only"
 import { prisma } from "@/lib/db"
 import {
   agentWithSubagents,
+  agentCardData,
   agentSubagentRow,
   type AgentWithSubagents,
+  type AgentCardData,
   type AgentSubagentRow,
 } from "./schema"
 
@@ -94,6 +96,19 @@ export async function getPublicAgents(userId: string): Promise<AgentWithSubagent
     where: { isPublic: true, NOT: { userId } },
     orderBy: { createdAt: "desc" },
     ...agentWithSubagents,
+  })
+}
+
+/**
+ * Returns ALL public agents (including the caller's own), newest first.
+ * Uses the card-data shape so only the fields needed to render a card are
+ * fetched. Called by the library page which shows every public agent.
+ */
+export async function getAllPublicAgents(): Promise<AgentCardData[]> {
+  return prisma.agent.findMany({
+    where: { isPublic: true },
+    orderBy: { createdAt: "desc" },
+    ...agentCardData,
   })
 }
 

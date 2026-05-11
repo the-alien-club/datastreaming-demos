@@ -41,7 +41,21 @@
   "common": {
     "cancel": "Cancel",
     "save": "Save changes",
-    "delete": "Delete",
+    "delete": {
+      "dialogTitle": "Delete {resource}?",
+      "dialogDescription": "This will permanently delete {name}. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "deleted": "{resource} deleted",
+      "failed": "Failed to delete {resource}",
+      "resources": {
+        "agent": "Assistant",
+        "specialist": "Specialized AI Agent",
+        "conversation": "Conversation",
+        "dataset": "Dataset",
+        "mcp": "MCP"
+      }
+    },
     "add": "Add",
     "next": "Next",
     "back": "Back",
@@ -76,21 +90,6 @@
     "addPhotosOrFiles": "Add photos or files",
     "takeScreenshot": "Take screenshot",
     "defaultPlaceholder": "What would you like to know?",
-    "delete": {
-      "dialogTitle": "Delete {resource}?",
-      "dialogDescription": "This will permanently delete {name}. This action cannot be undone.",
-      "cancel": "Cancel",
-      "confirm": "Delete",
-      "deleted": "{resource} deleted",
-      "failed": "Failed to delete {resource}",
-      "resources": {
-        "agent": "Assistant",
-        "specialist": "Specialized AI Agent",
-        "conversation": "Conversation",
-        "dataset": "Dataset",
-        "mcp": "MCP"
-      }
-    },
     "privacy": {
       "public": "Public",
       "private": "Private"
@@ -209,6 +208,11 @@
         "selectDataset": "Select a dataset",
         "attach": "Attach"
       }
+    },
+    "card": {
+      "fork": "Fork",
+      "forked": "{name} forked — you can now use and edit it.",
+      "forkFailed": "Failed to fork assistant"
     }
   },
   "specialists": {

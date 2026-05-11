@@ -10,6 +10,7 @@
 // Both env vars must be set for onboarding to run; if either is absent the
 // functions short-circuit so the chatbot can be run in standalone mode.
 
+import { cache } from "react"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { PLATFORM_OAUTH_TOKEN_HEADER } from "@/lib/constants"
 
@@ -98,8 +99,11 @@ async function switchUserOrg(orgId: string, userToken: string): Promise<void> {
  * or the user has no role assignment for that org.
  *
  * Never throws — callers should default to full-access when null is returned.
+ *
+ * Wrapped with React.cache so multiple server components in the same render
+ * tree (e.g. layout + page) share a single platform API call per request.
  */
-export async function getUserOrgRole(userId: string): Promise<string | null> {
+export const getUserOrgRole = cache(async (userId: string): Promise<string | null> => {
   if (!ADMIN_TOKEN || !ORG_ID) return null
   try {
     const userToken = await resolveAccessToken(userId)
@@ -110,7 +114,7 @@ export async function getUserOrgRole(userId: string): Promise<string | null> {
   } catch {
     return null
   }
-}
+})
 
 /**
  * Ensure the user is provisioned in the chatbot's org and has it selected

@@ -1,6 +1,6 @@
 import { withAuth } from "@/app/api/_middleware"
 import { ok, notFound } from "@/lib/api-response"
-import { type ForkAgentResponse } from "../../_validators"
+import { type ForkAgentResponse } from "../../../_validators"
 import { AgentPolicy } from "@/models/agents/policy"
 import { getAgentById } from "@/models/agents/queries"
 import { forkAgent } from "@/models/agents/service"

@@ -13,11 +13,13 @@ export function LayoutAgentsGrid({
   agents,
   authorNames,
   editable = false,
+  forkable = false,
 }: {
   agents: AgentCardData[]
   /** Map of userId -> display name; missing entries fall back to "Unknown". */
   authorNames: Record<string, string>
   editable?: boolean
+  forkable?: boolean
 }) {
   const tCommon = useTranslations("common")
   const [query, setQuery] = useState("")
@@ -48,6 +50,7 @@ export function LayoutAgentsGrid({
               agent={agent}
               authorName={authorNames[agent.userId] ?? tCommon("unknownAuthor")}
               editable={editable}
+              forkable={forkable}
             />
           ))}
         </div>

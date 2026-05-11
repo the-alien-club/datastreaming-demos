@@ -14,24 +14,11 @@ import { Bot, MessageSquare, Settings } from "lucide-react"
 import { PrivacyBadge } from "@/components/privacy-badge"
 import { PublishCardAction } from "@/components/publish-card-action"
 import { DeleteCardAction } from "@/components/delete-card-action"
+import { CardAgentForkAction } from "@/components/cards/agents/fork-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import type { AgentCardData } from "@/models/agents/schema"
 
-/**
- * Minimal data shape needed to render an agent card. Both the "Mes agents"
- * and "Bibliothèque d'agents" pages produce this from `db.query.agents`.
- */
-export type AgentCardData = {
-  id: string
-  name: string
-  description: string | null
-  model: string | null
-  author: string | null
-  steps: string | null
-  subagents: { id: string }[]
-  isPublic: boolean
-  userId: string
-  createdAt: Date | null
-}
+export type { AgentCardData }
 
 /**
  * Single source of truth for agent card UI. `editable=true` adds owner
@@ -41,10 +28,12 @@ export function CardAgent({
   agent,
   authorName,
   editable = false,
+  forkable = false,
 }: {
   agent: AgentCardData
   authorName: string
   editable?: boolean
+  forkable?: boolean
 }) {
   const t = useTranslations("agents")
   const tCommon = useTranslations("common")
@@ -119,6 +108,7 @@ export function CardAgent({
               />
             </>
           )}
+          {forkable && <CardAgentForkAction agentId={agent.id} />}
         </div>
       </CardFooter>
     </Card>

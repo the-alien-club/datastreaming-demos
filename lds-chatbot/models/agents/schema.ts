@@ -35,6 +35,25 @@ export const agentRow = {
 } satisfies Prisma.AgentDefaultArgs
 export type AgentRow = Prisma.AgentGetPayload<typeof agentRow>
 
+// Minimal shape for card / grid views — only the fields the UI needs to render
+// a card. Using `select` keeps the contract explicit: new columns added to the
+// schema are NOT included until you opt in here.
+export const agentCardData = {
+  select: {
+    id: true,
+    name: true,
+    description: true,
+    model: true,
+    author: true,
+    steps: true,
+    isPublic: true,
+    userId: true,
+    createdAt: true,
+    subagents: { select: { id: true } },
+  },
+} satisfies Prisma.AgentDefaultArgs
+export type AgentCardData = Prisma.AgentGetPayload<typeof agentCardData>
+
 // Plain subagent row without relations. Used by service operations that need a
 // single subagent after insertion.
 export const agentSubagentRow = {

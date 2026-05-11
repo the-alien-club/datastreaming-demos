@@ -439,8 +439,8 @@ export async function forkAgent(
     subagents: source.subagents.map((sa) => ({
       name: sa.name,
       systemPrompt: sa.systemPrompt,
-      model: sa.model,
-      mcpIds: JSON.parse(sa.mcpIds) as string[],
+      model: sa.model ?? DEFAULT_MODEL_SLUG,
+      mcpIds: sa.mcpIds ? (JSON.parse(sa.mcpIds) as string[]) : [],
       datasetId: null,
     })),
   }

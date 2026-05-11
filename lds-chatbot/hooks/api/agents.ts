@@ -19,6 +19,7 @@ import {
 import type {
   createAgentBodySchema,
   updateAgentBodySchema,
+  ForkAgentResponse,
 } from "@/app/api/_validators"
 import type { z } from "zod"
 import { apiFetch } from "@/lib/api-fetch"
@@ -128,6 +129,18 @@ export function useDeleteAgent(): UseMutationResult<void, Error, string> {
   return useMutation({
     mutationFn: (id: string) =>
       fetchJson<void>(`/api/agents/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.all })
+    },
+  })
+}
+
+/** Fork a public agent into the caller's workspace. Invalidates the agent list on success. */
+export function useForkAgent(): UseMutationResult<ForkAgentResponse, Error, string> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchJson<ForkAgentResponse>(`/api/agents/${id}/fork`, { method: "POST" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: agentKeys.all })
     },

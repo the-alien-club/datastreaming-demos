@@ -41,7 +41,21 @@
   "common": {
     "cancel": "Annuler",
     "save": "Enregistrer",
-    "delete": "Supprimer",
+    "delete": {
+      "dialogTitle": "Supprimer {resource} ?",
+      "dialogDescription": "Ceci supprimera définitivement {name}. Cette action est irréversible.",
+      "cancel": "Annuler",
+      "confirm": "Supprimer",
+      "deleted": "{resource} supprimé",
+      "failed": "Impossible de supprimer {resource}",
+      "resources": {
+        "agent": "Assistant",
+        "specialist": "Agent IA spécialisé",
+        "conversation": "Conversation",
+        "dataset": "Jeu de données",
+        "mcp": "MCP"
+      }
+    },
     "add": "Ajouter",
     "next": "Suivant",
     "back": "Retour",
@@ -76,21 +90,6 @@
     "addPhotosOrFiles": "Ajouter des photos ou des fichiers",
     "takeScreenshot": "Prendre une capture d'écran",
     "defaultPlaceholder": "Que souhaitez-vous savoir ?",
-    "delete": {
-      "dialogTitle": "Supprimer {resource} ?",
-      "dialogDescription": "Ceci supprimera définitivement {name}. Cette action est irréversible.",
-      "cancel": "Annuler",
-      "confirm": "Supprimer",
-      "deleted": "{resource} supprimé",
-      "failed": "Impossible de supprimer {resource}",
-      "resources": {
-        "agent": "Assistant",
-        "specialist": "Agent IA spécialisé",
-        "conversation": "Conversation",
-        "dataset": "Jeu de données",
-        "mcp": "MCP"
-      }
-    },
     "privacy": {
       "public": "Public",
       "private": "Privé"
@@ -209,6 +208,11 @@
         "selectDataset": "Sélectionner un jeu de données",
         "attach": "Associer"
       }
+    },
+    "card": {
+      "fork": "Dupliquer",
+      "forked": "{name} dupliqué — vous pouvez maintenant l’utiliser et le modifier.",
+      "forkFailed": "Impossible de dupliquer l’assistant"
     }
   },
   "specialists": {
