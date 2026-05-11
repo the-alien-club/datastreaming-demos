@@ -32,6 +32,9 @@ ENV AUTHENTIK_CLIENT_SECRET=build-time-placeholder
 ENV PLATFORM_API_URL=http://localhost:3333
 ENV CLUSTER_ID=77
 
+# Generate Prisma client before building Next.js — lib/generated is gitignored
+# so it doesn't exist in the COPY . . layer and must be produced here.
+RUN npx prisma generate
 RUN npm run build
 
 # Stage 3: Production runtime
@@ -53,8 +56,11 @@ COPY --from=builder --chown=node:node /app/public ./public
 
 # Prisma schema + migrations (needed by `prisma migrate deploy` at startup).
 COPY --from=builder --chown=node:node /app/prisma ./prisma
-# Generated Prisma client (produced by `prisma generate` during `npm run build`).
-COPY --from=builder --chown=node:node /app/lib/generated ./lib/generated
+# Prisma v7 config file — required by all prisma CLI commands at runtime.
+COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
+# Full lib/ source — needed by migrate-auth.ts (imports lib/auth, lib/db, etc.)
+# lib/generated is inside lib/ so this covers the Prisma client too.
+COPY --from=builder --chown=node:node /app/lib ./lib
 
 # Scripts the entrypoint actually runs — keep dev-only debug
 # utilities (debug-sse.mjs, seed-mcps.mjs) out of the runtime image.
