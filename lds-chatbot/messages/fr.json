@@ -215,7 +215,8 @@
       "libraryTitle": "Bibliothèque d'assistants IA",
       "librarySubtitle": "Assistants publics disponibles pour tous les membres.",
       "noPublicAgents": "Aucun assistant disponible pour le moment."
-    }
+    },
+    "chat": "Discuter"
   },
   "specialists": {
     "title": "Agents IA spécialisés",

@@ -43,6 +43,7 @@ type FormSpecialistEditProps = {
   models: PublicAIModel[]
   availableMcps: McpOption[]
   onSubmit: (data: FormSpecialistEditData) => Promise<void>
+  hideSubmit?: boolean
 }
 
 export function FormSpecialistEdit({
@@ -50,6 +51,7 @@ export function FormSpecialistEdit({
   models,
   availableMcps,
   onSubmit,
+  hideSubmit = false,
 }: FormSpecialistEditProps) {
   const t = useTranslations("specialists.form")
   const tCommon = useTranslations("common")
@@ -72,7 +74,7 @@ export function FormSpecialistEdit({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5">
+      <form id="specialist-edit-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-5">
         <FormField
           control={form.control}
           name="name"
@@ -211,12 +213,14 @@ export function FormSpecialistEdit({
           )}
         />
 
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting && (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          )}
-          {t("saveButton")}
-        </Button>
+        {!hideSubmit && (
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting && (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            )}
+            {t("saveButton")}
+          </Button>
+        )}
       </form>
     </Form>
   )

@@ -50,12 +50,17 @@ type FormAgentEditProps = {
   }
   models: PublicAIModel[]
   onSubmit: (data: FormAgentEditData) => Promise<void>
+  /** When true the built-in submit button is not rendered.
+   *  Use this when the form is embedded in a page that renders
+   *  its own Save button below additional non-form sections. */
+  hideSubmit?: boolean
 }
 
 export function FormAgentEdit({
   initialValues,
   models,
   onSubmit,
+  hideSubmit = false,
 }: FormAgentEditProps) {
   const t = useTranslations("agents.form")
   const tCommon = useTranslations("common")
@@ -84,7 +89,7 @@ export function FormAgentEdit({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form id="agent-edit-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="name"
@@ -306,12 +311,14 @@ export function FormAgentEdit({
           </div>
         </div>
 
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting && (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          )}
-          {t("saveButton")}
-        </Button>
+        {!hideSubmit && (
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting && (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            )}
+            {t("saveButton")}
+          </Button>
+        )}
       </form>
     </Form>
   )

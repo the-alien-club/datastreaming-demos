@@ -128,12 +128,14 @@ export function AgentDetailClient({
     }))
   )
 
+  const [saving, setSaving] = useState(false)
   const [subagentDialogOpen, setSubagentDialogOpen] = useState(false)
   const [attachOpen, setAttachOpen] = useState(false)
 
   const [conversationRows] = useState<ConversationRow[]>(initialConversationRows)
 
   async function handleSave(data: FormAgentEditData) {
+    setSaving(true)
     const response = await apiFetch(`/api/agents/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -161,6 +163,7 @@ export function AgentDetailClient({
     }
     setAgent((prev) => ({ ...prev, name: data.name.trim() }))
     toast.success(t("agentSaved"))
+    setSaving(false)
   }
 
   async function handleDelete() {
@@ -216,10 +219,12 @@ export function AgentDetailClient({
             steps: initialSteps,
           }}
           models={initialModels}
+          hideSubmit
           onSubmit={async (data) => {
             try {
               await handleSave(data)
             } catch (err) {
+              setSaving(false)
               toast.error(err instanceof Error ? err.message : t("failedSave"))
               throw err
             }
@@ -293,10 +298,15 @@ export function AgentDetailClient({
           </div>
         </div>
 
-        <Separator />
-
-        {/* Delete */}
-        <div>
+        <div className="flex items-center gap-3">
+          <Button
+            type="submit"
+            form="agent-edit-form"
+            disabled={saving}
+          >
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {t("saveButton")}
+          </Button>
           <Button
             variant="destructive"
             onClick={handleDelete}

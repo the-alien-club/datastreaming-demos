@@ -20,6 +20,7 @@ import { apiFetch } from "@/lib/api-fetch"
 interface AgentRecord {
   id: string
   name: string
+  isOwn: boolean
 }
 
 interface DialogDatasetAttachAgentProps {
@@ -54,7 +55,7 @@ export function DialogDatasetAttachAgent({
         const res = await apiFetch("/api/agents")
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
-        setAgents(Array.isArray(data) ? data : [])
+        setAgents(Array.isArray(data) ? data.filter((a: AgentRecord) => a.isOwn) : [])
       } catch {
         toast.error(t("failedLoadAgents"))
       }

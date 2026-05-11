@@ -43,10 +43,12 @@ export function SpecialistDetailClient({
   const tSpec = useTranslations("specialists")
   const router = useRouter()
 
+  const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [specialistName, setSpecialistName] = useState(initialSpecialist.name)
 
   async function handleSave(data: FormSpecialistEditData) {
+    setSaving(true)
     const response = await apiFetch(`/api/specialists/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -64,6 +66,7 @@ export function SpecialistDetailClient({
     }
     setSpecialistName(data.name.trim())
     toast.success(tSpec("saved"))
+    setSaving(false)
   }
 
   async function handleDelete() {
@@ -106,24 +109,36 @@ export function SpecialistDetailClient({
           }}
           models={initialModels}
           availableMcps={initialMcpList}
+          hideSubmit
           onSubmit={async (data) => {
             try {
               await handleSave(data)
             } catch (err) {
+              setSaving(false)
               toast.error(err instanceof Error ? err.message : tSpec("failedSave"))
               throw err
             }
           }}
         />
 
-        <Button
-          variant="destructive"
-          onClick={handleDelete}
-          disabled={deleting}
-        >
-          {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          {t("deleteButton")}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            type="submit"
+            form="specialist-edit-form"
+            disabled={saving}
+          >
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {t("saveButton")}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={deleting}
+          >
+            {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {t("deleteButton")}
+          </Button>
+        </div>
       </div>
     </div>
   )

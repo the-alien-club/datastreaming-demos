@@ -215,7 +215,8 @@
       "libraryTitle": "AI Assistant Library",
       "librarySubtitle": "Public assistants available to all members.",
       "noPublicAgents": "No assistants are available yet."
-    }
+    },
+    "chat": "Chat"
   },
   "specialists": {
     "title": "Specialized AI Agents",
