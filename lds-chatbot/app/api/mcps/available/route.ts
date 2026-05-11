@@ -1,64 +1,9 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { mcps } from "@/lib/db/schema"
-import { and, desc, eq, ne } from "drizzle-orm"
-import { ok, unauthorized } from "@/lib/api-response"
+import { withAuth } from "@/app/api/_middleware"
+import { ok } from "@/lib/api-response"
+import { type AvailableMcpsResponse } from "../../_validators"
+import { getAvailableMcps } from "@/models/mcps/service"
 
-export interface AvailableMcp {
-  id: string
-  name: string
-  description: string | null
-  source: "builtin" | "user"
-}
-
-// MCPs that are bootstrapped via `scripts/seed-mcps.mjs`. The chatbot UI
-// surfaces these under a curated "Legal" section; everything else (whether
-// seeded or user-created) shows up under "User MCPs". The split is purely
-// presentational — both source rows live in the same `mcps` table.
-//
-// Seeded ids follow the `<slug>:<userId>` shape (one built-in per user) — we
-// match by slug prefix so any user of the system gets the curated list.
-const BUILTIN_MCP_SLUGS = new Set(["legifrance", "convention-collective"])
-
-function builtinSlug(id: string): string | null {
-  const colon = id.indexOf(":")
-  if (colon < 0) return null
-  const slug = id.slice(0, colon)
-  return BUILTIN_MCP_SLUGS.has(slug) ? slug : null
-}
-
-export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const [ownRows, publicRows] = await Promise.all([
-    db.select().from(mcps)
-      .where(and(eq(mcps.enabled, true), eq(mcps.userId, session.user.id)))
-      .orderBy(desc(mcps.createdAt)),
-    db.select().from(mcps)
-      .where(and(eq(mcps.enabled, true), eq(mcps.isPublic, true), ne(mcps.userId, session.user.id)))
-      .orderBy(desc(mcps.createdAt)),
-  ])
-
-  const toAvailable = (r: typeof ownRows[number]): AvailableMcp => ({
-    id: r.id,
-    name: r.name,
-    description: r.description ?? null,
-    source: builtinSlug(r.id) !== null ? "builtin" : "user",
-  })
-
-  const all: AvailableMcp[] = [
-    ...ownRows.map(toAvailable),
-    ...publicRows.map(toAvailable),
-  ]
-
-  // All seeded built-ins are legal MCPs (the slug allow-list is the source of
-  // truth). The previous implementation also filtered by `category === 'legal'`
-  // which was redundant — and broke after the schema migration to multi-category.
-  const legal = all.filter((m) => m.source === "builtin")
-  const otherBuiltin: AvailableMcp[] = []
-  const userMcps = all.filter((m) => m.source === "user")
-
-  return ok({ legal, otherBuiltin, userMcps })
-}
+export const GET = withAuth(async (_req, user) => {
+  const available = await getAvailableMcps(user.id)
+  return ok<AvailableMcpsResponse>(available)
+})

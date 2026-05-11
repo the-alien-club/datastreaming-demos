@@ -31,7 +31,7 @@ interface McpStepContentProps {
 }
 
 export function McpStepContent({ state, setState }: McpStepContentProps) {
-  const t = useTranslations("wizard")
+  const t = useTranslations("wizard.steps.mcp")
   const [available, setAvailable] = useState<AvailableMcpsResponse>({
     legal: [],
     otherBuiltin: [],
@@ -74,7 +74,7 @@ export function McpStepContent({ state, setState }: McpStepContentProps) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [setState])
 
   function toggleMcp(id: string) {
     setState((prev) => {

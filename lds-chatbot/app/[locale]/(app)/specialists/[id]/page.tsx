@@ -1,288 +1,57 @@
-"use client"
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+import { redirect, notFound } from "next/navigation"
+import { resolveAccessToken } from "@/lib/auth-helpers"
+import { getAiModels } from "@/lib/platform/client"
+import { getSpecialist } from "@/models/specialists/queries"
+import { getMcps } from "@/models/mcps/queries"
+import { SpecialistDetailClient, type SpecialistRecord } from "./client"
 
-import { useState, useEffect, use } from "react"
-import { useTranslations } from "next-intl"
-import { useRouter, Link } from "@/i18n/routing"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { ArrowLeft, Loader2 } from "lucide-react"
-import { toast } from "sonner"
-import { apiFetch } from "@/lib/api-fetch"
-
-import type { PublicAIModel } from "@/lib/platform/client"
-import { providerLabelFromModel } from "@/lib/platform/client"
-import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
-
-type AIModel = PublicAIModel
-
-interface SpecialistRecord {
-  id: string
-  name: string
-  description: string | null
-  systemPrompt: string
-  model: string | null
-  mcpIds: string | null
-}
-
-interface McpConfig {
-  id: string
-  name: string
-  description: string | null
-  category: string | null
-}
-
-const DEFAULT_MODEL = DEFAULT_MODEL_SLUG
-
-export default function SpecialistEditorPage({
+export default async function SpecialistDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
-  const { id } = use(params)
-  const t = useTranslations("specialistForm")
-  const tCommon = useTranslations("common")
-  const tSpec = useTranslations("specialists")
-  const router = useRouter()
+  const { id } = await params
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [specialist, setSpecialist] = useState<SpecialistRecord | null>(null)
-  const [models, setModels] = useState<AIModel[]>([])
-  const [mcpList, setMcpList] = useState<McpConfig[]>([])
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session) redirect("/sign-in")
 
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [systemPrompt, setSystemPrompt] = useState("")
-  const [model, setModel] = useState(DEFAULT_MODEL)
-  const [mcpIds, setMcpIds] = useState<string[]>([])
+  const specialist = await getSpecialist(id, session.user.id)
+  if (!specialist) notFound()
 
-  useEffect(() => {
-    Promise.all([
-      apiFetch(`/api/specialists/${id}`).then((r) => r.json()),
-      apiFetch("/api/models").then((r) => r.json()).catch(() => []),
-      apiFetch("/api/mcps").then((r) => r.json()).catch(() => []),
-    ])
-      .then(([data, modelsData, mcpsData]: [SpecialistRecord, AIModel[], McpConfig[]]) => {
-        setSpecialist(data)
-        setName(data.name)
-        setDescription(data.description ?? "")
-        setSystemPrompt(data.systemPrompt)
-        setModel(data.model ?? DEFAULT_MODEL)
-        setMcpIds(data.mcpIds ? JSON.parse(data.mcpIds) : [])
-        setModels(Array.isArray(modelsData) ? modelsData : [])
-        setMcpList(Array.isArray(mcpsData) ? mcpsData : [])
-      })
-      .catch(() => toast.error(tSpec("failedLoad")))
-      .finally(() => setLoading(false))
-  }, [id, tSpec])
+  const [models, mcpRows] = await Promise.all([
+    resolveAccessToken(session.user.id)
+      .then((token) => getAiModels(token))
+      .catch(() => []),
+    getMcps(session.user.id).catch(() => []),
+  ])
 
-  function toggleMcp(mcpId: string) {
-    setMcpIds((prev) =>
-      prev.includes(mcpId) ? prev.filter((m) => m !== mcpId) : [...prev, mcpId]
-    )
+  const initialSpecialist: SpecialistRecord = {
+    id: specialist.id,
+    name: specialist.name,
+    description: specialist.description ?? null,
+    systemPrompt: specialist.systemPrompt,
+    model: specialist.model ?? null,
+    mcpIds: specialist.mcpIds ?? null,
   }
 
-  async function handleSave() {
-    if (!name.trim()) {
-      toast.error(tCommon("nameRequired"))
-      return
-    }
-    if (!systemPrompt.trim()) {
-      toast.error(tCommon("systemPromptRequired"))
-      return
-    }
-    setSaving(true)
-    try {
-      const response = await apiFetch(`/api/specialists/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-          systemPrompt: systemPrompt.trim(),
-          model,
-          mcpIds,
-        }),
-      })
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: "Unknown error" }))
-        throw new Error(err.error ?? `HTTP ${response.status}`)
-      }
-      toast.success(tSpec("saved"))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : tSpec("failedSave"))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirm(tSpec("confirmDelete"))) return
-    setDeleting(true)
-    try {
-      const response = await apiFetch(`/api/specialists/${id}`, { method: "DELETE" })
-      if (!response.ok && response.status !== 204) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-      toast.success(tSpec("deleted"))
-      router.push("/specialists")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : tSpec("failedDelete"))
-      setDeleting(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (!specialist) {
-    return (
-      <div className="p-6">
-        <p className="text-muted-foreground">{tSpec("notFound")}</p>
-        <Button asChild variant="link" className="mt-2 p-0">
-          <Link href="/specialists">{tSpec("backToSpecialists")}</Link>
-        </Button>
-      </div>
-    )
-  }
+  const initialMcpList = mcpRows
+    .filter((m) => m.isOwn)
+    .map((m) => ({
+      id: m.id,
+      name: m.name,
+      description: m.description ?? null,
+      category: Array.isArray(m.categories) && m.categories.length > 0
+        ? (m.categories as string[])[0]
+        : null,
+    }))
 
   return (
-    <div className="p-6 max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/specialists">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold flex-1 truncate">{specialist.name}</h1>
-      </div>
-
-      <div className="space-y-5">
-        <div className="space-y-2">
-          <Label htmlFor="name">{tCommon("nameLabel")} *</Label>
-          <Input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("specialistNamePlaceholder")}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="description">
-            {tCommon("descriptionLabel")}{" "}
-            <span className="text-muted-foreground text-xs font-normal">
-              {t("descriptionHint")}
-            </span>
-          </Label>
-          <Input
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={t("descriptionPlaceholder")}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="systemPrompt">{tCommon("systemPromptLabel")} *</Label>
-          <Textarea
-            id="systemPrompt"
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="min-h-32 resize-y"
-            placeholder={t("systemPromptPlaceholder")}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="model">{tCommon("modelLabel")}</Label>
-          {models.length === 0 ? (
-            <Input
-              id="model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={DEFAULT_MODEL_SLUG}
-            />
-          ) : (
-            <Select value={model} onValueChange={setModel}>
-              <SelectTrigger id="model">
-                <SelectValue placeholder={tCommon("selectModel")} />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.id} value={m.slug}>
-                    <span>{m.name}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{providerLabelFromModel(m)}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label>{tCommon("mcpToolsLabel")}</Label>
-          {mcpList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {tSpec("noMcps")}{" "}
-              <Link href="/mcps" className="underline">{tCommon("addOne")}</Link>{" "}
-              {tSpec("enableTools")}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {mcpList.map((mcp) => (
-                <label
-                  key={mcp.id}
-                  className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-muted/40 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-primary"
-                    checked={mcpIds.includes(mcp.id)}
-                    onChange={() => toggleMcp(mcp.id)}
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{mcp.name}</p>
-                    {mcp.description && (
-                      <p className="text-xs text-muted-foreground">{mcp.description}</p>
-                    )}
-                  </div>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-3 pt-2">
-          <Button onClick={handleSave} disabled={saving || deleting}>
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {t("saveButton")}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={saving || deleting}
-          >
-            {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {t("deleteButton")}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <SpecialistDetailClient
+      initialSpecialist={initialSpecialist}
+      initialModels={models}
+      initialMcpList={initialMcpList}
+    />
   )
 }

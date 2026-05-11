@@ -2,24 +2,22 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { getTranslations } from "next-intl/server"
-import { db, getUserNamesByIds } from "@/lib/db"
-import { specialists, mcps } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { getUserNamesByIds, prisma } from "@/lib/db"
 import { BrainCircuit } from "lucide-react"
-import { SpecialistsGrid } from "@/components/grids/specialists-grid"
+import { LayoutSpecialistsGrid } from "@/components/layouts/specialists/grid"
 
 export default async function SpecialistsLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
   const [publicSpecialists, mcpRows, t] = await Promise.all([
-    db.query.specialists.findMany({
-      where: eq(specialists.isPublic, true),
-      orderBy: [desc(specialists.createdAt)],
+    prisma.specialist.findMany({
+      where: { isPublic: true },
+      orderBy: { createdAt: "desc" },
     }),
     // Names for any MCP referenced by these specialists, regardless of owner —
     // public specialists may reference public MCPs the viewer doesn't own.
-    db.select({ id: mcps.id, name: mcps.name }).from(mcps),
+    prisma.mcp.findMany({ select: { id: true, name: true } }),
     getTranslations("specialists"),
   ])
   const mcpNames = Object.fromEntries(mcpRows.map((m) => [m.id, m.name]))
@@ -39,7 +37,7 @@ export default async function SpecialistsLibraryPage() {
           <p className="text-muted-foreground">{t("emptyDescription")}</p>
         </div>
       ) : (
-        <SpecialistsGrid
+        <LayoutSpecialistsGrid
           specialists={publicSpecialists}
           mcpNames={mcpNames}
           authorNames={authorNames}

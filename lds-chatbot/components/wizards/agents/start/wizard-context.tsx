@@ -1,15 +1,7 @@
 "use client"
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { useTranslations } from "next-intl"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { StartWizard } from "./index"
+import { DialogAgentWizard } from "@/components/dialogs/agents/wizard"
 
 interface WizardStartContextValue {
   open: boolean
@@ -23,7 +15,6 @@ const SEEN_STORAGE_KEY = "lds-chatbot:start-wizard-seen"
 
 export function WizardStartProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const t = useTranslations("wizard")
 
   const openWizard = useCallback(() => setOpen(true), [])
   const closeWizard = useCallback(() => setOpen(false), [])
@@ -31,19 +22,7 @@ export function WizardStartProvider({ children }: { children: React.ReactNode })
   return (
     <WizardStartContext.Provider value={{ open, openWizard, closeWizard }}>
       {children}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent
-          className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-y-auto"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
-          <DialogHeader className="sr-only">
-            <DialogTitle>{t("dialogTitle")}</DialogTitle>
-            <DialogDescription>{t("dialogDescription")}</DialogDescription>
-          </DialogHeader>
-          {open && <StartWizard onClose={closeWizard} />}
-        </DialogContent>
-      </Dialog>
+      <DialogAgentWizard open={open} onOpenChange={setOpen} onClose={closeWizard} />
     </WizardStartContext.Provider>
   )
 }

@@ -1,42 +1,24 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { agents, agentSubagents } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
-import { deleteWorkflow, updateWorkflow } from "@/lib/platform/client"
-import { buildAgentWorkflow, type SubagentConfig } from "@/lib/platform/workflows"
-import { resolveAccessToken } from "@/lib/auth-helpers"
-import { loadEnabledMcpConfigs } from "@/lib/mcps"
-import { ok, notFound, unauthorized, unprocessable } from "@/lib/api-response"
-import { parseBody, updateAgentBodySchema, patchVisibilityBodySchema } from "../../_validators"
+import { withAuth } from "@/app/api/_middleware"
+import { ok, notFound, err } from "@/lib/api-response"
+import { parseBody, updateAgentBodySchema, patchVisibilityBodySchema, type AgentResponse, type AgentPublicResponse } from "../../_validators"
+import { AgentPolicy } from "@/models/agents/policy"
+import { getAgentById } from "@/models/agents/queries"
+import { updateAgent, deleteAgent, patchAgentVisibility, AgentWorkflowNotFoundError } from "@/models/agents/service"
 
-type RouteContext = { params: Promise<{ id: string }> }
+export const GET = withAuth(async (_req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const agent = await getAgentById(id)
+  if (!agent) return notFound()
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
+  await bouncer.with(AgentPolicy).authorize("view", agent)
 
-  const { id } = await context.params
-
-  const agent = await db.query.agents.findFirst({
-    where: (a, { eq }) => eq(a.id, id),
-    with: { subagents: true },
-  })
-
-  if (!agent) {
-    // 404 (not 403) on missing: don't disclose existence of other users'
-    // resources to a potential attacker probing for IDs.
-    return notFound("Agent not found")
-  }
-
-  const isOwner = agent.userId === session.user.id
-
-  // Non-owners can only read public agents, and only the chat-relevant
-  // fields (name, description, starter prompts, model). Internals like
-  // `systemPrompt`, subagent configs, and `workflowId` are owner-only.
-  if (!isOwner) {
-    if (!agent.isPublic) return notFound("Agent not found")
-    return ok({
+  // Shape selector only — not an auth check.
+  // Ownership enforcement is already done by AgentPolicy.view() above.
+  // This branch picks the response shape: owners get the full record,
+  // others get the public subset. If ownership rules ever change,
+  // update AgentPolicy — this comparison must stay in sync.
+  if (agent.userId !== user.id) {
+    return ok<AgentPublicResponse>({
       id: agent.id,
       name: agent.name,
       description: agent.description,
@@ -46,183 +28,60 @@ export async function GET(request: NextRequest, context: RouteContext) {
     })
   }
 
-  return ok({
+  return ok<AgentResponse>({
     ...agent,
     starterPrompts: agent.starterPrompts ? JSON.parse(agent.starterPrompts) : [],
   })
-}
+})
 
-// Track datasetId alongside the workflow-graph SubagentConfig so we can
-// preserve corpus attachments on round-trip writes (the graph builder
-// doesn't need datasetId — but the persistence layer does).
-type SubagentConfigWithDataset = SubagentConfig & { datasetId: string | null }
-
-export async function PUT(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-
-  const existing = await db.query.agents.findFirst({
-    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
-    with: { subagents: true },
-  })
-
-  if (!existing) return notFound("Agent not found")
-
-  // PUT is full-replace. The validator enforces that name, model,
-  // systemPrompt, steps, and subagents are all present and well-shaped;
-  // a stringified array (`steps: "[]"`) or a missing `subagents` field
-  // is rejected at parse time with 400 + zod issues. No defensive
-  // coercion in this handler — that masked client bugs and silently
-  // wiped subagents on incomplete payloads.
-  const parsed = await parseBody(request, updateAgentBodySchema)
+export const PUT = withAuth(async (req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const parsed = await parseBody(req, updateAgentBodySchema)
   if (parsed instanceof Response) return parsed
-  const body = parsed
 
-  const name = body.name.trim()
-  const description = "description" in body ? (body.description ?? null) : existing.description
-  const author = "author" in body ? (body.author?.trim() || null) : existing.author
-  const createdAt =
-    body.createdAt ? new Date(body.createdAt) : existing.createdAt
-  const systemPrompt = body.systemPrompt
-  const steps = body.steps
-  const model = body.model
-  // `starterPrompts` is the one optional field — the edit form doesn't
-  // always include it, and the create flow seeds them separately. If
-  // omitted, preserve existing; if provided, replace (filtering blanks).
-  const parsedStarterPrompts: string[] | null =
-    body.starterPrompts !== undefined
-      ? (() => {
-          const cleaned = body.starterPrompts.filter((p) => p.trim() !== "")
-          return cleaned.length > 0 ? cleaned : null
-        })()
-      : existing.starterPrompts
-        ? (JSON.parse(existing.starterPrompts) as string[])
-        : null
+  const agent = await getAgentById(id)
+  if (!agent) return notFound()
 
-  const subagentConfigs: SubagentConfigWithDataset[] = body.subagents.map((sa) => ({
-    name: sa.name,
-    description: sa.description ?? "",
-    systemPrompt: sa.systemPrompt,
-    model: sa.model,
-    mcpIds: sa.mcpIds,
-    datasetId: sa.datasetId ?? null,
-  }))
+  await bouncer.with(AgentPolicy).authorize("edit", agent)
 
-  // Rebuild workflow graph from the full-replace payload.
-  const mcpConfigs = await loadEnabledMcpConfigs(session.user.id)
-  const { nodes, edges, subagentNodeIds } = buildAgentWorkflow({
-    name,
-    systemPrompt,
-    steps,
-    model,
-    subagents: subagentConfigs,
-  }, mcpConfigs)
-
-  const token = await resolveAccessToken(session.user.id)
-
-  // Patch workflow on platform.
-  if (!existing.workflowId) {
-    return unprocessable("Agent has no linked workflow")
-  }
-  await updateWorkflow(existing.workflowId, { nodes, edges, name: `LDS Agent: ${name}` }, token)
-
-  const now = new Date()
-
-  await db
-    .update(agents)
-    .set({
-      name,
-      description,
-      author,
-      createdAt,
-      systemPrompt,
-      steps: JSON.stringify(steps),
-      starterPrompts: parsedStarterPrompts ? JSON.stringify(parsedStarterPrompts) : null,
-      model,
-      updatedAt: now,
+  try {
+    const updated = await updateAgent(id, user.id, parsed)
+    return ok<AgentResponse>({
+      ...updated,
+      starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [],
     })
-    .where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
-
-  // Replace subagents wholesale: delete-then-insert with datasetId preserved.
-  await db.delete(agentSubagents).where(eq(agentSubagents.agentId, id))
-  if (subagentConfigs.length > 0) {
-    await db.insert(agentSubagents).values(
-      subagentConfigs.map((sa, i) => ({
-        id: crypto.randomUUID(),
-        agentId: id,
-        name: sa.name,
-        systemPrompt: sa.systemPrompt,
-        model: sa.model,
-        mcpIds: JSON.stringify(sa.mcpIds),
-        datasetId: sa.datasetId,
-        nodeId: subagentNodeIds[i] ?? null,
-        createdAt: now,
-      })),
-    )
+  } catch (e) {
+    if (e instanceof AgentWorkflowNotFoundError) return err(e.message, 409)
+    throw e
   }
+})
 
-  const updated = await db.query.agents.findFirst({
-    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
-    with: { subagents: true },
-  })
+export const PATCH = withAuth(async (req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const parsed = await parseBody(req, patchVisibilityBodySchema)
+  if (parsed instanceof Response) return parsed
 
-  if (!updated) {
-    return Response.json({ error: { message: "Agent not found after update" } }, { status: 500 })
-  }
+  const agent = await getAgentById(id)
+  if (!agent) return notFound()
 
-  return ok({
+  await bouncer.with(AgentPolicy).authorize("publish", agent)
+
+  const updated = await patchAgentVisibility(id, user.id, parsed.isPublic)
+
+  return ok<AgentResponse>({
     ...updated,
     starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [],
   })
-}
+})
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
+export const DELETE = withAuth(async (_req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const agent = await getAgentById(id)
+  if (!agent) return notFound()
 
-  const { id } = await context.params
-  const existing = await db.query.agents.findFirst({
-    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
-  })
-  if (!existing) return notFound("Agent not found")
+  await bouncer.with(AgentPolicy).authorize("delete", agent)
 
-  const parsed = await parseBody(request, patchVisibilityBodySchema)
-  if (parsed instanceof Response) return parsed
-
-  await db
-    .update(agents)
-    .set({ isPublic: parsed.isPublic, updatedAt: new Date() })
-    .where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
-
-  const updated = await db.query.agents.findFirst({
-    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
-    with: { subagents: true },
-  })
-  if (!updated) return notFound("Agent not found")
-  return ok({ ...updated, starterPrompts: updated.starterPrompts ? JSON.parse(updated.starterPrompts) : [] })
-}
-
-export async function DELETE(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-
-  const existing = await db.query.agents.findFirst({
-    where: (a, { eq, and }) => and(eq(a.id, id), eq(a.userId, session.user.id)),
-  })
-
-  if (!existing) return notFound("Agent not found")
-
-  if (existing.workflowId) {
-    const token = await resolveAccessToken(session.user.id)
-    await deleteWorkflow(existing.workflowId, token)
-  }
-
-  // Cascade delete handled by FK constraint (subagents, conversations).
-  await db.delete(agents).where(and(eq(agents.id, id), eq(agents.userId, session.user.id)))
+  await deleteAgent(id, user.id)
 
   return new Response(null, { status: 204 })
-}
+})

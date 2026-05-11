@@ -43,21 +43,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends postgresql-clie
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
-ENV DB_MIGRATIONS_DIR=/app/lib/db/migrations
 
-# Standalone tracing can miss runtime deps (pg, drizzle-orm, tsx used by migrate-auth.ts);
+# Standalone tracing can miss runtime deps (pg, tsx used by migrate-auth.ts);
 # copy full node_modules first, then the standalone build layered on top wins for Next.js internals.
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 
-# Migration assets used by the entrypoint.
-COPY --from=builder --chown=node:node /app/lib/db/migrations ./lib/db/migrations
-COPY --from=builder --chown=node:node /app/lib ./lib
-# Only the scripts the entrypoint actually runs — keep dev-only debug
+# Prisma schema + migrations (needed by `prisma migrate deploy` at startup).
+COPY --from=builder --chown=node:node /app/prisma ./prisma
+# Generated Prisma client (produced by `prisma generate` during `npm run build`).
+COPY --from=builder --chown=node:node /app/lib/generated ./lib/generated
+
+# Scripts the entrypoint actually runs — keep dev-only debug
 # utilities (debug-sse.mjs, seed-mcps.mjs) out of the runtime image.
-COPY --from=builder --chown=node:node /app/scripts/migrate-db.mjs ./scripts/migrate-db.mjs
 COPY --from=builder --chown=node:node /app/scripts/migrate-auth.ts ./scripts/migrate-auth.ts
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /app/package.json ./package.json

@@ -1,52 +1,25 @@
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { conversations } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
-import { ok, notFound, unauthorized } from "@/lib/api-response"
+import { withAuth } from "@/app/api/_middleware"
+import { ok, notFound } from "@/lib/api-response"
+import { ConversationPolicy } from "@/models/conversations/policy"
+import { getConversationById } from "@/models/conversations/queries"
+import { deleteConversation } from "@/models/conversations/service"
+import type { ConversationDetailResponse } from "../../_validators"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await params
-
-  const conversation = await db.query.conversations.findFirst({
-    where: (c, { eq, and }) => and(eq(c.id, id), eq(c.userId, session.user.id)),
-    with: {
-      messages: {
-        orderBy: (m, { asc }) => [asc(m.createdAt)],
-      },
-    },
-  })
-
+export const GET = withAuth(async (_req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const conversation = await getConversationById(id)
   if (!conversation) return notFound()
+  await bouncer.with(ConversationPolicy).authorize("view", conversation)
+  return ok<ConversationDetailResponse>(conversation)
+})
 
-  return ok(conversation)
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await params
-
-  const existing = await db.query.conversations.findFirst({
-    where: (c, { eq, and }) => and(eq(c.id, id), eq(c.userId, session.user.id)),
-  })
-  if (!existing) return notFound()
-
-  // Messages cascade-delete via FK constraint.
-  await db
-    .delete(conversations)
-    .where(and(eq(conversations.id, id), eq(conversations.userId, session.user.id)))
-
+export const DELETE = withAuth(async (_req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const conversation = await getConversationById(id)
+  if (!conversation) return notFound()
+  await bouncer.with(ConversationPolicy).authorize("delete", conversation)
+  await deleteConversation(id, user.id)
   return new Response(null, { status: 204 })
-}
+})

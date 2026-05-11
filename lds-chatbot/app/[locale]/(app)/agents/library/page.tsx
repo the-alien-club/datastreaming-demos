@@ -2,21 +2,20 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { getTranslations } from "next-intl/server"
-import { db, getUserNamesByIds } from "@/lib/db"
-import { agents } from "@/lib/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { prisma, getUserNamesByIds } from "@/lib/db"
 import { Bot } from "lucide-react"
-import { AgentsGrid } from "@/components/grids/agents-grid"
+import { Card, CardContent } from "@/components/ui/card"
+import { LayoutAgentsGrid } from "@/components/layouts/agents/grid"
 
 export default async function AgentLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
   const [publicAgents, t] = await Promise.all([
-    db.query.agents.findMany({
-      where: eq(agents.isPublic, true),
-      orderBy: [desc(agents.createdAt)],
-      with: { subagents: true },
+    prisma.agent.findMany({
+      where: { isPublic: true },
+      orderBy: { createdAt: "desc" },
+      include: { subagents: true },
     }),
     getTranslations("agents"),
   ])
@@ -31,12 +30,14 @@ export default async function AgentLibraryPage() {
       </div>
 
       {publicAgents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <Bot className="h-12 w-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">{t("noPublicAgents")}</p>
-        </div>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+            <Bot className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">{t("noPublicAgents")}</p>
+          </CardContent>
+        </Card>
       ) : (
-        <AgentsGrid agents={publicAgents} authorNames={authorNames} />
+        <LayoutAgentsGrid agents={publicAgents} authorNames={authorNames} />
       )}
     </div>
   )

@@ -1,10 +1,8 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect, notFound } from "next/navigation"
-import { db } from "@/lib/db"
-import { agents, conversations } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
-import { ExistingChatClient } from "./existing-chat-client"
+import { prisma } from "@/lib/db"
+import { ConversationClient } from "./client"
 
 interface ExistingChatPageProps {
   params: Promise<{ id: string; conversationId: string }>
@@ -17,18 +15,16 @@ export default async function ExistingChatPage({ params }: ExistingChatPageProps
   const { id: agentId, conversationId } = await params
 
   // Load agent (scoped to caller).
-  const agent = await db.query.agents.findFirst({
-    where: and(eq(agents.id, agentId)),
+  const agent = await prisma.agent.findFirst({
+    where: { id: agentId },
   })
   if (!agent) notFound()
 
   // Load conversation with messages (scoped to caller).
-  const conversation = await db.query.conversations.findFirst({
-    where: and(eq(conversations.id, conversationId), eq(conversations.userId, session.user.id)),
-    with: {
-      messages: {
-        orderBy: (m, { asc }) => [asc(m.createdAt)],
-      },
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, userId: session.user.id },
+    include: {
+      messages: { orderBy: { createdAt: "asc" } },
     },
   })
 
@@ -57,7 +53,7 @@ export default async function ExistingChatPage({ params }: ExistingChatPageProps
   })
 
   return (
-    <ExistingChatClient
+    <ConversationClient
       agentId={agentId}
       agentName={agent.name}
       conversationId={conversationId}

@@ -8,7 +8,7 @@
 // touch `db`/`auth` so they can be unit-tested in isolation.
 
 import type { UIDataTypes, UIMessage, UIMessagePart, UITools } from "ai"
-import type { StoredMessagePart } from "@/lib/db/schema"
+import type { StoredMessagePart } from "@/models/conversations/schema"
 
 /**
  * Concatenate every text part's text in order. Used as the fallback

@@ -1,47 +1,25 @@
-import { eq } from "drizzle-orm"
-import { auth } from "@/lib/auth"
-import { resolveAccessToken } from "@/lib/auth-helpers"
-import { db } from "@/lib/db"
-import { agents } from "@/lib/db/schema"
-import { badRequest, notFound, unauthorized } from "@/lib/api-response"
+import { withAuth } from "@/app/api/_middleware"
+import { notFound, ok } from "@/lib/api-response"
+import { parseBody, cancelBodySchema, type CancelResponse } from "../../_validators"
+import { AgentPolicy } from "@/models/agents/policy"
+import { getAgentById } from "@/models/agents/queries"
+import { cancelAgentResponse } from "@/models/agents/service"
 
 export const dynamic = "force-dynamic"
 
-const PLATFORM_API_URL = (process.env.PLATFORM_API_URL ?? "").replace(/\/$/, "")
+export const POST = withAuth(async (req, user, bouncer) => {
+  const parsed = await parseBody(req, cancelBodySchema)
+  if (parsed instanceof Response) return parsed
+  const { agentId, responseId } = parsed
 
-export async function POST(req: Request) {
-  const session = await auth.api.getSession({ headers: req.headers })
-  if (!session) return unauthorized()
-
-  const token = await resolveAccessToken(session.user.id)
-  if (!token) return unauthorized()
-
-  const body = (await req.json()) as { agentId?: string; responseId?: string }
-  const { agentId, responseId } = body
-
-  if (!agentId || !responseId) return badRequest("agentId and responseId are required")
-
-  const agent = await db.query.agents.findFirst({
-    where: eq(agents.id, agentId),
-  })
-
+  const agent = await getAgentById(agentId)
   if (!agent) return notFound()
 
-  const platformUrl = `${PLATFORM_API_URL}/agent/${agent.workflowId}/responses/${responseId}/cancel`
+  // Authorization: only the agent owner may cancel its running responses.
+  // Without this check any authenticated user who knows an agentId and
+  // responseId can terminate another user's in-flight workflow.
+  await bouncer.with(AgentPolicy).authorize("edit", agent)
 
-  const response = await fetch(platformUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      authorization: `Bearer ${token}`,
-    },
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "")
-    return Response.json({ cancelled: false, error: text }, { status: response.status })
-  }
-
-  const data = await response.json()
-  return Response.json(data)
-}
+  const result = await cancelAgentResponse(agent, responseId, user.id)
+  return ok<CancelResponse>(result)
+})

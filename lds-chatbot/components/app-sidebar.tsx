@@ -1,16 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
+import Image from "next/image"
 import { useTranslations } from "next-intl"
 import { Link, usePathname } from "@/i18n/routing"
 import {
   Bot,
   MessageSquare,
   Database,
-  LogOut,
   BrainCircuit,
   Sparkles,
-  Menu,
   ChevronDown,
   ChevronRight,
   Book,
@@ -23,20 +22,10 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { useWizardStart } from "@/components/wizards/agents/start/wizard-context"
 import { LocaleSwitcher } from "@/components/locale-switcher"
+import { AlertDialogSignOut } from "@/components/alerts/auth/sign-out"
+import { SheetMobileNav } from "@/components/sheets/navigation/mobile"
 
 interface AppSidebarProps {
   user: {
@@ -127,7 +116,9 @@ function SidebarContent({
     ? allNavigation.filter((item) => item.clientVisible)
     : allNavigation
 
-  const getInitialExpanded = () => {
+  // Derive which nav group should be expanded from the current pathname.
+  // This is pure derivation — no effect or setState needed.
+  const pathnameExpanded = useMemo<string | null>(() => {
     for (const item of navigation) {
       if (
         item.subItems &&
@@ -137,23 +128,23 @@ function SidebarContent({
       }
     }
     return null
+  }, [navigation, pathname])
+
+  // `manualToggle` records an explicit user collapse/expand relative to the
+  // current pathname. It stores `[triggeredForPathname, overrideValue]` so
+  // that navigating to a new route clears the override automatically.
+  const [manualToggle, setManualToggle] = useState<[string | null, string | null] | null>(null)
+
+  // If the user toggled while on the same pathname-derived group, honour their
+  // choice; otherwise fall back to the pathname-derived value.
+  const expandedItem =
+    manualToggle !== null && manualToggle[0] === pathnameExpanded
+      ? manualToggle[1]
+      : pathnameExpanded
+
+  const setExpandedItem = (value: string | null) => {
+    setManualToggle([pathnameExpanded, value])
   }
-
-  const [expandedItem, setExpandedItem] = useState<string | null>(
-    getInitialExpanded
-  )
-
-  useEffect(() => {
-    if (pathname === "/agents" || pathname.startsWith("/agents/")) {
-      setExpandedItem("/agents")
-    } else if (pathname === "/datasets" || pathname.startsWith("/datasets/")) {
-      setExpandedItem("/datasets")
-    } else if (pathname === "/mcps" || pathname.startsWith("/mcps/")) {
-      setExpandedItem("/mcps")
-    } else if (pathname === "/specialists" || pathname.startsWith("/specialists/")) {
-      setExpandedItem("/specialists")
-    }
-  }, [pathname])
 
   const handleSignOut = async () => {
     await authClient.signOut()
@@ -165,13 +156,17 @@ function SidebarContent({
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-4">
         <Link href="/agents" className="flex flex-col gap-0.5" onClick={onNavigate}>
-          <img
+          <Image
             src="https://www.legaldataspace.eu/images/LOGO-LDS-BLACK.svg"
             alt="Legal DataSpace"
-            className="h-7 w-auto"
+            width={160}
+            height={28}
+            className="h-7"
+            style={{ width: "auto" }}
+            unoptimized
           />
           <span className="text-[10px] italic text-muted-foreground leading-none">
-            powered by Alien Intelligence
+            {t("poweredBy")}
           </span>
         </Link>
         <LocaleSwitcher />
@@ -231,7 +226,7 @@ function SidebarContent({
                 </button>
               ) : (
                 <Link
-                  href={item.href as any}
+                  href={item.href}
                   onClick={onNavigate}
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
@@ -259,7 +254,7 @@ function SidebarContent({
                     return (
                       <Link
                         key={sub.name}
-                        href={sub.href as any}
+                        href={sub.href}
                         onClick={onNavigate}
                         className={cn(
                           "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
@@ -293,32 +288,7 @@ function SidebarContent({
           <p className="text-sm font-medium truncate">{user.name}</p>
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
         </div>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("signOut")}
-              className="shrink-0"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("signOutTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("signOutDescription")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("signOutCancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={handleSignOut}>
-                {t("signOutConfirm")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <AlertDialogSignOut onConfirm={handleSignOut} />
       </div>
     </div>
   )
@@ -326,7 +296,6 @@ function SidebarContent({
 
 export function AppSidebar({ user, isOrgClient }: AppSidebarProps) {
   const [open, setOpen] = useState(false)
-  const t = useTranslations("nav")
 
   return (
     <>
@@ -337,27 +306,23 @@ export function AppSidebar({ user, isOrgClient }: AppSidebarProps) {
 
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar px-4">
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label={t("openMenu")}>
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
-            <SheetTitle>{t("navigation")}</SheetTitle>
-            <SidebarContent
-              user={user}
-              isOrgClient={isOrgClient}
-              onNavigate={() => setOpen(false)}
-            />
-          </SheetContent>
-        </Sheet>
+        <SheetMobileNav open={open} onOpenChange={setOpen}>
+          <SidebarContent
+            user={user}
+            isOrgClient={isOrgClient}
+            onNavigate={() => setOpen(false)}
+          />
+        </SheetMobileNav>
 
         <Link href="/agents">
-          <img
+          <Image
             src="https://www.legaldataspace.eu/images/LOGO-LDS-BLACK.svg"
             alt="Legal DataSpace"
-            className="h-6 w-auto"
+            width={160}
+            height={24}
+            className="h-6"
+            style={{ width: "auto" }}
+            unoptimized
           />
         </Link>
 

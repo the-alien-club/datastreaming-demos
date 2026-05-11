@@ -24,8 +24,8 @@ until pg_isready -h "$pg_host" -p "$pg_port" -q; do
 done
 echo "[entrypoint] Postgres is ready."
 
-echo "[entrypoint] Applying drizzle migrations..."
-node /app/scripts/migrate-db.mjs
+echo "[entrypoint] Applying Prisma migrations..."
+node /app/node_modules/.bin/prisma migrate deploy
 
 echo "[entrypoint] Applying better-auth migrations..."
 node /app/node_modules/tsx/dist/cli.mjs /app/scripts/migrate-auth.ts

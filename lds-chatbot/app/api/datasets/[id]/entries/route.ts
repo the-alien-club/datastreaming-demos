@@ -1,38 +1,9 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { getClusterClient } from "@/lib/cluster/client"
-import { resolveAccessToken } from "@/lib/auth-helpers"
-import { ok, notFound, unauthorized, unprocessable, badRequest } from "@/lib/api-response"
-
-type RouteContext = { params: Promise<{ id: string }> }
-
-export async function GET(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-
-  const dataset = await db.query.datasets.findFirst({
-    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
-  })
-  if (!dataset) return notFound("Dataset not found")
-  if (!dataset.clusterDatasetId) return unprocessable("Dataset not yet synced with cluster")
-
-  const accessToken = await resolveAccessToken(session.user.id)
-  const client = getClusterClient(accessToken)
-
-  const result = await client.entries.listEntriesApiV1EntriesGet({
-    datasetId: dataset.clusterDatasetId,
-    limit: 100,
-  })
-
-  // The SDK returns { [key: string]: any } — extract entries array.
-  const raw = result as { entries?: unknown[]; items?: unknown[] }
-  const entries = raw.entries ?? raw.items ?? (Array.isArray(result) ? result : [])
-
-  return ok(entries)
-}
+import { withAuth } from "@/app/api/_middleware"
+import { ok, notFound, unprocessable, badRequest } from "@/lib/api-response"
+import { DatasetPolicy } from "@/models/datasets/policy"
+import { getDatasetById } from "@/models/datasets/queries"
+import { getEntryStatus, uploadEntry } from "@/models/datasets/service"
+import type { EntryResponse } from "../../../_validators"
 
 // Upload caps. The data cluster fans these out to Argo workflows that
 // process each file; without limits a single signed-in user can DoS
@@ -51,21 +22,29 @@ const ALLOWED_MIME_TYPES = new Set<string>([
   "application/vnd.ms-excel",
 ])
 
-export async function POST(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
+export const GET = withAuth(async (_req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const dataset = await getDatasetById(id)
+  if (!dataset) return notFound()
+  await bouncer.with(DatasetPolicy).authorize("view", dataset)
 
-  const { id } = await context.params
+  if (!dataset.clusterDatasetId) return unprocessable("Dataset not yet synced with cluster")
 
-  const dataset = await db.query.datasets.findFirst({
-    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
-  })
-  if (!dataset) return notFound("Dataset not found")
+  const entries = await getEntryStatus(dataset.clusterDatasetId, user.id, 100)
+  return ok<EntryResponse>(entries)
+})
+
+export const POST = withAuth(async (req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const dataset = await getDatasetById(id)
+  if (!dataset) return notFound()
+  await bouncer.with(DatasetPolicy).authorize("edit", dataset)
+
   if (!dataset.clusterDatasetId) return unprocessable("Dataset not yet synced with cluster")
 
   let formData: FormData
   try {
-    formData = await request.formData()
+    formData = await req.formData()
   } catch {
     return badRequest("Expected multipart/form-data")
   }
@@ -85,42 +64,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
   }
 
-  const accessToken = await resolveAccessToken(session.user.id)
-  const client = getClusterClient(accessToken)
-
   const results: unknown[] = []
-
   for (const file of files) {
-    // 1. Create entry record on cluster. crypto.randomUUID for uniqueness
-    // — Date.now() collided when two files of the same name were uploaded
-    // in the same millisecond (review A-P1.4).
-    const slug =
-      file.name
-        .toLowerCase()
-        .replace(/\.[^.]+$/, "")
-        .replace(/[^a-z0-9]+/g, "-") +
-      "-" +
-      crypto.randomUUID().slice(0, 8)
-
-    const entryResponse = await client.entries.createEntryApiV1EntriesPost({
-      entryCreateRequest: {
-        datasetId: dataset.clusterDatasetId,
-        name: file.name.replace(/\.[^.]+$/, ""),
-        slug,
-        description: "",
-        metadata: {},
-      },
-    })
-
-    // 2. Upload the file to the entry
-    const blob = new Blob([await file.arrayBuffer()], { type: file.type })
-    await client.entries.uploadFileToEntryApiV1EntriesEntryIdUploadPost({
-      entryId: entryResponse.entry.id,
-      file: blob,
-    })
-
-    results.push(entryResponse.entry)
+    const entry = await uploadEntry(id, dataset.clusterDatasetId, file, user.id)
+    results.push(entry)
   }
-
-  return ok(results, 201)
-}
+  return ok<EntryResponse>(results, 201)
+})

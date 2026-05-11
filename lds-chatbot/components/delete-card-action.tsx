@@ -3,22 +3,13 @@
 import * as React from "react"
 import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
-import { Loader2, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-fetch"
+import { AlertDialogDeleteConfirm } from "@/components/alerts/shared/delete-confirm"
 
 type Variant = "icon" | "ghost-link"
 
@@ -42,7 +33,7 @@ export function DeleteCardAction({
   className,
   successMessage,
 }: DeleteCardActionProps) {
-  const t = useTranslations("delete")
+  const t = useTranslations("common.delete")
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
@@ -73,7 +64,7 @@ export function DeleteCardAction({
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <>
       <Button
         type="button"
         variant="ghost"
@@ -96,25 +87,15 @@ export function DeleteCardAction({
         <Trash2 className="h-4 w-4" />
       </Button>
 
-      <AlertDialogContent onClick={suppressBubble}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t("dialogTitle", { resource: resourceLabel })}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {t("dialogDescription", { name })}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={deleting}>{t("cancel")}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleConfirm}
-            disabled={deleting}
-            className={cn(buttonVariants({ variant: "destructive" }))}
-          >
-            {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {t("confirm")}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      <AlertDialogDeleteConfirm
+        open={open}
+        onOpenChange={setOpen}
+        resourceLabel={resourceLabel}
+        name={name}
+        onConfirm={handleConfirm}
+        deleting={deleting}
+        onClick={suppressBubble}
+      />
+    </>
   )
 }

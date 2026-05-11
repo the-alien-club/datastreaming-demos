@@ -20,11 +20,20 @@ export const DEFAULT_MODEL_SLUG = "mistral-medium-3.5"
 export const WIZARD_DEFAULT_MODEL_SLUG = "mistral-medium-3.5"
 
 /**
- * MCP transport string accepted by the platform's MCP server node and the
- * `mcps.transport` column. The platform also accepts `sse` and `stdio`
- * but the chatbot only ships streamable_http for the demo.
+ * All three transport modes accepted by the platform's MCP server node and
+ * the `mcps.transport` column. Use these instead of bare string literals.
  */
-export const DEFAULT_MCP_TRANSPORT = "streamable_http"
+export const MCP_TRANSPORT = {
+  StreamableHttp: "streamable_http",
+  Sse: "sse",
+  Stdio: "stdio",
+} as const
+export type McpTransport = (typeof MCP_TRANSPORT)[keyof typeof MCP_TRANSPORT]
+
+/**
+ * Default MCP transport for new MCP server entries.
+ */
+export const DEFAULT_MCP_TRANSPORT = MCP_TRANSPORT.StreamableHttp
 
 /**
  * Pipeline preset applied to every freshly-created dataset. The preset
@@ -42,3 +51,35 @@ export const PLATFORM_OAUTH_TOKEN_HEADER = "x-oauth-access-token"
  * better-auth provider id for our Authentik OIDC integration.
  */
 export const OAUTH_PROVIDER_ID = "authentik"
+
+/**
+ * Application route paths that appear in more than one file. Import from here
+ * rather than repeating the string inline.
+ */
+export const ROUTES = {
+  AGENTS: "/agents",
+  AGENTS_NEW: "/agents/new",
+  DATASETS: "/datasets",
+  DATASETS_NEW: "/datasets/new",
+  SPECIALISTS: "/specialists",
+  MCPS: "/mcps",
+  CONVERSATIONS: "/conversations",
+} as const
+
+/**
+ * How often the dataset detail page re-polls cluster entry statuses while
+ * any entry is still in progress.
+ */
+export const ENTRY_POLL_INTERVAL_MS = 10_000
+
+/**
+ * How often the wizard's done step re-polls dataset processing status while
+ * waiting for documents to finish indexing.
+ */
+export const WIZARD_DATASET_POLL_INTERVAL_MS = 5_000
+
+/**
+ * Well-known ID of the built-in data-cluster MCP. Used wherever the chatbot
+ * auto-wires a corpus subagent or resolves the MCP server URL from the env.
+ */
+export const DATACLUSTER_MCP_ID = "datacluster"

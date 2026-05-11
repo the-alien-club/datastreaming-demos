@@ -14,7 +14,8 @@ interface TemplateStepContentProps {
 }
 
 export function TemplateStepContent({ state, setState }: TemplateStepContentProps) {
-  const t = useTranslations("wizard")
+  const t = useTranslations("wizard.steps.template")
+  const tWizard = useTranslations("wizard")
   const selected = state.templateId
 
   function pick(template: WizardAgentTemplate) {
@@ -32,10 +33,10 @@ export function TemplateStepContent({ state, setState }: TemplateStepContentProp
             <TemplateCard
               key={id}
               template={template}
-              name={t(`tpl_${id}_name` as never)}
-              description={t(`tpl_${id}_desc` as never)}
+              name={tWizard(`tpl_${id}_name` as never)}
+              description={tWizard(`tpl_${id}_desc` as never)}
               capabilities={template.capabilities.map((_, i) =>
-                t(`tpl_${id}_cap${i + 1}` as never)
+                tWizard(`tpl_${id}_cap${i + 1}` as never)
               )}
               selected={selected === id}
               onSelect={() => pick(template)}
@@ -48,7 +49,7 @@ export function TemplateStepContent({ state, setState }: TemplateStepContentProp
         <BlankCard
           key={template.id}
           template={template}
-          name={t(`tpl_${template.id}_name` as never)}
+          name={tWizard(`tpl_${template.id}_name` as never)}
           blankLabel={t("blankLabel")}
           blankDesc={t("blankSkipDesc")}
           selected={selected === template.id}
@@ -149,6 +150,7 @@ function BlankCard({
 }
 
 // Called from index.tsx when seeding the uploadDatasetName from the template.
+// Receives the "wizard" namespace translator from the caller.
 export function suggestDatasetName(
   templateId: string,
   t: ReturnType<typeof useTranslations<"wizard">>,

@@ -44,6 +44,7 @@ export function err(
 }
 
 export const unauthorized = (message = "Unauthorized") => err(message, 401)
+export const forbidden = (message = "Forbidden") => err(message, 403)
 export const notFound = (message = "Not found") => err(message, 404)
 export const badRequest = (message = "Bad request", issues?: unknown) =>
   err(message, 400, issues)
