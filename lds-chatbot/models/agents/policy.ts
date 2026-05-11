@@ -56,4 +56,13 @@ export class AgentPolicy {
   publish(agent: AgentRow): boolean {
     return agent.userId === this.user.id
   }
+
+  /**
+   * Non-client org members may fork a public agent into their own workspace.
+   * Mirrors the same constraint as `create` — org-client users are consumers,
+   * not builders.
+   */
+  fork(): boolean {
+    return this.user.orgRole !== "org-client"
+  }
 }

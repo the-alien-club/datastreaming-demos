@@ -62,6 +62,7 @@ export {
   type AgentListResponse,
   type AgentConversationListItem,
   type SubagentResponse,
+  type ForkAgentResponse,
 } from "@/models/agents/types"
 
 // ── Conversations & chat ────────────────────────────────────────────────────

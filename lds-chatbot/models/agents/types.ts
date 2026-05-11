@@ -122,6 +122,13 @@ export type AgentPublicResponse = {
 
 export type AgentListResponse = AgentResponse[]
 
+// ── Fork response ──────────────────────────────────────────────────────────
+
+export type ForkAgentResponse = {
+  id: string
+  name: string
+}
+
 // ── Agent conversations list ────────────────────────────────────────────────
 
 export type AgentConversationListItem = {

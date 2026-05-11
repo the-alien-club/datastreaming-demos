@@ -405,6 +405,49 @@ export async function cancelAgentResponse(
   return cancelResponse(agent.workflowId, responseId, token)
 }
 
+// ── Fork ───────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a copy of a public agent under a new owner.
+ *
+ * The source agent has already been loaded and access-checked by the route
+ * handler (AgentPolicy.view + AgentPolicy.fork). The forked agent is private
+ * by default. Dataset attachments on subagents are dropped — they reference
+ * the source user's corpus which the new owner does not have access to.
+ *
+ * @returns The newly created agent with subagents.
+ */
+export async function forkAgent(
+  source: AgentWithSubagents,
+  targetUserId: string,
+): Promise<AgentWithSubagents> {
+  const steps = source.steps
+    ? (JSON.parse(source.steps) as { name: string; prompt: string }[])
+    : []
+  const starterPrompts = source.starterPrompts
+    ? (JSON.parse(source.starterPrompts) as string[])
+    : []
+
+  const body: CreateAgentData = {
+    name: `${source.name} (copie)`,
+    description: source.description ?? undefined,
+    systemPrompt: source.systemPrompt ?? "",
+    author: source.author ?? undefined,
+    steps,
+    model: source.model ?? undefined,
+    starterPrompts: starterPrompts.length > 0 ? starterPrompts : undefined,
+    subagents: source.subagents.map((sa) => ({
+      name: sa.name,
+      systemPrompt: sa.systemPrompt,
+      model: sa.model,
+      mcpIds: JSON.parse(sa.mcpIds) as string[],
+      datasetId: null,
+    })),
+  }
+
+  return createAgent(targetUserId, body)
+}
+
 // ── Get by ID (public or owner) ────────────────────────────────────────────
 
 /**

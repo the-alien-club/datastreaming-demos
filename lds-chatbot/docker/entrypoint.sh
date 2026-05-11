@@ -24,6 +24,23 @@ until pg_isready -h "$pg_host" -p "$pg_port" -q; do
 done
 echo "[entrypoint] Postgres is ready."
 
+echo "[entrypoint] Checking Prisma migration state..."
+
+# Detect whether _prisma_migrations exists.
+# Returns "t" if it does, "f" if it does not.
+_has_prisma_table=$(psql "$DATABASE_URL" -tAc \
+  "SELECT EXISTS (
+     SELECT FROM pg_tables
+     WHERE schemaname = 'public'
+     AND tablename = '_prisma_migrations'
+   );")
+
+if [[ "$_has_prisma_table" == "f" ]]; then
+  echo "[entrypoint] _prisma_migrations table not found — resolving baseline..."
+  node /app/node_modules/.bin/prisma migrate resolve --applied "0001_baseline"
+  echo "[entrypoint] Baseline resolved."
+fi
+
 echo "[entrypoint] Applying Prisma migrations..."
 node /app/node_modules/.bin/prisma migrate deploy
 
