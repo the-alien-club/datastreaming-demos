@@ -147,19 +147,12 @@
     "title": "Assistants",
     "myTitle": "Mes assistants IA",
     "subtitle": "Créez et gérez vos assistants IA.",
-    "libraryTitle": "Bibliothèque d'assistants IA",
-    "librarySubtitle": "Assistants publics disponibles pour tous les membres.",
     "newAgent": "Nouvel assistant",
     "emptyTitle": "Aucun assistant pour l'instant",
     "emptyDescription": "Créez votre premier assistant pour commencer à construire des workflows IA.",
     "createFirst": "Créer votre premier assistant",
-    "stepsCount": "{count, plural, one {# étape} other {# étapes}}",
-    "specialistsCount": "{count, plural, one {# agent IA spécialisé} other {# agents IA spécialisés}}",
-    "chat": "Discuter",
-    "created": "Créé le {date}",
     "notFound": "Assistant introuvable.",
     "backToAgents": "Retour aux assistants",
-    "noPublicAgents": "Aucun assistant disponible pour le moment.",
     "publicSection": "Assistants publics",
     "makePublic": "Rendre public",
     "makePrivate": "Rendre privé",
@@ -212,7 +205,16 @@
     "card": {
       "fork": "Dupliquer",
       "forked": "{name} dupliqué — vous pouvez maintenant l’utiliser et le modifier.",
-      "forkFailed": "Impossible de dupliquer l’assistant"
+      "forkFailed": "Impossible de dupliquer l’assistant",
+      "stepsCount": "{count, plural, one {# étape} other {# étapes}}",
+      "specialistsCount": "{count, plural, one {# agent IA spécialisé} other {# agents IA spécialisés}}",
+      "chat": "Discuter",
+      "created": "Créé le {date}"
+    },
+    "page": {
+      "libraryTitle": "Bibliothèque d'assistants IA",
+      "librarySubtitle": "Assistants publics disponibles pour tous les membres.",
+      "noPublicAgents": "Aucun assistant disponible pour le moment."
     }
   },
   "specialists": {

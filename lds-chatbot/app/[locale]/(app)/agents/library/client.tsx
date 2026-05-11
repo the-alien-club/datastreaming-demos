@@ -17,7 +17,7 @@ export function AgentLibraryClient({
   initialAuthorNames,
   forkable,
 }: AgentLibraryClientProps) {
-  const t = useTranslations("agents")
+  const t = useTranslations("agents.page")
 
   return (
     <div className="p-4 sm:p-6">

@@ -147,19 +147,12 @@
     "title": "Assistants",
     "myTitle": "My AI Assistants",
     "subtitle": "Create and manage your AI assistants.",
-    "libraryTitle": "AI Assistant Library",
-    "librarySubtitle": "Public assistants available to all members.",
     "newAgent": "New Assistant",
     "emptyTitle": "No assistants yet",
     "emptyDescription": "Create your first assistant to start building AI-powered workflows.",
     "createFirst": "Create your first assistant",
-    "stepsCount": "{count, plural, one {# step} other {# steps}}",
-    "specialistsCount": "{count, plural, one {# specialized AI agent} other {# specialized AI agents}}",
-    "chat": "Chat",
-    "created": "Created {date}",
     "notFound": "Assistant not found.",
     "backToAgents": "Back to assistants",
-    "noPublicAgents": "No assistants are available yet.",
     "publicSection": "Public Assistants",
     "makePublic": "Make Public",
     "makePrivate": "Make Private",
@@ -212,7 +205,16 @@
     "card": {
       "fork": "Fork",
       "forked": "{name} forked — you can now use and edit it.",
-      "forkFailed": "Failed to fork assistant"
+      "forkFailed": "Failed to fork assistant",
+      "stepsCount": "{count, plural, one {# step} other {# steps}}",
+      "specialistsCount": "{count, plural, one {# specialized AI agent} other {# specialized AI agents}}",
+      "chat": "Chat",
+      "created": "Created {date}"
+    },
+    "page": {
+      "libraryTitle": "AI Assistant Library",
+      "librarySubtitle": "Public assistants available to all members.",
+      "noPublicAgents": "No assistants are available yet."
     }
   },
   "specialists": {

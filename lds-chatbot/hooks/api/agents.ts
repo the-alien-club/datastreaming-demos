@@ -19,6 +19,7 @@ import {
 import type {
   createAgentBodySchema,
   updateAgentBodySchema,
+  AgentResponse,
   ForkAgentResponse,
 } from "@/app/api/_validators"
 import type { z } from "zod"
@@ -28,38 +29,7 @@ import { apiFetch } from "@/lib/api-fetch"
 
 export type CreateAgentBody = z.infer<typeof createAgentBodySchema>
 export type UpdateAgentBody = z.infer<typeof updateAgentBodySchema>
-
-// The API returns `ok(agent)` which is a plain JSON body — no envelope.
-// We use `unknown` here and cast at the call-site boundary; a shared
-// `AgentResponse` type can be introduced once there's a stable API
-// response type package.
-export type AgentResponse = {
-  id: string
-  userId: string
-  workflowId: number | null
-  name: string
-  description: string | null
-  systemPrompt: string | null
-  steps: string | null
-  starterPrompts: string[]
-  model: string | null
-  author: string | null
-  isPublic: boolean
-  isOwn?: boolean
-  createdAt: string
-  updatedAt: string
-  subagents: {
-    id: string
-    agentId: string
-    name: string
-    systemPrompt: string
-    model: string | null
-    mcpIds: string | null
-    datasetId: string | null
-    nodeId: string | null
-    createdAt: string
-  }[]
-}
+export type { AgentResponse }
 
 // ── Query key factory ──────────────────────────────────────────────────────
 

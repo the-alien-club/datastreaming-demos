@@ -35,7 +35,7 @@ export function CardAgent({
   editable?: boolean
   forkable?: boolean
 }) {
-  const t = useTranslations("agents")
+  const t = useTranslations("agents.card")
   const tCommon = useTranslations("common")
   const format = useFormatter()
   const steps = agent.steps
