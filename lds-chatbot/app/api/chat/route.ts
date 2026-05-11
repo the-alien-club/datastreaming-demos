@@ -15,13 +15,18 @@
 // `web-app/packages/backend/lib/streaming/specs/responses_v1.md`.
 // Streaming is driven by `platformProvider` + `runPlatformResponse` in
 // `lib/platform/responses_stream.ts`.
+//
+// Persistence approach: `createUIMessageStream`'s `onFinish` callback
+// receives the fully assembled `UIMessage` (including all `parts`) after
+// the stream drains. We use this instead of `tee()` + `readUIMessageStream`
+// because the tee approach requires SSE-encoded bytes but `.tee()` produces
+// raw `UIMessageChunk` objects — a format mismatch that silently yields
+// nothing and leaves the assembled message empty.
 
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
-  readUIMessageStream,
   type UIMessage,
-  type UIMessageChunk,
 } from "ai"
 import { auth } from "@/lib/auth"
 import { resolveAccessToken } from "@/lib/auth-helpers"
@@ -31,12 +36,11 @@ import {
   runPlatformResponse,
   type PlatformResponseResult,
 } from "@/lib/platform/responses_stream"
+import { Prisma } from "@/lib/generated/prisma/client"
 import { badRequest, conflict, notFound, unauthorized } from "@/lib/api-response"
 import { chatBodySchema, parseBody, type ChatRequestBody } from "../_validators"
-import {
-  extractPlainTextFromParts,
-  filterPersistableParts,
-} from "@/lib/chat/persisted-parts"
+import { extractPlainTextFromParts, filterPersistableParts } from "@/lib/chat/persisted-parts"
+import { agentWithSubagents } from "@/models/agents/schema"
 
 export const dynamic = "force-dynamic"
 
@@ -73,7 +77,7 @@ export async function POST(request: Request): Promise<Response> {
       id: body.agentId,
       OR: [{ userId: session.user.id }, { isPublic: true }],
     },
-    include: { subagents: true },
+    ...agentWithSubagents,
   })
   const t3 = Date.now()
   if (!agent) return notFound("Agent not found")
@@ -152,8 +156,8 @@ export async function POST(request: Request): Promise<Response> {
   // cancelled instead of being held open until the workflow finishes.
   const signal = request.signal
 
-  // Hold the result so the persistence branch can read responseId/usage
-  // after the chunk stream drains.
+  // Hold the result so the onFinish callback can read responseId/usage
+  // after the stream drains.
   let platformResult: PlatformResponseResult | null = null
 
   const chunkStream = createUIMessageStream({
@@ -172,63 +176,74 @@ export async function POST(request: Request): Promise<Response> {
       console.error("Chat stream error:", error)
       return error instanceof Error ? error.message : "An error occurred"
     },
+    // `onFinish` fires after the stream fully drains on the server side.
+    // `event.responseMessage` is the fully assembled UIMessage including all
+    // parts (text bubbles, tool-call chips, subagent panels). We use this
+    // instead of tee() + readUIMessageStream because tee() produces raw
+    // UIMessageChunk objects but readUIMessageStream expects SSE-encoded bytes
+    // — the format mismatch silently yields nothing and leaves parts empty.
+    onFinish: async ({ responseMessage }) => {
+      await persistAssistantMessage({
+        responseMessage,
+        conversationId,
+        fallbackSessionId: existingConversation?.sessionId ?? null,
+        getResult: () => platformResult,
+      })
+    },
   })
 
-  // Tee the chunk stream: one branch goes to the SSE response the client
-  // reads, the other is drained through `readUIMessageStream` so we
-  // capture the assembled assistant `UIMessage` (text bubbles, tool-call
-  // chips, subagent panels) and persist its `parts` for replay on refresh.
-  const [forClient, forPersist] = chunkStream.tee()
-
-  void persistAssistantMessage({
-    chunkStream: forPersist,
-    conversationId,
-    fallbackSessionId: existingConversation?.sessionId ?? null,
-    getResult: () => platformResult,
-  })
-
-  return createUIMessageStreamResponse({ stream: forClient })
+  return createUIMessageStreamResponse({ stream: chunkStream })
 }
 
-// ── Background persistence ────────────────────────────────────────────────────
+// ── Persistence ───────────────────────────────────────────────────────────────
 
 interface PersistArgs {
-  chunkStream: ReadableStream<UIMessageChunk>
+  /** Fully assembled UIMessage delivered by createUIMessageStream's onFinish. */
+  responseMessage: UIMessage
   conversationId: string
   fallbackSessionId: string | null
   getResult: () => PlatformResponseResult | null
 }
 
 /**
- * Drain the tee'd UI-message chunk stream and write the assistant turn to
- * Postgres. Stores both the plain-text concatenation and the structured
- * `parts` array so a tab refresh can replay tool-call chips and subagent
- * panels exactly as they streamed in.
+ * Write the assistant turn to Postgres from the fully assembled `responseMessage`
+ * delivered by `createUIMessageStream`'s `onFinish` callback.
  *
- * Errors are caught and logged but never thrown — the SSE stream the
- * client is reading is independent and must not be interrupted by
- * persistence failures.
+ * Stores both:
+ *   - `content`  — plain-text concatenation of all text parts (backward-compat,
+ *                  OpenAI-compat path)
+ *   - `parts`    — filtered `UIMessage.parts` jsonb array (replays rich rendering
+ *                  on tab refresh: text bubbles, tool-call chips, subagent panels)
+ *
+ * The `PlatformResponseResult` from `runPlatformResponse` provides `responseId`
+ * (persisted as `conversation.sessionId` for next-turn `previous_response_id`)
+ * and `usage` for the metadata column.
+ *
+ * Errors are caught and logged but never thrown — `onFinish` runs server-side
+ * after the SSE stream is already sent to the client, so a persistence failure
+ * must never propagate to the response.
  */
 async function persistAssistantMessage({
-  chunkStream,
+  responseMessage,
   conversationId,
   fallbackSessionId,
   getResult,
 }: PersistArgs): Promise<void> {
-  let assembled: UIMessage | undefined
-  try {
-    for await (const message of readUIMessageStream({ stream: chunkStream })) {
-      assembled = message
-    }
-  } catch (e) {
-    // Mid-stream failure: still try to persist whatever the translator
-    // captured up to that point so partial answers aren't lost.
-    console.error("[chat] failed to drain chunk stream for persistence:", e)
-  }
-
+  // Plain-text fallback: concatenate all text parts in order. Prefer
+  // platformResult.text (accumulated from every text-delta event) when
+  // available because it excludes Task()-dispatch control strings that the
+  // stream writer already filtered out.
   const result = getResult()
-  const content = result?.text ?? extractPlainTextFromParts(assembled?.parts)
-  const persistedParts = filterPersistableParts(assembled?.parts)
+  const parts = filterPersistableParts(responseMessage.parts)
+  const content = result?.text || extractPlainTextFromParts(responseMessage.parts)
+
+  if (!content && parts.length === 0) {
+    console.error("[chat] assistant message is empty — skipping persist", {
+      conversationId,
+      hasResult: !!result,
+    })
+    return
+  }
 
   try {
     await prisma.message.create({
@@ -237,9 +252,7 @@ async function persistAssistantMessage({
         conversationId,
         role: "assistant",
         content,
-        // Prisma's Json field only accepts its internal InputJsonValue. Cast
-        // through unknown: the runtime value is a plain JSON-serialisable array.
-        parts: persistedParts.length > 0 ? (persistedParts as unknown as object) : undefined,
+        parts: parts.length > 0 ? (parts as unknown as Prisma.InputJsonValue) : undefined,
         metadata: result?.usage ? JSON.stringify({ usage: result.usage }) : null,
       },
     })

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Database, Loader2, Plus } from "lucide-react"
@@ -21,6 +21,11 @@ export function McpsClient({ initialMcps }: McpsClientProps) {
   const t = useTranslations("mcps")
   const tCommon = useTranslations("common")
   const [mcps, setMcps] = useState<McpRecord[]>(initialMcps)
+
+  useEffect(() => {
+    setMcps(initialMcps)
+  }, [initialMcps])
+
   const [deleting, setDeleting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const [publishing, setPublishing] = useState<string | null>(null)

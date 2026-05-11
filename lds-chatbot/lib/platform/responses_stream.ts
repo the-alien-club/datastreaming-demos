@@ -47,6 +47,12 @@
 import { createOpenAI } from "@ai-sdk/openai"
 import { smoothStream, streamText, type createUIMessageStream } from "ai"
 
+// Platform-internal subagent dispatch strings must never reach the UI.
+// The platform occasionally emits `Task(description="...", subagent_type="...")`
+// as a text-delta when an orchestrator delegates to a subagent. These are
+// internal control signals, not user-visible content.
+const TASK_DISPATCH_RE = /^Task\(description=["'].*?["'],\s*subagent_type=["'].*?["']\)\s*$/
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type StreamWriter = Parameters<
@@ -191,7 +197,7 @@ export async function runPlatformResponse(
           sidecarState.trackText(part.id)
           break
 
-        case "text-delta":
+        case "text-delta": {
           if (tFirstTextDelta === null) {
             tFirstTextDelta = Date.now()
             // [DIAG] Log TTFT breakdown — remove once latency root cause is confirmed.
@@ -204,9 +210,13 @@ export async function runPlatformResponse(
               },
             }))
           }
+          // Drop platform-internal subagent dispatch strings — they are control
+          // signals from the orchestrator, not content intended for the user.
+          if (TASK_DISPATCH_RE.test(part.text.trim())) break
           writer.write({ type: "text-delta", id: part.id, delta: part.text } as WriterEvent)
           sidecarState.accumulateText(part.text)
           break
+        }
 
         case "text-end":
           writer.write({ type: "text-end", id: part.id } as WriterEvent)
@@ -569,6 +579,8 @@ export async function translateResponseStream(
             const delta = payload.delta
             const itemId = typeof payload.item_id === "string" ? payload.item_id : null
             if (typeof delta === "string" && delta.length > 0 && itemId !== null) {
+              // Drop platform-internal subagent dispatch strings.
+              if (TASK_DISPATCH_RE.test(delta.trim())) break
               let partId = openTextParts.get(itemId)
               if (partId === undefined) {
                 partId = crypto.randomUUID()

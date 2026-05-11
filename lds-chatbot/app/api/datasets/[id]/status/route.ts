@@ -1,9 +1,9 @@
 import { withAuth } from "@/app/api/_middleware"
 import { ok, notFound } from "@/lib/api-response"
 import { DatasetPolicy } from "@/models/datasets/policy"
-import { getDatasetById } from "@/models/datasets/queries"
+import { getDatasetById, updateDatasetStatus } from "@/models/datasets/queries"
 import { getEntryStatus } from "@/models/datasets/service"
-import { ENTRY_STATUS } from "@/models/datasets/schema"
+import { ENTRY_STATUS, DATASET_STATUS } from "@/models/datasets/schema"
 import {
   type DatasetStatusResponse,
   type StatusKey,
@@ -63,6 +63,16 @@ export const GET = withAuth(async (_req, user, bouncer, ctx) => {
     overall = "uploading"
   } else {
     overall = "empty"
+  }
+
+  // Sync local status with cluster reality so the dataset card reflects the
+  // true state without requiring a separate write-back endpoint.
+  if (overall === "processed") {
+    await updateDatasetStatus(id, DATASET_STATUS.Ready)
+  } else if (overall === "error") {
+    await updateDatasetStatus(id, DATASET_STATUS.Error)
+  } else if (overall === "processing" || overall === "uploading") {
+    await updateDatasetStatus(id, DATASET_STATUS.Processing)
   }
 
   return ok<DatasetStatusResponse>({

@@ -167,7 +167,7 @@ export function DatasetDetailClient({ initialDataset }: DatasetDetailClientProps
     }
 
     if (hasInProgress) {
-      pollingRef.current = setTimeout(() => fetchEntries(), 10_000)
+      pollingRef.current = setTimeout(() => fetchEntries(), ENTRY_POLL_INTERVAL_MS)
     }
 
     return () => {

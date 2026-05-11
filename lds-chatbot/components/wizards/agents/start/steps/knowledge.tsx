@@ -54,7 +54,7 @@ export function KnowledgeStepContent({
         if (!cancelled) setDatasets(Array.isArray(data) ? data : [])
       } catch (err) {
         if (!cancelled) {
-          setDatasets([])
+          // do NOT setDatasets([]) — empty datasets is not the right state for a fetch failure
           toast.error(err instanceof Error ? err.message : t("knowledgeLoadFailed"))
         }
       } finally {
