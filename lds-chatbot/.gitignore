@@ -53,3 +53,5 @@ sqlite.db-journal
 # clients via the repo. Move to ai-memories/ if you want them tracked
 # elsewhere.
 /internal-docs/
+
+/lib/generated/prisma

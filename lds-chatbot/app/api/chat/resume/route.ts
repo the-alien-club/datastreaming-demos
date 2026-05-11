@@ -17,26 +17,19 @@ import {
   type UIMessage,
   type UIMessageChunk,
 } from "ai"
-import { and, eq, or } from "drizzle-orm"
 import { auth } from "@/lib/auth"
 import { resolveAccessToken } from "@/lib/auth-helpers"
-import { db } from "@/lib/db"
-import { agents, conversations, messages } from "@/lib/db/schema"
+import { prisma } from "@/lib/db"
 import { resumeResponsesStream } from "@/lib/platform/client"
 import {
   translateResponseStream,
   type PlatformResponseResult,
 } from "@/lib/platform/responses_stream"
-import { badRequest, conflict, notFound, unauthorized } from "@/lib/api-response"
+import { conflict, notFound, unauthorized, err } from "@/lib/api-response"
+import { resumeBodySchema, parseBody } from "../../_validators"
 import { filterPersistableParts } from "@/lib/chat/persisted-parts"
 
 export const dynamic = "force-dynamic"
-
-interface ResumeRequestBody {
-  conversationId?: string
-  responseId?: string
-  startingAfter?: number
-}
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -44,33 +37,23 @@ export async function POST(request: Request): Promise<Response> {
 
   const accessToken = await resolveAccessToken(session.user.id)
 
-  let body: ResumeRequestBody
-  try {
-    body = (await request.json()) as ResumeRequestBody
-  } catch {
-    return badRequest("Invalid JSON body")
-  }
+  const parsed = await parseBody(request, resumeBodySchema)
+  if (parsed instanceof Response) return parsed
+  const { conversationId: parsedConversationId, responseId, startingAfter } = parsed
 
-  if (!body.conversationId) return badRequest("conversationId required")
-  if (!body.responseId) return badRequest("responseId required")
-  if (typeof body.startingAfter !== "number" || !Number.isInteger(body.startingAfter) || body.startingAfter < 0) {
-    return badRequest("startingAfter must be a non-negative integer")
-  }
-  const startingAfter = body.startingAfter
-
-  const conversation = await db.query.conversations.findFirst({
-    where: and(
-      eq(conversations.id, body.conversationId),
-      eq(conversations.userId, session.user.id),
-    ),
+  const conversation = await prisma.conversation.findFirst({
+    where: {
+      id: parsedConversationId,
+      userId: session.user.id,
+    },
   })
   if (!conversation) return notFound("Conversation not found")
 
-  const agent = await db.query.agents.findFirst({
-    where: and(
-      eq(agents.id, conversation.agentId),
-      or(eq(agents.userId, session.user.id), eq(agents.isPublic, true)),
-    ),
+  const agent = await prisma.agent.findFirst({
+    where: {
+      id: conversation.agentId,
+      OR: [{ userId: session.user.id }, { isPublic: true }],
+    },
   })
   if (!agent) return notFound("Agent not found")
   if (agent.workflowId === null) {
@@ -78,7 +61,6 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const conversationId = conversation.id
-  const responseId = body.responseId
   const signal = request.signal
 
   const upstream = await resumeResponsesStream(
@@ -91,9 +73,8 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!upstream.ok || !upstream.body) {
     const errBody = await upstream.text().catch(() => "(no body)")
-    return new Response(`Platform Resume error ${upstream.status}: ${errBody}`, {
-      status: upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502,
-    })
+    const status = upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502
+    return err(`Platform Resume error: ${errBody}`, status)
   }
 
   // Mirror the POST route: capture the translator's result so the
@@ -173,21 +154,25 @@ async function persistResumedAssistantMessage({
   const persistedParts = filterPersistableParts(assembled?.parts)
 
   try {
-    await db.insert(messages).values({
-      id: crypto.randomUUID(),
-      conversationId,
-      role: "assistant",
-      content: result.text,
-      parts: persistedParts.length > 0 ? persistedParts : null,
-      metadata: result.usage ? JSON.stringify({ usage: result.usage }) : null,
+    await prisma.message.create({
+      data: {
+        id: crypto.randomUUID(),
+        conversationId,
+        role: "assistant",
+        content: result.text,
+        // Prisma's Json field only accepts its internal InputJsonValue. Cast
+        // through unknown: the runtime value is a plain JSON-serialisable array.
+        parts: persistedParts.length > 0 ? (persistedParts as unknown as object) : undefined,
+        metadata: result.usage ? JSON.stringify({ usage: result.usage }) : null,
+      },
     })
-    await db
-      .update(conversations)
-      .set({
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
         sessionId: result.responseId ?? responseId,
         updatedAt: new Date(),
-      })
-      .where(eq(conversations.id, conversationId))
+      },
+    })
   } catch (e) {
     console.error("[chat/resume] failed to persist assistant message:", e)
   }

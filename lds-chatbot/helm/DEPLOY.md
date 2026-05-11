@@ -152,8 +152,12 @@ Expected clean boot sequence:
 ```
 [entrypoint] Waiting for Postgres at …:5432...
 [entrypoint] Postgres is ready.
-[entrypoint] Applying drizzle migrations...
-[migrate-db] Drizzle migrations complete.
+[entrypoint] Applying Prisma migrations...
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "…"
+
+No pending migrations.
+
 [entrypoint] Applying better-auth migrations...
 Database is already up to date.
 [entrypoint] Starting Next.js server...
@@ -249,7 +253,7 @@ Edit `helm/lds-chatbot-chart/values.yaml` (or pass `--set` / ArgoCD parameters):
 kubectl --context platform-prod logs -n demo-lds-chatbot deploy/demo-lds-chatbot-prod
 ```
 
-The entrypoint waits up to ~2 min for Postgres, then runs drizzle + better-auth migrations. Most startup failures are visible here.
+The entrypoint waits up to ~2 min for Postgres, then runs Prisma + better-auth migrations. Most startup failures are visible here.
 
 ### Chat returns no response / blank stream
 

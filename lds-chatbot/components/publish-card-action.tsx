@@ -18,7 +18,7 @@ interface PublishCardActionProps {
 }
 
 export function PublishCardAction({ resource, endpoint, isPublic }: PublishCardActionProps) {
-  const t = useTranslations("publish")
+  const t = useTranslations("common.publish")
   const router = useRouter()
   const [pending, setPending] = React.useState(false)
 

@@ -4,13 +4,8 @@ import { Button } from "@/components/ui/button";
 import {
   ButtonGroup,
   ButtonGroupText,
-} from "@/components/ui/button-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ai-elements/button-group";
+import { TooltipMessageAction } from "@/components/tooltips/chat/message-action";
 import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
@@ -18,6 +13,7 @@ import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import {
   createContext,
@@ -99,14 +95,9 @@ export const MessageAction = ({
 
   if (tooltip) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <TooltipMessageAction label={tooltip}>
+        {button}
+      </TooltipMessageAction>
     );
   }
 
@@ -259,10 +250,11 @@ export const MessageBranchPrevious = ({
   ...props
 }: MessageBranchPreviousProps) => {
   const { goToPrevious, totalBranches } = useMessageBranch();
+  const t = useTranslations("aiElements.message");
 
   return (
     <Button
-      aria-label="Previous branch"
+      aria-label={t("previousBranch")}
       disabled={totalBranches <= 1}
       onClick={goToPrevious}
       size="icon-sm"
@@ -282,10 +274,11 @@ export const MessageBranchNext = ({
   ...props
 }: MessageBranchNextProps) => {
   const { goToNext, totalBranches } = useMessageBranch();
+  const t = useTranslations("aiElements.message");
 
   return (
     <Button
-      aria-label="Next branch"
+      aria-label={t("nextBranch")}
       disabled={totalBranches <= 1}
       onClick={goToNext}
       size="icon-sm"
@@ -305,6 +298,7 @@ export const MessageBranchPage = ({
   ...props
 }: MessageBranchPageProps) => {
   const { currentBranch, totalBranches } = useMessageBranch();
+  const t = useTranslations("aiElements.message");
 
   return (
     <ButtonGroupText
@@ -314,7 +308,7 @@ export const MessageBranchPage = ({
       )}
       {...props}
     >
-      {currentBranch + 1} of {totalBranches}
+      {t("branchPage", { current: currentBranch + 1, total: totalBranches })}
     </ButtonGroupText>
   );
 };

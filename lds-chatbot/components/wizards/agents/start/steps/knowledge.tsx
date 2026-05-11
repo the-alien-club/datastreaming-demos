@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { useTranslations } from "next-intl"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TabsAgentKnowledgeMode } from "@/components/tabs/agents/knowledge-mode"
 import { Input } from "@/components/ui/input"
+import { DATASET_STATUS } from "@/lib/db/schema"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Upload, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-fetch"
+import { toast } from "sonner"
 import { WIZARD_AGENT_TEMPLATES } from "../templates"
 import type { KnowledgeMode, WizardSetState, WizardState } from "../state"
 
@@ -32,7 +34,7 @@ export function KnowledgeStepContent({
   setState,
   uploadInFlight = false,
 }: KnowledgeStepContentProps) {
-  const t = useTranslations("wizard")
+  const t = useTranslations("wizard.steps.knowledge")
   const template = WIZARD_AGENT_TEMPLATES.find((tpl) => tpl.id === state.templateId)
   const knowledgeRequired = template?.knowledgeRequired ?? false
 
@@ -47,10 +49,14 @@ export function KnowledgeStepContent({
       setLoadingDatasets(true)
       try {
         const res = await apiFetch("/api/datasets")
-        const data = res.ok ? ((await res.json()) as DatasetRow[]) : []
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
         if (!cancelled) setDatasets(Array.isArray(data) ? data : [])
-      } catch {
-        if (!cancelled) setDatasets([])
+      } catch (err) {
+        if (!cancelled) {
+          // do NOT setDatasets([]) — empty datasets is not the right state for a fetch failure
+          toast.error(err instanceof Error ? err.message : t("knowledgeLoadFailed"))
+        }
       } finally {
         if (!cancelled) setLoadingDatasets(false)
       }
@@ -91,14 +97,11 @@ export function KnowledgeStepContent({
 
   return (
     <div className="space-y-4">
-      <Tabs value={state.knowledgeMode} onValueChange={(v) => setMode(v as KnowledgeMode)}>
-        <TabsList>
-          <TabsTrigger value="existing">{t("knowledgeExisting")}</TabsTrigger>
-          <TabsTrigger value="upload">{t("knowledgeUpload")}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="existing">
-          {loadingDatasets ? (
+      <TabsAgentKnowledgeMode
+        value={state.knowledgeMode}
+        onValueChange={(v) => setMode(v as KnowledgeMode)}
+        existingContent={
+          loadingDatasets ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" /> {t("knowledgeLoading")}
             </div>
@@ -109,8 +112,8 @@ export function KnowledgeStepContent({
           ) : (
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {datasets.map((d) => {
-                const status = d.status ?? "pending"
-                const isError = status === "error"
+                const status = d.status ?? DATASET_STATUS.Pending
+                const isError = status === DATASET_STATUS.Error
                 const checked = state.selectedExistingDatasetIds.includes(d.id)
                 return (
                   <button
@@ -141,10 +144,9 @@ export function KnowledgeStepContent({
                 )
               })}
             </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="upload">
+          )
+        }
+        uploadContent={
           <div className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="wizard-dataset-name">{t("knowledgeDatasetNameLabel")}</Label>
@@ -218,8 +220,8 @@ export function KnowledgeStepContent({
               <p className="text-xs text-muted-foreground">{t("knowledgeClickNext")}</p>
             ) : null}
           </div>
-        </TabsContent>
-      </Tabs>
+        }
+      />
 
       <p className="text-xs text-muted-foreground italic">
         {knowledgeRequired ? t("knowledgeRequiredSwitch") : t("knowledgeSkipHint")}

@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Application tables ───────────────────────────────────────────────────────
+
+model Agent {
+  id             String         @id
+  userId         String         @map("user_id")
+  workflowId     Int?           @map("workflow_id")
+  name           String
+  description    String?
+  systemPrompt   String?        @map("system_prompt")
+  steps          String?
+  starterPrompts String?        @map("starter_prompts")
+  model          String?        @default("gpt-4.1-mini")
+  author         String?
+  isPublic       Boolean        @default(false) @map("is_public")
+  createdAt      DateTime?      @map("created_at") @db.Timestamp(6)
+  updatedAt      DateTime?      @map("updated_at") @db.Timestamp(6)
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "agents_user_id_user_id_fk")
+  subagents      AgentSubagent[]
+  conversations  Conversation[]
+
+  @@index([userId])
+  @@map("agents")
+}
+
+model AgentSubagent {
+  id           String    @id
+  agentId      String    @map("agent_id")
+  name         String
+  systemPrompt String    @map("system_prompt")
+  model        String?   @default("gpt-4.1-mini")
+  mcpIds       String?   @map("mcp_ids")
+  datasetId    String?   @map("dataset_id")
+  nodeId       String?   @map("node_id")
+  createdAt    DateTime? @map("created_at") @db.Timestamp(6)
+
+  agent        Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "agent_subagents_agent_id_agents_id_fk")
+  dataset      Dataset?  @relation(fields: [datasetId], references: [id], onUpdate: NoAction, map: "agent_subagents_dataset_id_datasets_id_fk")
+
+  @@index([agentId])
+  @@map("agent_subagents")
+}
+
+model Conversation {
+  id        String    @id
+  agentId   String    @map("agent_id")
+  userId    String    @map("user_id")
+  sessionId String?   @map("session_id")
+  title     String?
+  createdAt DateTime? @map("created_at") @db.Timestamp(6)
+  updatedAt DateTime? @map("updated_at") @db.Timestamp(6)
+
+  agent     Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "conversations_agent_id_agents_id_fk")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "conversations_user_id_user_id_fk")
+  messages  Message[]
+
+  @@index([agentId])
+  @@index([userId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id
+  conversationId String       @map("conversation_id")
+  role           String
+  content        String
+  parts          Json?
+  metadata       String?
+  createdAt      DateTime?    @map("created_at") @db.Timestamp(6)
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "messages_conversation_id_conversations_id_fk")
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model Dataset {
+  id               String          @id
+  userId           String          @map("user_id")
+  clusterDatasetId Int?            @map("cluster_dataset_id")
+  name             String
+  description      String?
+  // "pending" | "processing" | "ready" | "error"
+  status           String?         @default("pending")
+  isPublic         Boolean         @default(false) @map("is_public")
+  createdAt        DateTime?       @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime?       @map("updated_at") @db.Timestamp(6)
+
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "datasets_user_id_user_id_fk")
+  agentSubagents   AgentSubagent[]
+
+  @@index([userId])
+  @@map("datasets")
+}
+
+model Mcp {
+  id            String    @id
+  userId        String    @map("user_id")
+  name          String
+  serverUrl     String    @map("server_url")
+  // "streamable_http" | "sse" | "stdio"
+  transport     String?   @default("streamable_http")
+  authToken     String?   @map("auth_token")
+  description   String?
+  categories    String[]  @default([])
+  type          String?
+  provider      String?
+  pricePerQuery String?   @map("price_per_query")
+  enabled       Boolean?  @default(true)
+  isPublic      Boolean   @default(false) @map("is_public")
+  createdAt     DateTime? @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime? @map("updated_at") @db.Timestamp(6)
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "mcps_user_id_user_id_fk")
+
+  @@index([userId])
+  @@map("mcps")
+}
+
+model Specialist {
+  id           String    @id
+  userId       String    @map("user_id")
+  name         String
+  description  String?
+  systemPrompt String    @map("system_prompt")
+  model        String?   @default("gpt-4.1-mini")
+  mcpIds       String?   @map("mcp_ids")
+  isPublic     Boolean   @default(false) @map("is_public")
+  createdAt    DateTime? @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime? @map("updated_at") @db.Timestamp(6)
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "specialists_user_id_user_id_fk")
+
+  @@index([userId])
+  @@map("specialists")
+}
+
+// ─── better-auth tables (column names are camelCase in the DB — no @map needed) ─
+
+model User {
+  id            String         @id
+  name          String
+  email         String         @unique
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @db.Timestamptz(6)
+
+  account       Account[]
+  session       Session[]
+  agents        Agent[]
+  conversations Conversation[]
+  datasets      Dataset[]
+  mcps          Mcp[]
+  specialists   Specialist[]
+
+  @@map("user")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @db.Timestamptz(6)
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(6)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @db.Timestamptz(6)
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([identifier])
+  @@map("verification")
+}

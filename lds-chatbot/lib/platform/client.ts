@@ -196,6 +196,27 @@ export async function openResponsesStream(
  * progress. Returns the raw upstream `Response` so the caller can pipe
  * its SSE body through `translateResponseStream`.
  */
+/**
+ * Cancels an in-progress response for a given agent workflow. The platform
+ * returns `{ cancelled: boolean }` on success; throws on non-OK status.
+ *
+ * Note: the cancel endpoint does NOT follow the standard `{ success, data }`
+ * envelope — it returns the object directly. `platformFetch` is used instead
+ * of `platformJson` so the caller controls JSON parsing.
+ */
+export async function cancelResponse(
+  workflowId: number,
+  responseId: string,
+  token: string,
+): Promise<{ cancelled: boolean }> {
+  const response = await platformFetch(
+    `/agent/${workflowId}/responses/${encodeURIComponent(responseId)}/cancel`,
+    { method: "POST" },
+    token,
+  )
+  return response.json() as Promise<{ cancelled: boolean }>
+}
+
 export async function resumeResponsesStream(
   workflowId: number,
   responseId: string,

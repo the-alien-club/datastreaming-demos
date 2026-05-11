@@ -19,12 +19,13 @@ interface SpecialistStepContentProps {
 }
 
 export function SpecialistStepContent({ state, setState }: SpecialistStepContentProps) {
-  const t = useTranslations("wizard")
+  const t = useTranslations("wizard.steps.specialist")
+  const tWizard = useTranslations("wizard")
   const [promptOpen, setPromptOpen] = useState(false)
 
   function pick(template: WizardSpecialistTemplate) {
-    const translatedName = template.isCustom ? "" : t(`sp_${template.id}_name` as never)
-    const translatedPrompt = t(`sp_${template.id}_prompt` as never)
+    const translatedName = template.isCustom ? "" : tWizard(`sp_${template.id}_name` as never)
+    const translatedPrompt = tWizard(`sp_${template.id}_prompt` as never)
     setState((prev) => ({
       ...prev,
       specialistTemplateId: template.id,
@@ -49,8 +50,8 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
           <SpecialistCard
             key={template.id}
             template={template}
-            name={t(`sp_${template.id}_name` as never)}
-            description={t(`sp_${template.id}_desc` as never)}
+            name={tWizard(`sp_${template.id}_name` as never)}
+            description={tWizard(`sp_${template.id}_desc` as never)}
             selected={state.specialistTemplateId === template.id}
             onSelect={() => pick(template)}
           />
@@ -69,8 +70,8 @@ export function SpecialistStepContent({ state, setState }: SpecialistStepContent
               }
               placeholder={
                 selectedTemplate.isCustom
-                  ? t("sp_custom_name" as never)
-                  : t(`sp_${selectedTemplate.id}_name` as never)
+                  ? tWizard("sp_custom_name" as never)
+                  : tWizard(`sp_${selectedTemplate.id}_name` as never)
               }
             />
             {trimmedName.length > 0 && trimmedName.length < 3 && (

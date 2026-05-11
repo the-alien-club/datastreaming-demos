@@ -20,7 +20,7 @@ export function PrivacyBadge({
   size?: "xs" | "sm"
   className?: string
 }) {
-  const t = useTranslations("privacy")
+  const t = useTranslations("common.privacy")
   const sizeClasses =
     size === "xs"
       ? "text-[10px] gap-1 px-1.5 py-0"

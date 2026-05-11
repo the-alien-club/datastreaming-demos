@@ -16,6 +16,7 @@ import {
   WrenchIcon,
   XCircleIcon,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement } from "react";
 
@@ -44,16 +45,6 @@ export type ToolHeaderProps = {
     }
 );
 
-const statusLabels: Record<ToolPart["state"], string> = {
-  "approval-requested": "Awaiting Approval",
-  "approval-responded": "Responded",
-  "input-available": "Running",
-  "input-streaming": "Pending",
-  "output-available": "Completed",
-  "output-denied": "Denied",
-  "output-error": "Error",
-};
-
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
   "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
   "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
@@ -64,11 +55,32 @@ const statusIcons: Record<ToolPart["state"], ReactNode> = {
   "output-error": <XCircleIcon className="size-4 text-red-600" />,
 };
 
+export type StatusBadgeProps = { status: ToolPart["state"] };
+
+export const StatusBadge = ({ status }: StatusBadgeProps) => {
+  const t = useTranslations("aiElements.tool");
+
+  const statusLabels: Record<ToolPart["state"], string> = {
+    "approval-requested": t("approvalRequested"),
+    "approval-responded": t("approvalResponded"),
+    "input-available": t("inputAvailable"),
+    "input-streaming": t("inputStreaming"),
+    "output-available": t("outputAvailable"),
+    "output-denied": t("outputDenied"),
+    "output-error": t("outputError"),
+  };
+
+  return (
+    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
+      {statusIcons[status]}
+      {statusLabels[status]}
+    </Badge>
+  );
+};
+
+/** @deprecated Use <StatusBadge status={status} /> instead */
 export const getStatusBadge = (status: ToolPart["state"]) => (
-  <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-    {statusIcons[status]}
-    {statusLabels[status]}
-  </Badge>
+  <StatusBadge status={status} />
 );
 
 export const ToolHeader = ({
@@ -93,7 +105,7 @@ export const ToolHeader = ({
       <div className="flex items-center gap-2">
         <WrenchIcon className="size-4 text-muted-foreground" />
         <span className="font-medium text-sm">{title ?? derivedName}</span>
-        {getStatusBadge(state)}
+        <StatusBadge status={state} />
       </div>
       <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
@@ -116,16 +128,20 @@ export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Parameters
-    </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
+  const t = useTranslations("aiElements.tool");
+
+  return (
+    <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {t("parametersLabel")}
+      </h4>
+      <div className="rounded-md bg-muted/50">
+        <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export type ToolOutputProps = ComponentProps<"div"> & {
   output: ToolPart["output"];
@@ -138,6 +154,8 @@ export const ToolOutput = ({
   errorText,
   ...props
 }: ToolOutputProps) => {
+  const t = useTranslations("aiElements.tool");
+
   if (!(output || errorText)) {
     return null;
   }
@@ -155,7 +173,7 @@ export const ToolOutput = ({
   return (
     <div className={cn("space-y-2", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-        {errorText ? "Error" : "Result"}
+        {errorText ? t("errorLabel") : t("resultLabel")}
       </h4>
       <div
         className={cn(

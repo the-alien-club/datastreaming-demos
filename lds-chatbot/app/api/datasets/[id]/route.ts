@@ -1,84 +1,47 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { datasets, agentSubagents, agents } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
-import { ok, notFound, unauthorized } from "@/lib/api-response"
+import { withAuth } from "@/app/api/_middleware"
+import { ok, notFound } from "@/lib/api-response"
+import { DatasetPolicy } from "@/models/datasets/policy"
+import { getDatasetById, updateDatasetRecord, deleteDatasetRecord } from "@/models/datasets/queries"
+import { getDatasetDetail } from "@/models/datasets/service"
 import { parseBody, updateDatasetBodySchema } from "../../_validators"
+import type { DatasetDetailResponse, DatasetRow } from "../../_validators"
 
-type RouteContext = { params: Promise<{ id: string }> }
+export const GET = withAuth(async (_req, user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const dataset = await getDatasetById(id)
+  if (!dataset) return notFound()
+  await bouncer.with(DatasetPolicy).authorize("view", dataset)
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
+  const detail = await getDatasetDetail(id, user.id)
+  if (!detail) return notFound()
+  return ok<DatasetDetailResponse>(detail)
+})
 
-  const { id } = await context.params
+export const PATCH = withAuth(async (req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const dataset = await getDatasetById(id)
+  if (!dataset) return notFound()
+  await bouncer.with(DatasetPolicy).authorize("edit", dataset)
 
-  const dataset = await db.query.datasets.findFirst({
-    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
-  })
+  const body = await parseBody(req, updateDatasetBodySchema)
+  if (body instanceof Response) return body
 
-  if (!dataset) return notFound("Dataset not found")
+  const updates: Partial<{ name: string; description: string | null; isPublic: boolean }> = {}
+  if (body.name !== undefined) updates.name = body.name.trim()
+  if ("description" in body) updates.description = body.description ?? null
+  if (body.isPublic !== undefined) updates.isPublic = body.isPublic
 
-  // Joining on agents.userId too: defence in depth — even if a stray subagent
-  // row points at this dataset from another user's agent (shouldn't be
-  // possible after the multi-tenancy migration), we never leak that user's
-  // agent name.
-  const subagentRows = await db
-    .selectDistinct({ agentId: agentSubagents.agentId, agentName: agents.name })
-    .from(agentSubagents)
-    .innerJoin(agents, eq(agentSubagents.agentId, agents.id))
-    .where(and(eq(agentSubagents.datasetId, id), eq(agents.userId, session.user.id)))
+  const updated = await updateDatasetRecord(id, updates)
+  if (!updated) return notFound()
+  return ok<DatasetRow>(updated)
+})
 
-  const attachedAgents = subagentRows.map((r) => ({ id: r.agentId, name: r.agentName }))
+export const DELETE = withAuth(async (_req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const dataset = await getDatasetById(id)
+  if (!dataset) return notFound()
+  await bouncer.with(DatasetPolicy).authorize("delete", dataset)
 
-  return ok({ ...dataset, attachedAgents })
-}
-
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-  const existing = await db.query.datasets.findFirst({
-    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
-  })
-  if (!existing) return notFound("Dataset not found")
-
-  const parsed = await parseBody(request, updateDatasetBodySchema)
-  if (parsed instanceof Response) return parsed
-
-  // Partial update — only apply fields the client actually sent.
-  const updates: Partial<typeof datasets.$inferInsert> = { updatedAt: new Date() }
-  if (parsed.name !== undefined) updates.name = parsed.name.trim()
-  if ("description" in parsed) updates.description = parsed.description ?? null
-  if (parsed.isPublic !== undefined) updates.isPublic = parsed.isPublic
-
-  await db
-    .update(datasets)
-    .set(updates)
-    .where(and(eq(datasets.id, id), eq(datasets.userId, session.user.id)))
-
-  const updated = await db.query.datasets.findFirst({
-    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
-  })
-  if (!updated) return notFound("Dataset not found")
-  return ok(updated)
-}
-
-export async function DELETE(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-
-  const existing = await db.query.datasets.findFirst({
-    where: (d, { eq, and }) => and(eq(d.id, id), eq(d.userId, session.user.id)),
-  })
-
-  if (!existing) return notFound("Dataset not found")
-
-  await db.delete(datasets).where(and(eq(datasets.id, id), eq(datasets.userId, session.user.id)))
-
+  await deleteDatasetRecord(id)
   return new Response(null, { status: 204 })
-}
+})

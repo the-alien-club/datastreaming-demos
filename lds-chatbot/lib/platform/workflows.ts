@@ -1,3 +1,5 @@
+import { DEFAULT_MCP_TRANSPORT, DATACLUSTER_MCP_ID } from "@/lib/constants"
+
 export interface McpConfig {
   id: string
   serverUrl: string
@@ -239,7 +241,7 @@ function buildMcpServerNode(
       outputs: [],
       params: {
         server_url: param(serverUrl),
-        transport: param("streamable_http"),
+        transport: param(DEFAULT_MCP_TRANSPORT),
         auth_token: param(authToken),
         tool_filter: param(null),
       },
@@ -322,7 +324,7 @@ export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[])
     subagent.mcpIds.forEach((mcpId, mcpIdx) => {
       const mcpConfig = mcpConfigs.find((m) => m.id === mcpId)
       const serverUrl =
-        mcpId === "datacluster" && process.env.DATACLUSTER_MCP_URL
+        mcpId === DATACLUSTER_MCP_ID && process.env.DATACLUSTER_MCP_URL
           ? process.env.DATACLUSTER_MCP_URL
           : mcpConfig?.serverUrl
 

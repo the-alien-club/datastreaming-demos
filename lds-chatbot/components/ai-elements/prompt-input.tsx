@@ -33,17 +33,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
 import {
   CornerDownLeftIcon,
   ImageIcon,
+  Loader2Icon,
   Monitor,
   PlusIcon,
   SquareIcon,
@@ -415,9 +416,11 @@ export type PromptInputActionAddAttachmentsProps = ComponentProps<
 };
 
 export const PromptInputActionAddAttachments = ({
-  label = "Add photos or files",
+  label,
   ...props
 }: PromptInputActionAddAttachmentsProps) => {
+  const tCommon = useTranslations("common");
+  const resolvedLabel = label ?? tCommon("addPhotosOrFiles");
   const attachments = usePromptInputAttachments();
 
   const handleSelect = useCallback(
@@ -430,7 +433,7 @@ export const PromptInputActionAddAttachments = ({
 
   return (
     <DropdownMenuItem {...props} onSelect={handleSelect}>
-      <ImageIcon className="mr-2 size-4" /> {label}
+      <ImageIcon className="mr-2 size-4" /> {resolvedLabel}
     </DropdownMenuItem>
   );
 };
@@ -442,10 +445,12 @@ export type PromptInputActionAddScreenshotProps = ComponentProps<
 };
 
 export const PromptInputActionAddScreenshot = ({
-  label = "Take screenshot",
+  label,
   onSelect,
   ...props
 }: PromptInputActionAddScreenshotProps) => {
+  const tCommon = useTranslations("common");
+  const resolvedLabel = label ?? tCommon("takeScreenshot");
   const attachments = usePromptInputAttachments();
 
   const handleSelect = useCallback(
@@ -476,7 +481,7 @@ export const PromptInputActionAddScreenshot = ({
   return (
     <DropdownMenuItem {...props} onSelect={handleSelect}>
       <Monitor className="mr-2 size-4" />
-      {label}
+      {resolvedLabel}
     </DropdownMenuItem>
   );
 };
@@ -524,6 +529,7 @@ export const PromptInput = ({
   children,
   ...props
 }: PromptInputProps) => {
+  const tCommon = useTranslations("common");
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController();
   const usingProvider = !!controller;
@@ -907,12 +913,12 @@ export const PromptInput = ({
     <>
       <input
         accept={accept}
-        aria-label="Upload files"
+        aria-label={tCommon("uploadFiles")}
         className="hidden"
         multiple={multiple}
         onChange={handleChange}
         ref={inputRef}
-        title="Upload files"
+        title={tCommon("uploadFiles")}
         type="file"
       />
       <form
@@ -957,9 +963,11 @@ export const PromptInputTextarea = ({
   onChange,
   onKeyDown,
   className,
-  placeholder = "What would you like to know?",
+  placeholder,
   ...props
 }: PromptInputTextareaProps) => {
+  const tCommon = useTranslations("common");
+  const resolvedPlaceholder = placeholder ?? tCommon("defaultPlaceholder");
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
@@ -1061,7 +1069,7 @@ export const PromptInputTextarea = ({
       onCompositionStart={handleCompositionStart}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
-      placeholder={placeholder}
+      placeholder={resolvedPlaceholder}
       {...props}
       {...controlledProps}
     />
@@ -1223,12 +1231,13 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
+  const tCommon = useTranslations("common");
   const isGenerating = status === "submitted" || status === "streaming";
 
   let Icon = <CornerDownLeftIcon className="size-4" />;
 
   if (status === "submitted") {
-    Icon = <Spinner />;
+    Icon = <Loader2Icon className="size-4 animate-spin" role="status" aria-label="Loading" />;
   } else if (status === "streaming") {
     Icon = <SquareIcon className="size-4" />;
   } else if (status === "error") {
@@ -1249,7 +1258,7 @@ export const PromptInputSubmit = ({
 
   return (
     <InputGroupButton
-      aria-label={isGenerating ? "Stop" : "Submit"}
+      aria-label={isGenerating ? tCommon("stop") : tCommon("send")}
       className={cn(className)}
       onClick={handleClick}
       size={size}

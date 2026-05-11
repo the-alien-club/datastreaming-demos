@@ -1,115 +1,66 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { specialists } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
-import { ok, notFound, unauthorized } from "@/lib/api-response"
-import { parseBody, specialistBodySchema, patchVisibilityBodySchema } from "../../_validators"
-import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
+import { withAuth } from "@/app/api/_middleware"
+import { getSpecialistById } from "@/models/specialists/queries"
+import { SpecialistPolicy } from "@/models/specialists/policy"
+import { updateSpecialist, publishSpecialist, deleteSpecialist } from "@/models/specialists/service"
+import { ok, notFound } from "@/lib/api-response"
+import { parseBody, specialistBodySchema, type SpecialistRow } from "../../_validators"
+import { patchVisibilityBodySchema } from "@/models/specialists/types"
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
+/**
+ * GET /api/specialists/:id
+ *
+ * Returns the specialist. Owners and any user when the specialist is public.
+ */
+export const GET = withAuth(async (_req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const specialist = await getSpecialistById(id)
+  if (!specialist) return notFound()
+  await bouncer.with(SpecialistPolicy).authorize("view", specialist)
+  return ok<SpecialistRow>(specialist)
+})
 
-  const { id } = await params
-  const row = await db.query.specialists.findFirst({
-    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
-  })
-
-  if (!row) return notFound()
-
-  return ok(row)
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await params
-
-  const existing = await db.query.specialists.findFirst({
-    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
-  })
-  if (!existing) return notFound()
-
-  const parsed = await parseBody(request, specialistBodySchema)
+/**
+ * PUT /api/specialists/:id
+ *
+ * Full-replace update of a specialist. Only the owner may edit.
+ */
+export const PUT = withAuth(async (req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const specialist = await getSpecialistById(id)
+  if (!specialist) return notFound()
+  await bouncer.with(SpecialistPolicy).authorize("edit", specialist)
+  const parsed = await parseBody(req, specialistBodySchema)
   if (parsed instanceof Response) return parsed
-  const body = parsed
+  const updated = await updateSpecialist(id, parsed)
+  return ok<SpecialistRow>(updated)
+})
 
-  await db
-    .update(specialists)
-    .set({
-      name: body.name.trim(),
-      description: body.description?.trim() ?? null,
-      systemPrompt: body.systemPrompt.trim(),
-      model: body.model ?? DEFAULT_MODEL_SLUG,
-      mcpIds: body.mcpIds && body.mcpIds.length > 0 ? JSON.stringify(body.mcpIds) : null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(specialists.id, id), eq(specialists.userId, session.user.id)))
-
-  const updated = await db.query.specialists.findFirst({
-    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
-  })
-
-  if (!updated) return notFound()
-
-  return ok(updated)
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await params
-
-  const existing = await db.query.specialists.findFirst({
-    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
-  })
-  if (!existing) return notFound()
-
-  const parsed = await parseBody(request, patchVisibilityBodySchema)
+/**
+ * PATCH /api/specialists/:id
+ *
+ * Toggles the specialist's public visibility. Only the owner may publish.
+ */
+export const PATCH = withAuth(async (req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const specialist = await getSpecialistById(id)
+  if (!specialist) return notFound()
+  await bouncer.with(SpecialistPolicy).authorize("publish", specialist)
+  const parsed = await parseBody(req, patchVisibilityBodySchema)
   if (parsed instanceof Response) return parsed
+  const updated = await publishSpecialist(id, parsed.isPublic)
+  return ok<SpecialistRow>(updated)
+})
 
-  await db
-    .update(specialists)
-    .set({ isPublic: parsed.isPublic, updatedAt: new Date() })
-    .where(and(eq(specialists.id, id), eq(specialists.userId, session.user.id)))
-
-  const updated = await db.query.specialists.findFirst({
-    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
-  })
-  if (!updated) return notFound()
-
-  return ok(updated)
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await params
-
-  const existing = await db.query.specialists.findFirst({
-    where: (s, { eq, and }) => and(eq(s.id, id), eq(s.userId, session.user.id)),
-  })
-  if (!existing) return notFound()
-
-  await db
-    .delete(specialists)
-    .where(and(eq(specialists.id, id), eq(specialists.userId, session.user.id)))
-
+/**
+ * DELETE /api/specialists/:id
+ *
+ * Deletes the specialist. Only the owner may delete.
+ */
+export const DELETE = withAuth(async (_req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const specialist = await getSpecialistById(id)
+  if (!specialist) return notFound()
+  await bouncer.with(SpecialistPolicy).authorize("delete", specialist)
+  await deleteSpecialist(id)
   return new Response(null, { status: 204 })
-}
+})

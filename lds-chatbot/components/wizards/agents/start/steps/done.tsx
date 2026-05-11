@@ -4,8 +4,11 @@ import { useEffect, useState } from "react"
 import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/routing"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { CheckCircle2, Loader2, Settings } from "lucide-react"
 import { apiFetch } from "@/lib/api-fetch"
+import { WIZARD_DATASET_POLL_INTERVAL_MS } from "@/lib/constants"
+import { ENTRY_STATUS } from "@/lib/db/schema"
 import type { WizardState } from "../state"
 
 interface DoneStepContentProps {
@@ -24,7 +27,7 @@ interface DatasetStatusResponse {
 }
 
 export function DoneStepContent({ state, onClose, onComplete }: DoneStepContentProps) {
-  const t = useTranslations("wizard")
+  const t = useTranslations("wizard.steps.done")
   const [statusByDataset, setStatusByDataset] = useState<Record<string, DatasetStatusResponse>>({})
 
   useEffect(() => {
@@ -49,10 +52,10 @@ export function DoneStepContent({ state, onClose, onComplete }: DoneStepContentP
       setStatusByDataset(next)
 
       const allDone = state.uploadedDatasetIds.every(
-        (id) => next[id]?.overall === "processed" || next[id]?.overall === "error",
+        (id) => next[id]?.overall === ENTRY_STATUS.Processed || next[id]?.overall === ENTRY_STATUS.Error,
       )
       if (!allDone) {
-        timer = setTimeout(poll, 5000)
+        timer = setTimeout(poll, WIZARD_DATASET_POLL_INTERVAL_MS)
       }
     }
 
@@ -72,8 +75,8 @@ export function DoneStepContent({ state, onClose, onComplete }: DoneStepContentP
   const stillProcessing = state.uploadedDatasetIds.some(
     (id) =>
       statusByDataset[id] &&
-      statusByDataset[id].overall !== "processed" &&
-      statusByDataset[id].overall !== "error",
+      statusByDataset[id].overall !== ENTRY_STATUS.Processed &&
+      statusByDataset[id].overall !== ENTRY_STATUS.Error,
   )
 
   return (
@@ -83,38 +86,42 @@ export function DoneStepContent({ state, onClose, onComplete }: DoneStepContentP
         <span className="font-semibold">{t("doneReady")}</span>
       </div>
 
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="text-sm font-semibold">{state.name}</div>
-            {state.description && (
-              <div className="text-xs text-muted-foreground">{state.description}</div>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            <Badge variant="secondary" className="text-[10px]">
-              {state.model}
-            </Badge>
-            {state.specialistName && (
-              <Badge variant="outline" className="text-[10px]">
-                {state.specialistName}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="text-sm font-semibold">{state.name}</div>
+              {state.description && (
+                <div className="text-xs text-muted-foreground">{state.description}</div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              <Badge variant="secondary" className="text-[10px]">
+                {state.model}
               </Badge>
-            )}
-            <Badge variant="outline" className="text-[10px]">
-              {t("doneTools", { count: state.selectedMcpIds.length })}
-            </Badge>
-            <Badge variant="outline" className="text-[10px]">
-              {t("doneDocs", { count: documentCount })}
-            </Badge>
+              {state.specialistName && (
+                <Badge variant="outline" className="text-[10px]">
+                  {state.specialistName}
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px]">
+                {t("doneTools", { count: state.selectedMcpIds.length })}
+              </Badge>
+              <Badge variant="outline" className="text-[10px]">
+                {t("doneDocs", { count: documentCount })}
+              </Badge>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {stillProcessing && (
-        <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          <span>{t("doneProcessing")}</span>
-        </div>
+        <Card>
+          <CardContent className="flex items-center gap-2 p-3 text-xs text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>{t("doneProcessing")}</span>
+          </CardContent>
+        </Card>
       )}
 
       {state.agentId && (

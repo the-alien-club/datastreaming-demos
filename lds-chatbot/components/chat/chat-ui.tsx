@@ -11,6 +11,7 @@ import { useTranslations } from "next-intl"
 import type { UIMessage } from "ai"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Conversation,
   ConversationContent,
@@ -143,14 +144,16 @@ function TypingIndicator() {
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
         <Bot className="h-4 w-4 text-muted-foreground" />
       </div>
-      <div className="rounded-xl rounded-tl-none border bg-card px-4 py-3 flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{t("thinking")}</span>
-        <span className="flex items-center gap-1" aria-hidden>
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
-        </span>
-      </div>
+      <Card className="rounded-xl rounded-tl-none gap-0 py-0">
+        <CardContent className="px-4 py-3 flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">{t("thinking")}</span>
+          <span className="flex items-center gap-1" aria-hidden>
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+          </span>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -268,17 +271,19 @@ const ToolCallCard = memo(function ToolCallCard({
 function SubagentDispatchBlock({ description }: { description: string | null }) {
   const t = useTranslations("chat")
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-900 dark:text-violet-200">
-      <UsersRound className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
-      <div className="min-w-0 flex-1">
-        <div className="font-medium">{t("delegating")}</div>
-        {description && (
-          <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs opacity-80">
-            {description}
-          </div>
-        )}
-      </div>
-    </div>
+    <Card className="gap-0 py-0 border-violet-500/30 bg-violet-500/10 text-sm text-violet-900 dark:text-violet-200">
+      <CardContent className="px-3 py-2 flex items-start gap-2">
+        <UsersRound className="mt-0.5 h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">{t("delegating")}</div>
+          {description && (
+            <div className="mt-0.5 line-clamp-3 whitespace-pre-wrap break-words text-xs opacity-80">
+              {description}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -441,6 +446,7 @@ export function ChatUI({
   onNewChat,
 }: ChatUIProps) {
   const t = useTranslations("chat")
+  const tCommon = useTranslations("common")
   const [input, setInput] = useState("")
   const isLoading = status === "submitted" || status === "streaming"
 
@@ -497,7 +503,7 @@ export function ChatUI({
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-3 sm:px-6 sm:py-4">
         <h1 className="truncate text-lg font-semibold">
-          {agentName ?? "Chat"}
+          {agentName ?? t("defaultTitle")}
         </h1>
         {onNewChat && (
           <Button variant="outline" size="sm" onClick={onNewChat}>
@@ -543,9 +549,11 @@ export function ChatUI({
           {showStandaloneIndicator && <TypingIndicator />}
 
           {status === "error" && error && (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-              Error: {error.message}
-            </div>
+            <Card className="gap-0 py-0 border-destructive/20 bg-destructive/10">
+              <CardContent className="px-4 py-2 text-sm text-destructive">
+                Error: {error.message}
+              </CardContent>
+            </Card>
           )}
         </ConversationContent>
         <ConversationScrollButton />
@@ -594,10 +602,10 @@ export function ChatUI({
               variant="outline"
               onClick={onStop}
               className="h-11 w-11 shrink-0"
-              title="Stop (Esc)"
+              title={t("stopEsc")}
             >
               <Square className="h-4 w-4 fill-current" />
-              <span className="sr-only">Stop</span>
+              <span className="sr-only">{tCommon("stop")}</span>
             </Button>
           ) : (
             <Button
@@ -607,7 +615,7 @@ export function ChatUI({
               className="h-11 w-11 shrink-0"
             >
               <SendHorizonal className="h-4 w-4" />
-              <span className="sr-only">Send</span>
+              <span className="sr-only">{tCommon("send")}</span>
             </Button>
           )}
         </form>

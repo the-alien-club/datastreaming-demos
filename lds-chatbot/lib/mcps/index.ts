@@ -1,6 +1,4 @@
-import { db } from "@/lib/db"
-import { mcps } from "@/lib/db/schema"
-import { and, eq, ne, or } from "drizzle-orm"
+import { prisma } from "@/lib/db"
 import type { McpConfig } from "@/lib/platform/workflows"
 
 // MCP registrations live entirely in the `mcps` table. The legacy
@@ -11,15 +9,12 @@ import type { McpConfig } from "@/lib/platform/workflows"
 // Returns enabled MCPs owned by this user PLUS enabled public MCPs from other
 // users so that workflow graphs built for this user can reference shared MCPs.
 export async function loadEnabledMcpConfigs(userId: string): Promise<McpConfig[]> {
-  const rows = await db
-    .select()
-    .from(mcps)
-    .where(
-      and(
-        eq(mcps.enabled, true),
-        or(eq(mcps.userId, userId), and(eq(mcps.isPublic, true), ne(mcps.userId, userId))),
-      ),
-    )
+  const rows = await prisma.mcp.findMany({
+    where: {
+      enabled: true,
+      OR: [{ userId }, { isPublic: true, userId: { not: userId } }],
+    },
+  })
   return rows.map((r) => ({
     id: r.id,
     serverUrl: r.serverUrl,

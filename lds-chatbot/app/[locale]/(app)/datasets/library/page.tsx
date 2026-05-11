@@ -2,43 +2,32 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { getTranslations } from "next-intl/server"
-import { db } from "@/lib/db"
-import { datasets, agentSubagents } from "@/lib/db/schema"
-import { desc, eq, sql } from "drizzle-orm"
+import { prisma } from "@/lib/db"
 import { Database } from "lucide-react"
-import { type DatasetRowData } from "@/components/cards/dataset-row"
-import { DatasetsReadonlyGrid } from "@/components/grids/datasets-readonly-grid"
+import { Card, CardContent } from "@/components/ui/card"
+import { type DatasetRowData } from "@/components/cards/datasets/row"
+import { LayoutDatasetsReadonlyGrid } from "@/components/layouts/datasets/readonly-grid"
 
 export default async function CorpusLibraryPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const [publicRows, t] = await Promise.all([
-    db
-      .select({
-        id: datasets.id,
-        name: datasets.name,
-        description: datasets.description,
-        status: datasets.status,
-        isPublic: datasets.isPublic,
-        createdAt: datasets.createdAt,
-        attachedAgentCount: sql<number>`count(distinct ${agentSubagents.agentId})`,
-      })
-      .from(datasets)
-      .leftJoin(agentSubagents, eq(agentSubagents.datasetId, datasets.id))
-      .where(eq(datasets.isPublic, true))
-      .groupBy(datasets.id)
-      .orderBy(desc(datasets.createdAt)),
+  const [publicDatasets, t] = await Promise.all([
+    prisma.dataset.findMany({
+      where: { isPublic: true },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { agentSubagents: true } } },
+    }),
     getTranslations("datasets"),
   ])
 
-  const rows: DatasetRowData[] = publicRows.map((r) => ({
+  const rows: DatasetRowData[] = publicDatasets.map((r) => ({
     id: r.id,
     name: r.name,
     description: r.description,
     status: r.status,
     isPublic: r.isPublic,
-    attachedAgentCount: Number(r.attachedAgentCount),
+    attachedAgentCount: r._count.agentSubagents,
     createdAt: r.createdAt ? r.createdAt.getTime() : null,
   }))
 
@@ -50,12 +39,14 @@ export default async function CorpusLibraryPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
-          <Database className="h-10 w-10 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground font-medium">{t("emptyDescription")}</p>
-        </div>
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <Database className="h-10 w-10 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground font-medium">{t("emptyDescription")}</p>
+          </CardContent>
+        </Card>
       ) : (
-        <DatasetsReadonlyGrid datasets={rows} />
+        <LayoutDatasetsReadonlyGrid datasets={rows} />
       )}
     </div>
   )

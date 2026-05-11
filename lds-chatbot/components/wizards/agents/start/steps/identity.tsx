@@ -5,18 +5,9 @@ import { useTranslations } from "next-intl"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ChevronDown, ChevronUp } from "lucide-react"
-import {
-  type PublicAIModel,
-  providerLabelFromModel,
-} from "@/lib/platform/client"
+import { type PublicAIModel } from "@/lib/platform/client"
+import { SelectModelPicker } from "@/components/selects/model/picker"
 import type { WizardSetState, WizardState } from "../state"
 
 interface IdentityStepContentProps {
@@ -26,7 +17,7 @@ interface IdentityStepContentProps {
 }
 
 export function IdentityStepContent({ state, setState, models }: IdentityStepContentProps) {
-  const t = useTranslations("wizard")
+  const t = useTranslations("wizard.steps.identity")
   const tCommon = useTranslations("common")
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const trimmedName = state.name.trim()
@@ -91,24 +82,13 @@ export function IdentityStepContent({ state, setState, models }: IdentityStepCon
                 onChange={(e) => setState((prev) => ({ ...prev, model: e.target.value }))}
               />
             ) : (
-              <Select
+              <SelectModelPicker
+                id="wizard-agent-model"
                 value={state.model}
                 onValueChange={(v) => setState((prev) => ({ ...prev, model: v }))}
-              >
-                <SelectTrigger id="wizard-agent-model" className="w-full">
-                  <SelectValue placeholder={tCommon("selectModel")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((m) => (
-                    <SelectItem key={m.id} value={m.slug}>
-                      <span>{m.name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {providerLabelFromModel(m)}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                models={models}
+                placeholder={tCommon("selectModel")}
+              />
             )}
           </div>
         </div>

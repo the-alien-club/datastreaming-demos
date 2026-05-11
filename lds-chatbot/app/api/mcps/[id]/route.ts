@@ -1,74 +1,49 @@
-import { NextRequest } from "next/server"
-import { auth } from "@/lib/auth"
-import { db } from "@/lib/db"
-import { mcps } from "@/lib/db/schema"
-import { and, eq } from "drizzle-orm"
-import { notFound, ok, unauthorized } from "@/lib/api-response"
-import { parseBody, updateMcpBodySchema } from "../../_validators"
+import { withAuth } from "@/app/api/_middleware"
+import { getMcpById } from "@/models/mcps/queries"
+import { McpPolicy } from "@/models/mcps/policy"
+import { updateMcp, deleteMcp } from "@/models/mcps/service"
+import { ok, notFound } from "@/lib/api-response"
+import { parseBody, updateMcpBodySchema, type McpRow } from "../../_validators"
 
-type RouteContext = { params: Promise<{ id: string }> }
+/**
+ * GET /api/mcps/:id
+ *
+ * Returns the MCP server entry. Owners and any user when the MCP is public.
+ */
+export const GET = withAuth(async (_req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const mcp = await getMcpById(id)
+  if (!mcp) return notFound()
+  await bouncer.with(McpPolicy).authorize("view", mcp)
+  return ok<McpRow>(mcp)
+})
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-  const mcp = await db.query.mcps.findFirst({
-    where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
-  })
-  if (!mcp) return notFound("MCP not found")
-
-  return ok(mcp)
-}
-
-export async function PUT(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-  const existing = await db.query.mcps.findFirst({
-    where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
-  })
-  if (!existing) return notFound("MCP not found")
-
-  const parsed = await parseBody(request, updateMcpBodySchema)
+/**
+ * PUT /api/mcps/:id
+ *
+ * Full-replace update of an MCP server entry. Only the owner may edit.
+ */
+export const PUT = withAuth(async (req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const mcp = await getMcpById(id)
+  if (!mcp) return notFound()
+  await bouncer.with(McpPolicy).authorize("edit", mcp)
+  const parsed = await parseBody(req, updateMcpBodySchema)
   if (parsed instanceof Response) return parsed
-  const body = parsed
+  const updated = await updateMcp(id, parsed, mcp)
+  return ok<McpRow>(updated)
+})
 
-  await db
-    .update(mcps)
-    .set({
-      name: body.name?.trim() ?? existing.name,
-      serverUrl: body.serverUrl?.trim() ?? existing.serverUrl,
-      transport: body.transport ?? existing.transport,
-      authToken: "authToken" in body ? (body.authToken ?? null) : existing.authToken,
-      description: "description" in body ? (body.description ?? null) : existing.description,
-      categories: "categories" in body && body.categories ? body.categories : existing.categories,
-      type: "type" in body ? (body.type ?? null) : existing.type,
-      provider: "provider" in body ? (body.provider ?? null) : existing.provider,
-      pricePerQuery: "pricePerQuery" in body ? (body.pricePerQuery ?? null) : existing.pricePerQuery,
-      enabled: body.enabled ?? existing.enabled,
-      isPublic: body.isPublic ?? existing.isPublic,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(mcps.id, id), eq(mcps.userId, session.user.id)))
-
-  const updated = await db.query.mcps.findFirst({
-    where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
-  })
-  return ok(updated)
-}
-
-export async function DELETE(request: NextRequest, context: RouteContext) {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return unauthorized()
-
-  const { id } = await context.params
-  const existing = await db.query.mcps.findFirst({
-    where: (m, { eq, and }) => and(eq(m.id, id), eq(m.userId, session.user.id)),
-  })
-  if (!existing) return notFound("MCP not found")
-
-  await db.delete(mcps).where(and(eq(mcps.id, id), eq(mcps.userId, session.user.id)))
+/**
+ * DELETE /api/mcps/:id
+ *
+ * Deletes the MCP server entry. Only the owner may delete.
+ */
+export const DELETE = withAuth(async (_req, _user, bouncer, ctx) => {
+  const { id } = await ctx.params
+  const mcp = await getMcpById(id)
+  if (!mcp) return notFound()
+  await bouncer.with(McpPolicy).authorize("delete", mcp)
+  await deleteMcp(id)
   return new Response(null, { status: 204 })
-}
+})

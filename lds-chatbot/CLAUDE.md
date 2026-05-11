@@ -18,7 +18,7 @@ Concretely: a Next.js 16 web app where users create AI agents backed by the Alie
 | UI | React 19, TailwindCSS v4, shadcn/ui |
 | Auth | better-auth + Authentik OAuth2/OIDC |
 | AI SDK | Vercel AI SDK v6 (`ai` + `@ai-sdk/react`) |
-| Local DB | Postgres 16 + Drizzle ORM (`pg` driver) |
+| Local DB | Postgres 16 + Prisma ORM (`pg` driver adapter) |
 | Platform | Alien Backend (AdonisJS) — workflow engine |
 | Data Layer | Alien Data Cluster via `@alien/data-api-client` |
 
@@ -170,9 +170,9 @@ When attaching a dataset to an agent, the UI auto-generates a subagent node whos
 
 ---
 
-## Local Database Schema (`lib/db/schema.ts`)
+## Local Database Schema (`prisma/schema.prisma`)
 
-All state is in a local Postgres database. Drizzle ORM manages the schema; migrations in `lib/db/migrations/`. `docker-compose.yml` brings up a single Postgres 16 container for local dev (port 5435); the Helm chart provisions a per-deployment Postgres StatefulSet for production.
+All state is in a local Postgres database. Prisma manages the schema and migrations. `docker-compose.yml` brings up a single Postgres 16 container for local dev (port 5435); the Helm chart provisions a per-deployment Postgres StatefulSet for production.
 
 | Table | Purpose |
 |---|---|
@@ -209,12 +209,12 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```bash
 npm install
 npm run dev          # Next.js dev server on :3000
-npm run db:migrate   # Apply Drizzle migrations
+npm run db:migrate   # Apply Prisma migrations (prisma migrate deploy)
 npm run auth:migrate # Run better-auth migration (first time only)
 npm run build
 ```
 
-Migrations live in `drizzle/` and are generated with `npm run db:generate` after schema changes.
+Schema changes: edit `prisma/schema.prisma`, then run `npx prisma migrate dev --name <description>` to generate and apply a new migration. Generated client lives in `lib/generated/prisma/`.
 
 ---
 
@@ -225,7 +225,9 @@ Migrations live in `drizzle/` and are generated with `npm run db:generate` after
 | `lib/platform/workflows.ts` | Workflow graph builder — all node and edge construction |
 | `lib/platform/client.ts` | Platform API client — workflow CRUD, AI-model lookup |
 | `lib/platform/responses_stream.ts` | OpenAI Responses-API SSE → AI SDK UI message parts translator |
-| `lib/db/schema.ts` | Drizzle table definitions |
+| `lib/db/schema.ts` | Domain enum barrel (re-exports `DATASET_STATUS`, `ENTRY_STATUS`, etc.) |
+| `lib/db/index.ts` | Prisma client singleton + shared pg Pool + auth helpers |
+| `prisma/schema.prisma` | Canonical database schema |
 | `lib/auth.ts` | better-auth session config |
 | `lib/auth-helpers.ts` | Access token resolution |
 | `app/api/chat/route.ts` | Internal chat endpoint (auth proxy → platform Responses API) |
@@ -288,7 +290,7 @@ i18n: French (`fr`) is the default locale with no URL prefix (`as-needed` strate
 
 No global store. Three tiers:
 
-1. **Server state**: Next.js Server Components query Drizzle directly — Agent list, Conversations list, Specialists list.
+1. **Server state**: Next.js Server Components query Prisma directly — Agent list, Conversations list, Specialists list.
 2. **Client-local**: `useState` + `useEffect` + `apiFetch()` for interactive pages — `datasets-view.tsx`, `mcps-view.tsx`, `new-agent-form.tsx`.
 3. **Streaming chat**: Vercel AI SDK `useChat` hook, backed by `POST /api/chat` SSE.
 4. **Wizard state**: Single `WizardState` object in `useState` inside `StartWizard`, passed as `state + setState` to each step. Accessible anywhere via `useWizardStart()` context.
