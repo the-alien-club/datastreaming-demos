@@ -51,7 +51,6 @@ export function FormSpecialistCreate({
 }: FormSpecialistCreateProps) {
   const t = useTranslations("specialists.form")
   const tCommon = useTranslations("common")
-  const tSpec = useTranslations("specialists")
 
   const form = useForm<FormSpecialistCreateData>({
     resolver: zodResolver(specialistCreateSchema),
@@ -167,9 +166,9 @@ export function FormSpecialistCreate({
               <FormControl>
                 {availableMcps.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    {tSpec("noMcps")}{" "}
+                    {t("noMcps")}{" "}
                     <Link href="/mcps" className="underline">{tCommon("addOne")}</Link>{" "}
-                    {tSpec("enableTools")}
+                    {t("enableTools")}
                   </p>
                 ) : (
                   <div className="space-y-2">

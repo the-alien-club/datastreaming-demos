@@ -26,6 +26,7 @@ export type AgentInsert = {
   model?: string | null
   author?: string | null
   isPublic?: boolean
+  isForkable?: boolean
   createdAt?: Date | null
   updatedAt?: Date | null
 }

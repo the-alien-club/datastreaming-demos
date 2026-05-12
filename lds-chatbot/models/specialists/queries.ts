@@ -49,6 +49,18 @@ export async function getSpecialistById(id: string): Promise<Specialist | undefi
 }
 
 /**
+ * Returns all public specialists, newest first.
+ * Intended for the public library — includes the viewer's own public specialists.
+ */
+export async function getAllPublicSpecialists(): Promise<Specialist[]> {
+  return prisma.specialist.findMany({
+    where: { isPublic: true },
+    orderBy: { createdAt: "desc" },
+    ...specialistRow,
+  })
+}
+
+/**
  * Returns all public specialists NOT owned by `userId`, newest first.
  */
 export async function getPublicSpecialists(userId: string): Promise<SpecialistWithOwnership[]> {

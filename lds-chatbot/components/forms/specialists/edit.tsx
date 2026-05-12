@@ -13,6 +13,7 @@ import {
   FormItem,
   FormLabel,
   FormControl,
+  FormDescription,
   FormMessage,
 } from "@/components/ui/form"
 import { Loader2 } from "lucide-react"
@@ -21,6 +22,7 @@ import { type PublicAIModel } from "@/lib/platform/client"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 import { SelectModelPicker } from "@/components/selects/model/picker"
 import { type McpOption } from "@/components/forms/specialists/create"
+import { Switch } from "@/components/ui/switch"
 
 const specialistEditSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -28,6 +30,7 @@ const specialistEditSchema = z.object({
   systemPrompt: z.string().min(1, "System prompt is required"),
   model: z.string().min(1, "Model is required"),
   mcpIds: z.array(z.string()),
+  isForkable: z.boolean(),
 })
 
 export type FormSpecialistEditData = z.infer<typeof specialistEditSchema>
@@ -39,6 +42,7 @@ type FormSpecialistEditProps = {
     systemPrompt: string
     model: string
     mcpIds: string[]
+    isForkable: boolean
   }
   models: PublicAIModel[]
   availableMcps: McpOption[]
@@ -55,7 +59,6 @@ export function FormSpecialistEdit({
 }: FormSpecialistEditProps) {
   const t = useTranslations("specialists.form")
   const tCommon = useTranslations("common")
-  const tSpec = useTranslations("specialists")
 
   const form = useForm<FormSpecialistEditData>({
     resolver: zodResolver(specialistEditSchema),
@@ -65,6 +68,7 @@ export function FormSpecialistEdit({
       systemPrompt: initialValues.systemPrompt,
       model: initialValues.model,
       mcpIds: initialValues.mcpIds,
+      isForkable: initialValues.isForkable,
     },
   })
 
@@ -171,9 +175,9 @@ export function FormSpecialistEdit({
               <FormControl>
                 {availableMcps.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    {tSpec("noMcps")}{" "}
+                    {t("noMcps")}{" "}
                     <Link href="/mcps" className="underline">{tCommon("addOne")}</Link>{" "}
-                    {tSpec("enableTools")}
+                    {t("enableTools")}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -208,6 +212,31 @@ export function FormSpecialistEdit({
                   </div>
                 )}
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="isForkable"
+          render={({ field }) => (
+            <FormItem>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <FormLabel>{t("isForkableLabel")}</FormLabel>
+                  <FormDescription className="text-xs">
+                    {t("isForkableHint")}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={form.formState.isSubmitting}
+                  />
+                </FormControl>
+              </div>
               <FormMessage />
             </FormItem>
           )}

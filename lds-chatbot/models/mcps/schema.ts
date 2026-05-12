@@ -20,6 +20,16 @@ export type McpTransport = (typeof MCP_TRANSPORT)[keyof typeof MCP_TRANSPORT]
 // valid `McpDefaultArgs` shape, literal types are preserved, and
 // `McpGetPayload<typeof shape>` derives an accurate TypeScript type.
 
+// Minimal MCP name lookup shape. Used wherever only id + name are needed
+// (e.g. resolving MCP names for display in specialist cards).
+export const mcpNameRow = {
+  select: {
+    id: true,
+    name: true,
+  },
+} satisfies Prisma.McpDefaultArgs
+export type McpName = Prisma.McpGetPayload<typeof mcpNameRow>
+
 // Plain MCP server row. Used by policies and every query that returns MCP
 // records without cross-model relations.
 export const mcpRow = {

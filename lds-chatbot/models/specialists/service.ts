@@ -28,6 +28,7 @@ export async function createSpecialist(
     systemPrompt: data.systemPrompt.trim(),
     model: data.model ?? DEFAULT_MODEL_SLUG,
     mcpIds: data.mcpIds && data.mcpIds.length > 0 ? JSON.stringify(data.mcpIds) : null,
+    isForkable: data.isForkable,
     createdAt: now,
     updatedAt: now,
   })
@@ -48,6 +49,7 @@ export async function updateSpecialist(
     systemPrompt: data.systemPrompt.trim(),
     model: data.model ?? DEFAULT_MODEL_SLUG,
     mcpIds: data.mcpIds && data.mcpIds.length > 0 ? JSON.stringify(data.mcpIds) : null,
+    isForkable: data.isForkable,
     updatedAt: new Date(),
   })
 }
@@ -70,4 +72,32 @@ export async function publishSpecialist(
  */
 export async function deleteSpecialist(id: string): Promise<void> {
   await deleteSpecialistRecord(id)
+}
+
+/**
+ * Creates a copy of a forkable specialist under a new owner.
+ *
+ * The source specialist must be public and isForkable — both checks are
+ * enforced by the route handler via SpecialistPolicy before calling here.
+ * The forked specialist is private by default.
+ */
+export async function forkSpecialist(
+  source: Specialist,
+  targetUserId: string,
+  nameSuffix: string,
+): Promise<Specialist> {
+  const now = new Date()
+  return insertSpecialist({
+    id: crypto.randomUUID(),
+    userId: targetUserId,
+    name: `${source.name}${nameSuffix}`,
+    description: source.description ?? null,
+    systemPrompt: source.systemPrompt,
+    model: source.model ?? DEFAULT_MODEL_SLUG,
+    mcpIds: source.mcpIds ?? null,
+    isPublic: false,
+    isForkable: false,
+    createdAt: now,
+    updatedAt: now,
+  })
 }

@@ -170,6 +170,8 @@
       "createdAtLabel": "Date de création",
       "saveButton": "Enregistrer",
       "deleteButton": "Supprimer l'assistant",
+      "isForkableLabel": "Autoriser la duplication",
+      "isForkableHint": "Les membres peuvent copier cet assistant dans leur bibliothèque depuis la bibliothèque publique.",
       "stepsTitle": "Étapes",
       "stepsSubtitle": "Instructions séquentielles ajoutées au prompt système.",
       "addStep": "Ajouter une étape",
@@ -204,6 +206,7 @@
     },
     "card": {
       "fork": "Dupliquer",
+      "forkCopySuffix": " (copie)",
       "forked": "{name} dupliqué — vous pouvez maintenant l’utiliser et le modifier.",
       "forkFailed": "Impossible de dupliquer l’assistant",
       "stepsCount": "{count, plural, one {# étape} other {# étapes}}",
@@ -254,7 +257,24 @@
       "specialistNamePlaceholder": "Nom de l'agent IA spécialisé",
       "createButton": "Créer l'agent IA spécialisé",
       "saveButton": "Enregistrer",
-      "deleteButton": "Supprimer l'agent IA spécialisé"
+      "deleteButton": "Supprimer l'agent IA spécialisé",
+      "isForkableLabel": "Autoriser la duplication",
+      "isForkableHint": "Les membres peuvent copier cet agent IA spécialisé dans leur bibliothèque depuis la bibliothèque publique.",
+      "noMcps": "Aucun MCP enregistré.",
+      "enableTools": "pour activer les outils."
+    },
+    "page": {
+      "libraryTitle": "Bibliothèque d'agents IA spécialisés",
+      "librarySubtitle": "Agents IA spécialisés publics disponibles pour tous les membres.",
+      "noPublicSpecialists": "Aucun agent IA spécialisé disponible pour le moment.",
+      "createFirst": "Créer votre premier agent IA spécialisé"
+    },
+    "card": {
+      "created": "Créé le {date}",
+      "fork": "Dupliquer",
+      "forkCopySuffix": " (copie)",
+      "forked": "{name} dupliqué — vous pouvez maintenant l'utiliser et le modifier.",
+      "forkFailed": "Impossible de dupliquer l'agent IA spécialisé"
     },
     "dialog": {
       "title": "Ajouter un agent IA spécialisé",

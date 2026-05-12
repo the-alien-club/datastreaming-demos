@@ -1,25 +1,22 @@
 "use client"
 
 import { useTranslations } from "next-intl"
-import { useRouter } from "@/i18n/routing"
 import { GitFork, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { useForkAgent } from "@/hooks/api/agents"
+import { useForkSpecialist } from "@/hooks/api/specialists"
 
-export function CardAgentForkAction({ agentId }: { agentId: string }) {
-  const t = useTranslations("agents.card")
-  const router = useRouter()
-  const { mutate: forkAgent, isPending } = useForkAgent()
+export function CardSpecialistForkAction({ specialistId }: { specialistId: string }) {
+  const t = useTranslations("specialists.card")
+  const { mutate: forkSpecialist, isPending } = useForkSpecialist()
 
   function handleFork() {
-    forkAgent(
-      { id: agentId, nameSuffix: t("forkCopySuffix") },
+    forkSpecialist(
+      { id: specialistId, nameSuffix: t("forkCopySuffix") },
       {
         onSuccess: (forked) => {
           toast.success(t("forked", { name: forked.name }))
-          router.push(`/agents/${forked.id}/chat`)
         },
         onError: (err) => {
           toast.error(err.message || t("forkFailed"))

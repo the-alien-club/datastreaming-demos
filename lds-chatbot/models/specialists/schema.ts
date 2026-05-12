@@ -20,6 +20,7 @@ export const specialistRow = {
     model: true,
     mcpIds: true,
     isPublic: true,
+    isForkable: true,
     createdAt: true,
     updatedAt: true,
   },

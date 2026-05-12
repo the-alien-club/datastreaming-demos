@@ -21,6 +21,7 @@ model Agent {
   model          String?        @default("gpt-4.1-mini")
   author         String?
   isPublic       Boolean        @default(false) @map("is_public")
+  isForkable     Boolean        @default(false) @map("is_forkable")
   createdAt      DateTime?      @map("created_at") @db.Timestamp(6)
   updatedAt      DateTime?      @map("updated_at") @db.Timestamp(6)
 
@@ -135,6 +136,7 @@ model Specialist {
   model        String?   @default("gpt-4.1-mini")
   mcpIds       String?   @map("mcp_ids")
   isPublic     Boolean   @default(false) @map("is_public")
+  isForkable   Boolean   @default(false) @map("is_forkable")
   createdAt    DateTime? @map("created_at") @db.Timestamp(6)
   updatedAt    DateTime? @map("updated_at") @db.Timestamp(6)
 

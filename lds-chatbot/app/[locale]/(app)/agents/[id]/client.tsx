@@ -64,6 +64,7 @@ export interface AgentRecord {
   systemPrompt: string | null
   steps: string | null
   model: string | null
+  isForkable: boolean
   createdAt: number | null
   updatedAt: number | null
   subagents: SubagentRecord[]
@@ -147,6 +148,7 @@ export function AgentDetailClient({
         systemPrompt: data.systemPrompt.trim(),
         steps: data.steps,
         model: data.model,
+        isForkable: data.isForkable,
         subagents: subagents.map((sa) => ({
           name: sa.name,
           description: sa.description,
@@ -217,6 +219,7 @@ export function AgentDetailClient({
             systemPrompt: initialAgent.systemPrompt ?? "",
             model: initialAgent.model ?? DEFAULT_MODEL,
             steps: initialSteps,
+            isForkable: initialAgent.isForkable,
           }}
           models={initialModels}
           hideSubmit

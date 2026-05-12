@@ -83,3 +83,9 @@ export const WIZARD_DATASET_POLL_INTERVAL_MS = 5_000
  * auto-wires a corpus subagent or resolves the MCP server URL from the env.
  */
 export const DATACLUSTER_MCP_ID = "datacluster"
+
+/**
+ * Error returned by fork routes when the resource has isForkable = false.
+ * Used in both the agent and specialist fork handlers.
+ */
+export const ERR_NOT_FORKABLE = "Resource is not forkable"

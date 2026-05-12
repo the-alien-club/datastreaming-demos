@@ -108,7 +108,7 @@ export function CardAgent({
               />
             </>
           )}
-          {forkable && <CardAgentForkAction agentId={agent.id} />}
+          {forkable && agent.isForkable && <CardAgentForkAction agentId={agent.id} />}
         </div>
       </CardFooter>
     </Card>

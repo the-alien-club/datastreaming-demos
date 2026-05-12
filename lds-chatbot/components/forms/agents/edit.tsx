@@ -20,6 +20,7 @@ import { Loader2, Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
 import { type PublicAIModel } from "@/lib/platform/client"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 import { SelectModelPicker } from "@/components/selects/model/picker"
+import { Switch } from "@/components/ui/switch"
 
 const stepSchema = z.object({
   name: z.string().min(1, "Step name is required"),
@@ -34,6 +35,7 @@ const agentEditSchema = z.object({
   systemPrompt: z.string(),
   model: z.string().min(1, "Model is required"),
   steps: z.array(stepSchema),
+  isForkable: z.boolean(),
 })
 
 export type FormAgentEditData = z.infer<typeof agentEditSchema>
@@ -47,6 +49,7 @@ type FormAgentEditProps = {
     systemPrompt: string
     model: string
     steps: { name: string; prompt: string }[]
+    isForkable: boolean
   }
   models: PublicAIModel[]
   onSubmit: (data: FormAgentEditData) => Promise<void>
@@ -75,6 +78,7 @@ export function FormAgentEdit({
       systemPrompt: initialValues.systemPrompt,
       model: initialValues.model,
       steps: initialValues.steps,
+      isForkable: initialValues.isForkable,
     },
   })
 
@@ -207,6 +211,31 @@ export function FormAgentEdit({
                   />
                 )}
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="isForkable"
+          render={({ field }) => (
+            <FormItem>
+              <div className="flex items-center justify-between rounded-lg border p-3">
+                <div className="space-y-0.5">
+                  <FormLabel>{t("isForkableLabel")}</FormLabel>
+                  <FormDescription className="text-xs">
+                    {t("isForkableHint")}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={form.formState.isSubmitting}
+                  />
+                </FormControl>
+              </div>
               <FormMessage />
             </FormItem>
           )}

@@ -191,6 +191,7 @@ export async function updateAgent(
     steps: JSON.stringify(steps),
     starterPrompts: parsedStarterPrompts ? JSON.stringify(parsedStarterPrompts) : null,
     model,
+    isForkable: body.isForkable,
     updatedAt: now,
   })
 
@@ -420,6 +421,7 @@ export async function cancelAgentResponse(
 export async function forkAgent(
   source: AgentWithSubagents,
   targetUserId: string,
+  nameSuffix: string,
 ): Promise<AgentWithSubagents> {
   const steps = source.steps
     ? (JSON.parse(source.steps) as { name: string; prompt: string }[])
@@ -429,7 +431,7 @@ export async function forkAgent(
     : []
 
   const body: CreateAgentData = {
-    name: `${source.name} (copie)`,
+    name: `${source.name}${nameSuffix}`,
     description: source.description ?? undefined,
     systemPrompt: source.systemPrompt ?? "",
     author: source.author ?? undefined,

@@ -106,11 +106,15 @@ export function useDeleteAgent(): UseMutationResult<void, Error, string> {
 }
 
 /** Fork a public agent into the caller's workspace. Invalidates the agent list on success. */
-export function useForkAgent(): UseMutationResult<ForkAgentResponse, Error, string> {
+export function useForkAgent(): UseMutationResult<ForkAgentResponse, Error, { id: string; nameSuffix: string }> {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) =>
-      fetchJson<ForkAgentResponse>(`/api/agents/${id}/fork`, { method: "POST" }),
+    mutationFn: ({ id, nameSuffix }) =>
+      fetchJson<ForkAgentResponse>(`/api/agents/${id}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nameSuffix }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: agentKeys.all })
     },

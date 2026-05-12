@@ -47,4 +47,9 @@ export class SpecialistPolicy {
   publish(specialist: Specialist): boolean {
     return specialist.userId === this.user.id
   }
+
+  /** Non-client org members may fork specialists. */
+  fork(): boolean {
+    return this.user.orgRole !== "org-client"
+  }
 }

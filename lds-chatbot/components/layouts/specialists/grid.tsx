@@ -13,12 +13,14 @@ export function LayoutSpecialistsGrid({
   mcpNames,
   authorNames,
   editable = false,
+  forkable = false,
 }: {
   specialists: SpecialistCardData[]
   /** Plain object (vs Map) so it survives the server→client boundary. */
   mcpNames: Record<string, string>
   authorNames: Record<string, string>
   editable?: boolean
+  forkable?: boolean
 }) {
   const tCommon = useTranslations("common")
   const [query, setQuery] = useState("")
@@ -53,6 +55,7 @@ export function LayoutSpecialistsGrid({
               mcpNames={mcpNamesMap}
               authorName={authorNames[specialist.userId] ?? tCommon("unknownAuthor")}
               editable={editable}
+              forkable={forkable}
             />
           ))}
         </div>

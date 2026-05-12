@@ -13,6 +13,7 @@ export const specialistBodySchema = z.object({
   systemPrompt: z.string().trim().min(1, "systemPrompt is required").max(64_000),
   model: z.string().trim().min(1).max(120).optional(),
   mcpIds: z.array(ID).optional(),
+  isForkable: z.boolean().default(false),
 })
 export type SpecialistBody = z.infer<typeof specialistBodySchema>
 
@@ -28,3 +29,13 @@ export type SpecialistRow = Specialist
 
 export type SpecialistResponse = SpecialistRow & { isOwn?: boolean }
 export type SpecialistListResponse = SpecialistResponse[]
+
+export const forkSpecialistSchema = z.object({
+  nameSuffix: z.string().max(60),
+})
+export type ForkSpecialistBody = z.infer<typeof forkSpecialistSchema>
+
+export type ForkSpecialistResponse = {
+  id: string
+  name: string
+}

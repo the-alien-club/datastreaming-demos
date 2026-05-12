@@ -25,6 +25,7 @@ export interface SpecialistRecord {
   systemPrompt: string
   model: string | null
   mcpIds: string | null
+  isForkable: boolean
 }
 
 type SpecialistDetailClientProps = {
@@ -58,6 +59,7 @@ export function SpecialistDetailClient({
         systemPrompt: data.systemPrompt.trim(),
         model: data.model,
         mcpIds: data.mcpIds,
+        isForkable: data.isForkable,
       }),
     })
     if (!response.ok) {
@@ -106,6 +108,7 @@ export function SpecialistDetailClient({
             mcpIds: initialSpecialist.mcpIds
               ? JSON.parse(initialSpecialist.mcpIds)
               : [],
+            isForkable: initialSpecialist.isForkable,
           }}
           models={initialModels}
           availableMcps={initialMcpList}

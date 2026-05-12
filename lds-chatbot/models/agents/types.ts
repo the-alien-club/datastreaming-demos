@@ -73,6 +73,7 @@ export const updateAgentSchema = z.object({
   starterPrompts: z.array(STARTER_PROMPT).optional(),
   model: z.string().trim().min(1).max(120),
   subagents: z.array(subagentConfigSchema),
+  isForkable: z.boolean().default(false),
 })
 export type UpdateAgentData = z.infer<typeof updateAgentSchema>
 
@@ -122,7 +123,12 @@ export type AgentPublicResponse = {
 
 export type AgentListResponse = AgentResponse[]
 
-// ── Fork response ──────────────────────────────────────────────────────────
+// ── Fork ───────────────────────────────────────────────────────────────────
+
+export const forkAgentSchema = z.object({
+  nameSuffix: z.string().max(60),
+})
+export type ForkAgentBody = z.infer<typeof forkAgentSchema>
 
 export type ForkAgentResponse = {
   id: string

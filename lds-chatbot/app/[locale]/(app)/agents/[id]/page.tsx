@@ -45,6 +45,7 @@ export default async function AgentDetailPage({
     systemPrompt: agent.systemPrompt ?? null,
     steps: agent.steps ?? null,
     model: agent.model ?? null,
+    isForkable: agent.isForkable,
     createdAt: agent.createdAt
       ? (agent.createdAt instanceof Date ? agent.createdAt.getTime() : agent.createdAt)
       : null,

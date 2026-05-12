@@ -170,6 +170,8 @@
       "createdAtLabel": "Creation date",
       "saveButton": "Save changes",
       "deleteButton": "Delete assistant",
+      "isForkableLabel": "Allow forking",
+      "isForkableHint": "Members can copy this assistant to their own library from the public library.",
       "stepsTitle": "Steps",
       "stepsSubtitle": "Sequential instructions appended to the system prompt.",
       "addStep": "Add step",
@@ -204,6 +206,7 @@
     },
     "card": {
       "fork": "Fork",
+      "forkCopySuffix": " (fork)",
       "forked": "{name} forked — you can now use and edit it.",
       "forkFailed": "Failed to fork assistant",
       "stepsCount": "{count, plural, one {# step} other {# steps}}",
@@ -254,7 +257,24 @@
       "specialistNamePlaceholder": "Specialized AI Agent name",
       "createButton": "Create Specialized AI Agent",
       "saveButton": "Save changes",
-      "deleteButton": "Delete specialized AI agent"
+      "deleteButton": "Delete specialized AI agent",
+      "isForkableLabel": "Allow forking",
+      "isForkableHint": "Members can copy this specialized AI agent to their own library from the public library.",
+      "noMcps": "No MCPs registered.",
+      "enableTools": "to enable tools."
+    },
+    "page": {
+      "libraryTitle": "Specialized AI Agents Library",
+      "librarySubtitle": "Public specialized AI agents available to all members.",
+      "noPublicSpecialists": "No specialized AI agents are available yet.",
+      "createFirst": "Create your first specialized AI agent"
+    },
+    "card": {
+      "created": "Created {date}",
+      "fork": "Fork",
+      "forkCopySuffix": " (fork)",
+      "forked": "{name} forked — you can now use and edit it.",
+      "forkFailed": "Failed to fork specialized AI agent"
     },
     "dialog": {
       "title": "Add Specialized AI Agent",

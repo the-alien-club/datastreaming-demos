@@ -54,6 +54,7 @@ export {
   subagentCreateSchema as subagentCreateBodySchema,
   subagentDeleteSchema as subagentDeleteBodySchema,
   patchAgentVisibilitySchema as patchVisibilityBodySchema,
+  forkAgentSchema as forkAgentBodySchema,
   // Response types
   type AgentRow,
   type SubagentRow,
@@ -62,6 +63,7 @@ export {
   type AgentListResponse,
   type AgentConversationListItem,
   type SubagentResponse,
+  type ForkAgentBody,
   type ForkAgentResponse,
 } from "@/models/agents/types"
 
@@ -116,10 +118,13 @@ export {
 
 export {
   specialistBodySchema,
+  forkSpecialistSchema as forkSpecialistBodySchema,
   // Response types
   type SpecialistRow,
   type SpecialistResponse,
   type SpecialistListResponse,
+  type ForkSpecialistBody,
+  type ForkSpecialistResponse,
 } from "@/models/specialists/types"
 
 // ── AI Models ──────────────────────────────────────────────────────────────

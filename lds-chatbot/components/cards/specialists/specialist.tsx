@@ -14,6 +14,7 @@ import { BrainCircuit, Settings } from "lucide-react"
 import { PrivacyBadge } from "@/components/privacy-badge"
 import { PublishCardAction } from "@/components/publish-card-action"
 import { DeleteCardAction } from "@/components/delete-card-action"
+import { CardSpecialistForkAction } from "@/components/cards/specialists/fork-action"
 import { DEFAULT_MODEL_SLUG } from "@/lib/constants"
 
 export type SpecialistCardData = {
@@ -23,6 +24,7 @@ export type SpecialistCardData = {
   model: string | null
   mcpIds: string | null
   isPublic: boolean
+  isForkable: boolean
   userId: string
   createdAt: Date | null
 }
@@ -37,13 +39,15 @@ export function CardSpecialist({
   mcpNames,
   authorName,
   editable = false,
+  forkable = false,
 }: {
   specialist: SpecialistCardData
   mcpNames: Map<string, string>
   authorName: string
   editable?: boolean
+  forkable?: boolean
 }) {
-  const t = useTranslations("specialists")
+  const t = useTranslations("specialists.card")
   const tCommon = useTranslations("common")
   const format = useFormatter()
   const mcpIds: string[] = specialist.mcpIds ? JSON.parse(specialist.mcpIds) : []
@@ -100,6 +104,11 @@ export function CardSpecialist({
               name={specialist.name}
               endpoint={`/api/specialists/${specialist.id}`}
             />
+          </div>
+        )}
+        {forkable && specialist.isForkable && (
+          <div className="flex w-full gap-2">
+            <CardSpecialistForkAction specialistId={specialist.id} />
           </div>
         )}
       </CardFooter>

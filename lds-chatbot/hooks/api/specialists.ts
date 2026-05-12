@@ -20,6 +20,7 @@ import type { specialistBodySchema } from "@/app/api/_validators"
 import type { z } from "zod"
 import { apiFetch } from "@/lib/api-fetch"
 import type { SpecialistWithOwnership } from "@/models/specialists/queries"
+import type { ForkSpecialistResponse } from "@/models/specialists/types"
 
 // ── Types inferred from validators ────────────────────────────────────────
 
@@ -93,6 +94,22 @@ export function useDeleteSpecialist(): UseMutationResult<void, Error, string> {
   return useMutation({
     mutationFn: (id: string) =>
       fetchJson<void>(`/api/specialists/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: specialistKeys.all })
+    },
+  })
+}
+
+/** Fork a public forkable specialist. Invalidates the specialist list on success. */
+export function useForkSpecialist(): UseMutationResult<ForkSpecialistResponse, Error, { id: string; nameSuffix: string }> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, nameSuffix }) =>
+      fetchJson<ForkSpecialistResponse>(`/api/specialists/${id}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nameSuffix }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: specialistKeys.all })
     },

@@ -34,6 +34,7 @@ export default async function SpecialistDetailPage({
     systemPrompt: specialist.systemPrompt,
     model: specialist.model ?? null,
     mcpIds: specialist.mcpIds ?? null,
+    isForkable: specialist.isForkable,
   }
 
   const initialMcpList = mcpRows
