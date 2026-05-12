@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect, notFound } from "next/navigation"
-import { getAgent } from "@/models/agents/queries"
+import { getAgentById } from "@/models/agents/queries"
 import { AgentChatClient } from "./client"
 
 interface AgentChatPageProps {
@@ -14,8 +14,8 @@ export default async function AgentChatPage({ params }: AgentChatPageProps) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const agent = await getAgent(agentId, session.user.id)
-  if (!agent) notFound()
+  const agent = await getAgentById(agentId)
+  if (!agent || (!agent.isPublic && agent.userId !== session.user.id)) notFound()
 
   return <AgentChatClient agentId={agentId} initialAgentName={agent.name} />
 }
