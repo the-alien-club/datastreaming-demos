@@ -137,24 +137,34 @@ export async function ensureOrgMembership(userId: string): Promise<void> {
     const userToken = await resolveAccessToken(userId)
     const me = await getMe(userToken)
 
-    // Best-effort: provision the user if they are not yet in the org.
-    // Isolated so a failure here never blocks the org-switch below.
-    try {
-      const members = await listOrgUsers(ORG_ID, ADMIN_TOKEN)
-      const isMember = members.some((m) => m.email === me.email)
-      if (!isMember) {
-        await provisionUserInOrg(
-          ORG_ID,
-          ADMIN_TOKEN,
-          me.email,
-          me.firstName ?? me.email.split("@")[0],
-          me.lastName || "-",
-        )
+    // Skip client-managed provisioning if the user already has ANY role in
+    // this org (org-owner, org-member, org-admin, etc.). These native members
+    // are not returned by listOrgUsers (which only lists client-managed users),
+    // so without this guard they would be double-provisioned — ending up with
+    // both their native role AND an org-client role.
+    const orgId = Number(ORG_ID)
+    const hasExistingRole = me.roles?.some((r) => r.organizationId === orgId) ?? false
+
+    if (!hasExistingRole) {
+      // Best-effort: provision as client-managed if not already in the org.
+      // Isolated so a failure here never blocks the org-switch below.
+      try {
+        const members = await listOrgUsers(ORG_ID, ADMIN_TOKEN)
+        const isMember = members.some((m) => m.email === me.email)
+        if (!isMember) {
+          await provisionUserInOrg(
+            ORG_ID,
+            ADMIN_TOKEN,
+            me.email,
+            me.firstName ?? me.email.split("@")[0],
+            me.lastName || "-",
+          )
+        }
+      } catch (provisionErr) {
+        // Non-fatal: user may have been added manually as org-client, or the
+        // admin token may lack list-users scope.  Continue to the switch below.
+        console.error("[onboarding] member check/provision failed:", provisionErr)
       }
-    } catch (provisionErr) {
-      // Non-fatal: user may have been added manually as org-client, or the
-      // admin token may lack list-users scope.  Continue to the switch below.
-      console.error("[onboarding] member check/provision failed:", provisionErr)
     }
 
     // Always switch to the chatbot org when the user's current org differs.

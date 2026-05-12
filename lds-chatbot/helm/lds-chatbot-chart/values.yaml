@@ -5,7 +5,7 @@ image:
   # IfNotPresent — image tags are immutable numeric versions, so re-pulling
   # on every pod start is wasted bandwidth + slower restarts (D-P1.4).
   pullPolicy: Always
-  tag: "0.3.4"
+  tag: "0.3.5"
 
 imagePullSecrets: []
 
@@ -141,6 +141,9 @@ config:
   # Required when serving the chatbot under multiple hostnames so that
   # sign-in / API calls from those hosts pass origin validation.
   betterAuthTrustedOrigins: "https://demo.legaldataspace.eu"
+  # Service name reported to SigNoz. Keep stable across deploys so dashboards
+  # and alerts don't need to be updated on every rename.
+  otelServiceName: "lds-chatbot-prod"
 
 # Scaleway Secret Manager references for secrets.
 secrets:
@@ -172,7 +175,10 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
 
-podAnnotations: {}
+podAnnotations:
+  # Inject the OTel Node.js auto-instrumentation sidecar. The Instrumentation CR
+  # lives in the signoz namespace so we reference it with the namespace/name form.
+  instrumentation.opentelemetry.io/inject-nodejs: "signoz/signoz-instrumentation"
 
 securityContext:
   runAsNonRoot: true

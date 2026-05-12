@@ -25,3 +25,4 @@ data:
   {{- with .Values.config.betterAuthTrustedOrigins }}
   BETTER_AUTH_TRUSTED_ORIGINS: {{ . | quote }}
   {{- end }}
+  OTEL_SERVICE_NAME: {{ .Values.config.otelServiceName | quote }}
