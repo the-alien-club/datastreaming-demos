@@ -54,6 +54,9 @@ config:
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
   betterAuthUrl: https://demo.alien.club
+  # Service name reported to SigNoz. Keep stable across deploys so dashboards
+  # and alerts don't need to be updated on every rename.
+  otelServiceName: "openaire-prod"
 
 livenessProbe:
   httpGet:
@@ -73,7 +76,10 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
 
-podAnnotations: {}
+podAnnotations:
+  # Inject the OTel Node.js auto-instrumentation sidecar. The Instrumentation CR
+  # lives in the signoz namespace so we reference it with the namespace/name form.
+  instrumentation.opentelemetry.io/inject-nodejs: "signoz/signoz-instrumentation"
 
 securityContext:
   runAsNonRoot: true

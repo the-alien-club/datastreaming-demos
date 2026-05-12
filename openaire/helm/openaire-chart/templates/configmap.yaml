@@ -13,3 +13,4 @@ data:
   NEXT_PUBLIC_AUTHENTIK_BASE_URL: {{ .Values.config.authentikBaseUrl | quote }}
   AUTHENTIK_APP_SLUG: {{ .Values.config.authentikAppSlug | quote }}
   BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.config.otelServiceName | quote }}
