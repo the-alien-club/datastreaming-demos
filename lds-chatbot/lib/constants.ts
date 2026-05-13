@@ -10,14 +10,14 @@
  * response — a slug that the platform doesn't recognise produces an
  * empty-content chat (the agent runs but emits no tokens).
  */
-export const DEFAULT_MODEL_SLUG = "mistral-medium-3.5"
+export const DEFAULT_MODEL_SLUG = "mistral-medium-3-5"
 
 /**
  * Default LLM slug for the Start wizard. Sonnet onboards more naturally
  * for first-time users than mistral-large-2512 — picked deliberately and not
  * to be unified with `DEFAULT_MODEL_SLUG`.
  */
-export const WIZARD_DEFAULT_MODEL_SLUG = "mistral-medium-3.5"
+export const WIZARD_DEFAULT_MODEL_SLUG = "mistral-medium-3-5"
 
 /**
  * All three transport modes accepted by the platform's MCP server node and
