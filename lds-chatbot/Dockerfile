@@ -35,6 +35,12 @@ ENV CLUSTER_ID=77
 # Generate Prisma client before building Next.js — lib/generated is gitignored
 # so it doesn't exist in the COPY . . layer and must be produced here.
 RUN npx prisma generate
+# Force the schema-engine binary to download now (build time) so it lands in
+# a read-only image layer. Without this, prisma migrate deploy downloads it
+# at container startup into the writable layer, which Falco flags as
+# EXE_UPPER_LAYER (potential code injection). The command fails on connection
+# but that is expected and intentional — we only need the download side-effect.
+RUN npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > /dev/null 2>&1 || true
 RUN npm run build
 
 # Stage 3: Production runtime
