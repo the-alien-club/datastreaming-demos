@@ -89,12 +89,6 @@
     --shadow-xl: var(--shadow-xl);
     --shadow-2xl: var(--shadow-2xl);
 
-    /* Legal AI brand */
-    --color-legal-blue: var(--legal-blue);
-    --color-legal-slate: var(--legal-slate);
-    --color-legal-emerald: var(--legal-emerald);
-    --color-legal-light: var(--legal-light);
-
     /* Custom colors */
     --tailwind-colors-black: hsla(0, 0%, 7%, 1);
     --tailwind-colors-white: hsla(0, 0%, 100%, 1);

@@ -153,19 +153,16 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-4">
-        <Link href="/agents" className="flex flex-col gap-0.5" onClick={onNavigate}>
+        <Link href="/agents" className="flex items-center" onClick={onNavigate}>
           <Image
-            src="https://www.legaldataspace.eu/images/LOGO-LDS-BLACK.svg"
-            alt="Legal DataSpace"
+            src="/images/logo-with-text.svg"
+            alt="Alien"
             width={160}
             height={28}
             className="h-7"
             style={{ width: "auto" }}
             unoptimized
           />
-          <span className="text-[10px] italic text-muted-foreground leading-none">
-            {t("poweredBy")}
-          </span>
         </Link>
         <LocaleSwitcher />
       </div>
@@ -312,8 +309,8 @@ export function AppSidebar({ user, isOrgClient }: AppSidebarProps) {
 
         <Link href="/agents">
           <Image
-            src="https://www.legaldataspace.eu/images/LOGO-LDS-BLACK.svg"
-            alt="Legal DataSpace"
+            src="/images/logo-with-text.svg"
+            alt="Alien"
             width={160}
             height={24}
             className="h-6"

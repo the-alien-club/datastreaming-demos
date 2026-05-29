@@ -13,6 +13,22 @@
         @apply bg-background text-foreground;
     }
 
+    h1 {
+        @apply text-4xl font-bold mb-4;
+    }
+
+    h2 {
+        @apply text-3xl font-semibold mb-4;
+    }
+
+    h3 {
+        @apply text-2xl font-semibold mb-4;
+    }
+
+    h4 {
+        @apply text-xl font-semibold mb-4;
+    }
+
     button:not([disabled]),
     [role="button"]:not([disabled]) {
         cursor: pointer;
@@ -23,79 +39,138 @@
     @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
 }
 
+/*
+ * Note: Do NOT copy Figma's exported theme directly in here, by overwriting the
+ * current CSS variables, we added custom properties and these would be lost.
+*/
+
 :root {
-    --background: hsl(0, 0%, 100%);
-    --foreground: hsl(20, 14.3%, 4.1%);
-    --card: hsl(0, 0%, 100%);
-    --card-foreground: hsl(20, 14.3%, 4.1%);
-    --popover: hsl(0, 0%, 100%);
-    --popover-foreground: hsl(20, 14.3%, 4.1%);
-    --primary: hsl(218, 100%, 44%);
-    --primary-foreground: hsl(211, 100%, 99%);
-    --secondary: hsl(60, 4.8%, 95.9%);
-    --secondary-foreground: hsl(24, 9.8%, 10%);
-    --muted: hsl(60, 4.8%, 95.9%);
-    --muted-foreground: hsl(25, 5.3%, 44.7%);
-    --base-accent: hsl(218, 100%, 14%);
-    --accent: hsl(60, 4.8%, 95.9%);
-    --accent-foreground: hsl(24, 9.8%, 10%);
-    --border: hsl(20, 5.9%, 90%);
-    --input: hsl(20, 5.9%, 90%);
-    --ring: hsl(218, 100%, 44%);
+    --background: hsl(0 0% 100%);
+    --foreground: hsl(120 1.9608% 10%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(120 1.9608% 10%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(120 1.9608% 10%);
+    --primary: hsl(0 0% 9.0196%);
+    --primary-foreground: hsl(0 0% 98.0392%);
+    --secondary: hsl(0 0% 96.0784%);
+    --secondary-foreground: hsl(120 1.9608% 10%);
+    --muted: hsl(0 0% 96.0784%);
+    --muted-foreground: hsl(0 0% 45.0980%);
+    --base-accent: hsl(0 0% 14%);
+    --accent: hsl(0 0% 96.0784%);
+    --accent-foreground: hsl(120 1.9608% 10%);
+    --border: hsl(0 0% 18.0392%);
+    --input: hsl(0 0% 18.0392%);
+    --ring: hsl(0 0% 18.0392%);
+
+    /* Levels / Statuses */
     --info: hsl(130, 41%, 67%);
     --info-foreground: hsl(0 0% 100%);
     --warning: hsl(28, 88%, 59%);
     --warning-foreground: hsl(0 0% 100%);
-    --destructive: hsl(0, 84.2%, 60.2%);
-    --destructive-foreground: hsl(60, 9.1%, 97.8%);
+    --destructive: hsl(231.8841 100% 40.5882%);
+    --destructive-foreground: hsl(0 0% 100%);
 
-    /* Legal AI brand */
-    --legal-blue: hsl(218, 100%, 44%);
-    --legal-slate: hsl(215, 16%, 47%);
-    --legal-emerald: hsl(158, 64%, 52%);
-    --legal-light: hsl(210, 40%, 98%);
-
+    /* Charts */
     --chart-1: hsl(91.9266 100% 78.6275%);
     --chart-2: hsl(97.3404 91.2621% 59.6078%);
     --chart-3: hsl(101.5842 86.3248% 54.1176%);
     --chart-4: hsl(103.75 78.6885% 47.8431%);
     --chart-5: hsl(106.4789 69.6078% 40%);
 
-    --sidebar: hsl(210, 40%, 98%);
-    --sidebar-foreground: hsl(20, 14.3%, 4.1%);
-    --sidebar-primary: hsl(218, 100%, 44%);
-    --sidebar-primary-foreground: hsl(211, 100%, 99%);
-    --sidebar-accent: hsl(210, 40%, 94%);
-    --sidebar-accent-foreground: hsl(24, 9.8%, 10%);
-    --sidebar-border: hsl(20, 5.9%, 90%);
-    --sidebar-ring: hsl(218, 100%, 44%);
+    /* Datasets */
+    --dataset-1: hsl(311 100% 84%);
+    --dataset-1-muted: color-mix(in oklch, var(--dataset-1), black 70%);
+    --dataset-1-foreground: color-mix(in oklch, var(--dataset-1), white 74%);
+    --dataset-2: hsl(237 88% 66%);
+    --dataset-2-muted: color-mix(in oklch, var(--dataset-2), black 70%);
+    --dataset-2-foreground: color-mix(in oklch, var(--dataset-2), white 74%);
+    --dataset-3: hsl(189 100% 66%);
+    --dataset-3-muted: color-mix(in oklch, var(--dataset-3), black 70%);
+    --dataset-3-foreground: color-mix(in oklch, var(--dataset-3), white 74%);
+    --dataset-4: hsl(130 41% 67%);
+    --dataset-4-muted: color-mix(in oklch, var(--dataset-4), black 70%);
+    --dataset-4-foreground: color-mix(in oklch, var(--dataset-4), white 74%);
+    --dataset-5: hsl(6 92% 67%);
+    --dataset-5-muted: color-mix(in oklch, var(--dataset-5), black 70%);
+    --dataset-5-foreground: color-mix(in oklch, var(--dataset-5), white 74%);
+    --dataset-6: hsl(34 100% 59%);
+    --dataset-6-muted: color-mix(in oklch, var(--dataset-6), black 70%);
+    --dataset-6-foreground: color-mix(in oklch, var(--dataset-6), white 74%);
+    --dataset-7: hsl(40 100% 67%);
+    --dataset-7-muted: color-mix(in oklch, var(--dataset-7), black 70%);
+    --dataset-7-foreground: color-mix(in oklch, var(--dataset-7), white 74%);
 
+    /* Sidebar */
+    --sidebar: hsl(0 0% 98.0392%);
+    --sidebar-foreground: hsl(120 1.9608% 10%);
+    --sidebar-primary: hsl(120 1.9608% 10%);
+    --sidebar-primary-foreground: hsl(0 0% 98.0392%);
+    --sidebar-accent: hsl(0 0% 96.0784%);
+    --sidebar-accent-foreground: hsl(120 1.9608% 10%);
+    --sidebar-border: hsl(0 0% 89.8039%);
+    --sidebar-ring: hsl(0 0% 63.1373%);
+
+    /* Fonts */
     --font-sans: Inter, ui-sans-serif, sans-serif, system-ui;
     --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+
+    /* Radius */
     --radius: 0.5rem;
+
+    /* Shadow styling */
+    --shadow-x: 0;
+    --shadow-y: 1px;
+    --shadow-blur: 3px;
+    --shadow-spread: 0px;
+    --shadow-opacity: 0.1;
+    --shadow-color: oklch(0 0 0);
+
+    /* Shadow dimensions */
+    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-sm:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow-md:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+    --shadow-lg:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+    --shadow-xl:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+    /* Tracking, spacing, etc. */
+    --tracking-normal: 0em;
     --spacing: 0.25rem;
 }
 
 .dark {
-    --background: hsl(240, 10%, 3.9%);
-    --foreground: hsl(0, 0%, 98%);
-    --card: hsl(240, 10%, 3.9%);
-    --card-foreground: hsl(0, 0%, 98%);
-    --popover: hsl(240, 10%, 3.9%);
-    --popover-foreground: hsl(0, 0%, 98%);
-    --primary: hsl(207, 90%, 54%);
-    --primary-foreground: hsl(211, 100%, 99%);
-    --secondary: hsl(240, 3.7%, 15.9%);
-    --secondary-foreground: hsl(0, 0%, 98%);
-    --muted: hsl(240, 3.7%, 15.9%);
-    --muted-foreground: hsl(240, 5%, 64.9%);
-    --base-accent: hsl(207, 90%, 12%);
-    --accent: hsl(240, 3.7%, 15.9%);
-    --accent-foreground: hsl(0, 0%, 98%);
-    --border: hsl(240, 3.7%, 15.9%);
-    --input: hsl(240, 3.7%, 15.9%);
-    --ring: hsl(240, 4.9%, 83.9%);
+    --background: hsl(0, 0%, 7%);
+    --foreground: hsl(0 0% 100%);
+    --card: hsl(0, 0%, 9%);
+    --card-foreground: hsl(0 0% 100%);
+    --popover: hsl(0 0% 9.0196%);
+    --popover-foreground: hsl(0 0% 100%);
+    --primary: hsl(183, 39%, 35%);
+    --primary-foreground: hsl(0 0% 100%);
+    --secondary: oklch(0.25 0 0);
+    --secondary-foreground: oklch(1 0 0);
+    --muted: hsl(0 0% 9.0196%);
+    --muted-foreground: hsl(0 0% 54.1176%);
+    --base-accent: hsl(0 0% 14%);
+    --accent: oklch(37.1% 0 0);
+    --accent-foreground: hsl(0 0% 100%);
+    --border: hsl(0 0% 18.0392%);
+    --input: hsl(0 0% 18.0392%);
+    --ring: hsl(0 0% 80%);
+
+    /* Levels / statuses */
     --info: hsl(130, 41%, 67%);
     --info-foreground: hsl(0 0% 100%);
     --warning: hsl(28, 88%, 59%);
@@ -103,30 +178,80 @@
     --destructive: hsl(6.3158 91.5663% 67.4510%);
     --destructive-foreground: hsl(5.4545 100.0000% 97.8431%);
 
-    /* Legal AI brand */
-    --legal-blue: hsl(207, 90%, 54%);
-    --legal-slate: hsl(215, 16%, 65%);
-    --legal-emerald: hsl(158, 64%, 52%);
-    --legal-light: hsl(240, 10%, 8%);
-
+    /* Charts */
     --chart-1: hsl(129.5652 41.3174% 67.2549%);
     --chart-2: hsl(31.2676 36.4103% 61.7647%);
     --chart-3: hsl(6.3158 91.5663% 67.4510%);
     --chart-4: hsl(27.541 87.5598% 59.0196%);
     --chart-5: hsl(40.3571 100.0000% 67.0588%);
 
-    --sidebar: hsl(240, 10%, 5%);
-    --sidebar-foreground: hsl(0, 0%, 98%);
-    --sidebar-primary: hsl(207, 90%, 18%);
-    --sidebar-primary-foreground: hsl(0, 0%, 100%);
-    --sidebar-accent: hsl(207, 90%, 18%);
-    --sidebar-accent-foreground: hsl(207, 30%, 80%);
-    --sidebar-border: hsl(240, 3.7%, 15.9%);
-    --sidebar-ring: hsl(207, 90%, 54%);
+    /* Datasets */
+    --dataset-1: hsl(311 100% 84%);
+    --dataset-1-muted: color-mix(in oklch, var(--dataset-1), black 70%);
+    --dataset-1-foreground: color-mix(in oklch, var(--dataset-1), white 74%);
+    --dataset-2: hsl(237 88% 66%);
+    --dataset-2-muted: color-mix(in oklch, var(--dataset-2), black 70%);
+    --dataset-2-foreground: color-mix(in oklch, var(--dataset-2), white 74%);
+    --dataset-3: hsl(189 100% 66%);
+    --dataset-3-muted: color-mix(in oklch, var(--dataset-3), black 70%);
+    --dataset-3-foreground: color-mix(in oklch, var(--dataset-3), white 74%);
+    --dataset-4: hsl(130 41% 67%);
+    --dataset-4-muted: color-mix(in oklch, var(--dataset-4), black 70%);
+    --dataset-4-foreground: color-mix(in oklch, var(--dataset-4), white 74%);
+    --dataset-5: hsl(6 92% 67%);
+    --dataset-5-muted: color-mix(in oklch, var(--dataset-5), black 70%);
+    --dataset-5-foreground: color-mix(in oklch, var(--dataset-5), white 74%);
+    --dataset-6: hsl(34 100% 59%);
+    --dataset-6-muted: color-mix(in oklch, var(--dataset-6), black 70%);
+    --dataset-6-foreground: color-mix(in oklch, var(--dataset-6), white 74%);
+    --dataset-7: hsl(40 100% 67%);
+    --dataset-7-muted: color-mix(in oklch, var(--dataset-7), black 70%);
+    --dataset-7-foreground: color-mix(in oklch, var(--dataset-7), white 74%);
 
+    /* Sidebar */
+    --sidebar: hsl(0 0% 7.0588%);
+    --sidebar-foreground: hsl(0 0% 100%);
+    --sidebar-primary: hsl(184 38.4615% 15.2941%);
+    --sidebar-primary-foreground: hsl(0 0% 100%);
+    --sidebar-accent: hsl(184 38.4615% 15.2941%);
+    --sidebar-accent-foreground: hsl(183.5294 20% 83.3333%);
+    --sidebar-border: hsl(0 0% 18.0392%);
+    --sidebar-ring: hsl(0 0% 70.9804%);
+
+    /* Fonts */
     --font-sans: Inter, ui-sans-serif, sans-serif, system-ui;
     --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+
+    /* Radius */
     --radius: 0.5rem;
+
+    /* Shadow styling */
+    --shadow-x: 0;
+    --shadow-y: 1px;
+    --shadow-blur: 3px;
+    --shadow-spread: 0px;
+    --shadow-opacity: 0.1;
+    --shadow-color: #09090b;
+
+    /* Shadow dimensions */
+    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+    --shadow-sm:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+    --shadow-md:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+    --shadow-lg:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+    --shadow-xl:
+        0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 8px 10px -1px hsl(0 0% 0% / 0.1);
+    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+
+    /* Tracking, spacing, etc. */
+    --tracking-normal: 0em;
     --spacing: 0.25rem;
 }
