@@ -66,13 +66,13 @@ describe("filterPersistableParts", () => {
 
   it("preserves text + data-toolCall + data-subagent in order", () => {
     const parts = asParts([
-      { type: "text", text: "Bonne question, je vais chercher." },
+      { type: "text", text: "Good question — let me look that up." },
       {
         type: "data-toolCall",
-        data: { id: "t1", name: "legifrance_rechercher_code", args: { query: "code civil" } },
+        data: { id: "t1", name: "search_corpus", args: { query: "alien architecture" } },
       },
-      { type: "data-subagent", data: { agentId: "a2", name: "Légifrance specialist", kind: "subagent" } },
-      { type: "text", text: "Voici la réponse." },
+      { type: "data-subagent", data: { agentId: "a2", name: "Research specialist", kind: "subagent" } },
+      { type: "text", text: "Here is what I found." },
     ])
     const filtered = filterPersistableParts(parts)
     expect(filtered).toHaveLength(4)

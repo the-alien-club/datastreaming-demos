@@ -5,13 +5,15 @@ import { DEFAULT_MCP_TRANSPORT } from "@/lib/constants"
 import type { Mcp } from "./schema"
 import type { CreateMcpBody, UpdateMcpBody, AvailableMcp, AvailableMcpsResponse } from "./types"
 
-// MCPs that are bootstrapped via `scripts/seed-mcps.mjs`. The UI surfaces
-// these under a curated "Built-in" section; everything else (whether seeded
-// or user-created) shows up under "User MCPs". The split is purely
-// presentational — both source rows live in the same `mcps` table.
+// MCPs whose ids match these slug prefixes are surfaced under a curated
+// "Built-in" section in the UI; everything else (user-created) shows up
+// under "User MCPs". The split is purely presentational — both source rows
+// live in the same `mcps` table.
 //
-// Seeded ids follow the `<slug>:<userId>` shape (one built-in per user) — we
-// match by slug prefix so any user of the system gets the curated list.
+// Built-in ids follow the `<slug>:<userId>` shape (one per user). The set is
+// empty in the Alien Agents public demo (the legacy LDS seed script that
+// populated it was removed during the rebrand); add slugs here if a future
+// seeder bootstraps curated built-ins.
 const BUILTIN_MCP_SLUGS = new Set<string>()
 
 function builtinSlug(id: string): string | null {

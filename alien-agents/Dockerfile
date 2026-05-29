@@ -69,7 +69,7 @@ COPY --from=builder --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=node:node /app/lib ./lib
 
 # Scripts the entrypoint actually runs — keep dev-only debug
-# utilities (debug-sse.mjs, seed-mcps.mjs) out of the runtime image.
+# utilities (e.g. debug-sse.mjs) out of the runtime image.
 COPY --from=builder --chown=node:node /app/scripts/migrate-auth.ts ./scripts/migrate-auth.ts
 COPY --from=builder --chown=node:node /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=node:node /app/package.json ./package.json

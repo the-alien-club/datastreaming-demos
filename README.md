@@ -4,25 +4,25 @@ Collection of demo applications showcasing [Alien Intelligence Data Streaming](h
 
 ## Demos
 
-### LDS Chatbot — Agent Builder & RAG Workbench
+### Alien Agents — Agent Builder & RAG Workbench
 
-**Location**: [`/lds-chatbot`](./lds-chatbot)
+**Location**: [`/alien-agents`](./alien-agents)
 
-A First Data Engine (FDE) demo: a Next.js web app where users create AI agents backed by the Alien workflow engine, attach specialist subagents with MCP tool access, upload document datasets for RAG, and chat in a streaming multi-turn interface. Every agent is also exposed as an **OpenAI-compatible API endpoint** (Chat Completions and Responses), so any tool that speaks OpenAI can point at it and just work.
+The public Alien demo (formerly the LDS Chatbot FDE for a client): a Next.js web app where users create AI agents backed by the Alien workflow engine, attach specialist subagents with MCP tool access, upload document datasets for RAG, and chat in a streaming multi-turn interface. Every agent is also exposed as an **OpenAI-compatible API endpoint** (Chat Completions and Responses), so any tool that speaks OpenAI can point at it and just work.
 
 **Features:**
-- Agent creation wizard with templates, system prompts, and multi-step instructions
+- Agent and specialist creation flows backed by the platform workflow engine
 - Specialist subagents wired to MCP servers (custom or built-in)
 - Dataset upload + processing pipeline (`general_purpose` preset) with status polling
 - Streaming chat via the platform's OpenAI Responses API (native session resume)
 - Authentik OAuth2/OIDC sign-in via better-auth
 - French/English i18n; per-user data isolation; role-gated UI for `org-client` users
 
-**Tech Stack**: Next.js 16, React 19, TypeScript, Tailwind v4, shadcn/ui, Vercel AI SDK v6, Drizzle ORM + Postgres 16, better-auth, Authentik
+**Tech Stack**: Next.js 16, React 19, TypeScript, Tailwind v4, shadcn/ui, Vercel AI SDK v6, Prisma + Postgres 16, better-auth, Authentik
 
 **Quick Start:**
 ```bash
-cd lds-chatbot
+cd alien-agents
 npm install
 cp .env.example .env   # fill in Authentik + platform vars
 docker compose up -d   # local Postgres
@@ -30,7 +30,7 @@ npm run db:migrate
 npm run dev
 ```
 
-See [lds-chatbot/README.md](./lds-chatbot/README.md) for full setup and [lds-chatbot/CLAUDE.md](./lds-chatbot/CLAUDE.md) for architecture details.
+See [alien-agents/README.md](./alien-agents/README.md) for full setup and [alien-agents/CLAUDE.md](./alien-agents/CLAUDE.md) for architecture details.
 
 ---
 
