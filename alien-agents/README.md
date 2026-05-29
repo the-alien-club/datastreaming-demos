@@ -1,6 +1,6 @@
-# LDS Chatbot
+# Alien Agents
 
-An AI-powered research assistant that lets users create agents, attach literature dataset corpora, and chat with streaming responses — backed by the DataStreaming platform.
+An AI-powered research assistant that lets users create agents, attach literature dataset corpora, and chat with streaming responses — backed by the Alien DataStreaming platform.
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ An AI-powered research assistant that lets users create agents, attach literatur
 
    | Variable | Description |
    |---|---|
-   | `DATABASE_URL` | Postgres connection string (default `postgres://postgres:postgres@localhost:5435/lds_chatbot`) |
+   | `DATABASE_URL` | Postgres connection string (default `postgres://postgres:postgres@localhost:5435/alien_agents`) |
    | `AUTHENTIK_BASE_URL` | Base URL of your Authentik instance (e.g. `https://auth.alien.club`) |
    | `AUTHENTIK_APP_SLUG` | Authentik application slug (default: `datastreaming`) |
    | `AUTHENTIK_CLIENT_ID` | OAuth2 client ID from your Authentik application |

@@ -46,7 +46,7 @@ const allowedHosts = Array.from(
 const authBasePath = `${nextBasePath}/api/auth`
 
 export const auth = betterAuth({
-  appName: "LDS Chatbot",
+  appName: "Alien Agents",
   secret: process.env.BETTER_AUTH_SECRET!,
   baseURL: { allowedHosts, fallback: fallbackBaseURL },
   basePath: authBasePath,
@@ -86,8 +86,8 @@ export const auth = betterAuth({
           discoveryUrl: `${authentikBaseUrl}/application/o/${appSlug}/.well-known/openid-configuration`,
           // No static redirectURI — better-auth derives it per request from
           // ctx.baseURL (= dynamic origin + authBasePath), so a sign-in on
-          // demo.legaldataspace.eu uses that domain in redirect_uri instead
-          // of the build-time fallback.
+          // any host listed in trustedOrigins uses that domain in
+          // redirect_uri instead of the build-time fallback.
           scopes: ["openid", "email", "profile", "offline_access"],
           accessType: "offline",
           prompt: "consent",

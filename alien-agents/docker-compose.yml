@@ -3,10 +3,10 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: lds-chatbot-postgres
+    container_name: alien-agents-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: lds_chatbot
+      POSTGRES_DB: alien_agents
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d lds_chatbot"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d alien_agents"]
       interval: 3s
       timeout: 3s
       retries: 10

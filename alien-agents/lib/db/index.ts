@@ -9,7 +9,7 @@ const connectionString =
   process.env.DATABASE_URL ??
   (process.env.NODE_ENV === "production"
     ? null
-    : "postgres://postgres:postgres@localhost:5435/lds_chatbot")
+    : "postgres://postgres:postgres@localhost:5435/alien_agents")
 if (!connectionString) {
   throw new Error("DATABASE_URL is not set")
 }

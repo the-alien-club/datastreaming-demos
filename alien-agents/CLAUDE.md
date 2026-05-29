@@ -1,8 +1,8 @@
-# LDS Chatbot — CLAUDE.md
+# Alien Agents — CLAUDE.md
 
 ## What This Is
 
-The LDS Chatbot is a **FDE (First Data Engine) demo application** for clients. It showcases how the Alien platform can be used to build a fully working AI research assistant in days, not months.
+Alien Agents is the public Alien demo application (formerly the LDS Chatbot FDE demo). It showcases how the Alien platform can be used to build a fully working AI research assistant in days, not months.
 
 Concretely: a Next.js 16 web app where users create AI agents backed by the Alien workflow engine, attach specialist subagents with MCP tool access, upload document datasets for RAG, and chat in a streaming multi-turn interface. Every agent is also exposed as an **OpenAI-compatible API endpoint**, so any existing tool that speaks the OpenAI chat completions format can point at it and just work.
 

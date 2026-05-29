@@ -64,10 +64,10 @@ export async function createAgent(
   )
 
   const token = await resolveAccessToken(userId)
-  const slug = `lds-agent-${crypto.randomUUID()}`
+  const slug = `alien-agent-${crypto.randomUUID()}`
   const workflowResponse = await createWorkflow(
     {
-      name: `LDS Agent: ${name}`,
+      name: `Alien Agent: ${name}`,
       slug,
       description: description ?? undefined,
       isPublic: false,
@@ -172,7 +172,7 @@ export async function updateAgent(
 
   const token = await resolveAccessToken(userId)
   try {
-    await updateWorkflow(existing.workflowId, { nodes, edges, name: `LDS Agent: ${name}` }, token)
+    await updateWorkflow(existing.workflowId, { nodes, edges, name: `Alien Agent: ${name}` }, token)
   } catch (err) {
     if (err instanceof Error && err.message.includes("404")) {
       throw new AgentWorkflowNotFoundError(existing.workflowId)
