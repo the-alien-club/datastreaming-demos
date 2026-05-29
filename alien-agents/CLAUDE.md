@@ -243,7 +243,7 @@ Schema changes: edit `prisma/schema.prisma`, then run `npx prisma migrate dev --
 
 /[locale]/                              → LocaleLayout (html/body, ThemeProvider, Toaster)
   /sign-in                              → OAuth2 sign-in card
-  /(app)/                               → AppLayout (sidebar + auth guard + WizardStartProvider)
+  /(app)/                               → AppLayout (sidebar + auth guard)
     /agents                             → Agent list grid
     /agents/new                         → Simple agent creation form
     /agents/[agentId]                   → Agent detail/edit
@@ -293,7 +293,6 @@ No global store. Three tiers:
 1. **Server state**: Next.js Server Components query Prisma directly — Agent list, Conversations list, Specialists list.
 2. **Client-local**: `useState` + `useEffect` + `apiFetch()` for interactive pages — `datasets-view.tsx`, `mcps-view.tsx`, `new-agent-form.tsx`.
 3. **Streaming chat**: Vercel AI SDK `useChat` hook, backed by `POST /api/chat` SSE.
-4. **Wizard state**: Single `WizardState` object in `useState` inside `StartWizard`, passed as `state + setState` to each step. Accessible anywhere via `useWizardStart()` context.
 
 ### Key UI Components for UX Work
 
@@ -306,19 +305,11 @@ No global store. Three tiers:
 | `app/[locale]/(app)/conversations/page.tsx` | Conversation history, date-grouped |
 | `app/[locale]/(app)/datasets/datasets-view.tsx` | Dataset list with status badges |
 | `app/[locale]/(app)/mcps/mcps-view.tsx` | MCP server CRUD with Dialog |
-| `components/wizards/agents/start/index.tsx` | 6-step agent creation wizard (Dialog) |
-| `components/wizards/agents/start/templates.ts` | Preset agent + specialist templates |
-| `components/ui/wizard.tsx` | Generic multi-step Wizard component |
-| `components/ui/wizard-steps.tsx` | Step indicator visual |
 | `components/chat/` | Chat UI components (messages, input, subagent panels) |
 
-### Wizard (6-step agent creation)
+### Agent creation
 
-Rendered in a Dialog, opened via `useWizardStart()` → `openWizard()` from anywhere. Auto-opens on first visit (`localStorage` key `lds-chatbot:start-wizard-seen`).
-
-Steps: **Template → Identity → Specialist → MCP → Knowledge → Done**
-
-Each step uses the generic `Wizard` + `Step` components. Steps gate progression with `canProceed()` and call the platform API in `onBeforeNext()`. On cancel mid-wizard, cleanup fires `DELETE /api/agents/:id` to remove the orphaned workflow.
+New users land on `/agents` with an empty-state offering two CTAs: **Browse library** → `/agents/library` (primary, recommended path) and **Create from scratch** → `/agents/new` (plain form). The sidebar "Start" button also routes to `/agents/new`. No wizard.
 
 ### Role Gating
 
@@ -334,5 +325,3 @@ Each step uses the generic `Wizard` + `Step` components. Steps gate progression 
 **Dual-stream in `/api/chat`**: `ReadableStream.tee()` splits the AI SDK chunk stream — one copy to SSE response, one drained asynchronously by `persistAssistantMessage()`. Persistence failures don't interrupt the live stream.
 
 **Streaming resume**: `SidecarState` emits `data-streamProgress` chunks (transient) with `sequence_number`; the chat client stores these in `localStorage` as resume cursor. `POST /api/chat/resume` accepts `{ conversationId, responseId, startingAfter }`.
-
-**Wizard cleanup**: `StartWizard` registers a `useEffect` cleanup that fires `DELETE /api/agents/:agentId` when the component unmounts without completion, preventing orphaned platform workflows.

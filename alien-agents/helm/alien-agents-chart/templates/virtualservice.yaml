@@ -19,15 +19,15 @@
   {{- if not .Values.istio.gateway.create }}
     {{- fail "istio.gateway.create must be true when any host uses gateway: own" }}
   {{- end }}
-  {{- $ownRef = printf "%s/%s-gateway" $ns (include "lds-chatbot.fullname" .) }}
+  {{- $ownRef = printf "%s/%s-gateway" $ns (include "alien-agents.fullname" .) }}
 {{- end }}
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: {{ include "lds-chatbot.fullname" . }}-vs
+  name: {{ include "alien-agents.fullname" . }}-vs
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    {{- include "alien-agents.labels" . | nindent 4 }}
     app.kubernetes.io/component: virtualservice
 spec:
   hosts:
@@ -51,7 +51,7 @@ spec:
     {{- if eq (.gateway | default "shared") "own" }}
     {{- $gwRef = $ownRef }}
     {{- end }}
-    - name: lds-chatbot-route-{{ .host | replace "." "-" }}{{ if ne .path "/" }}-{{ trimPrefix "/" .path | replace "/" "-" }}{{ else }}-root{{ end }}
+    - name: alien-agents-route-{{ .host | replace "." "-" }}{{ if ne .path "/" }}-{{ trimPrefix "/" .path | replace "/" "-" }}{{ else }}-root{{ end }}
       match:
         - uri:
             prefix: {{ .path }}
@@ -65,7 +65,7 @@ spec:
       {{- end }}
       route:
         - destination:
-            host: {{ include "lds-chatbot.fullname" $ }}.{{ $.Values.namespace }}.svc.cluster.local
+            host: {{ include "alien-agents.fullname" $ }}.{{ $.Values.namespace }}.svc.cluster.local
             port:
               number: {{ $.Values.service.port }}
       {{- with $.Values.istio.virtualService.timeout }}

@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "lds-chatbot.name" -}}
+{{- define "alien-agents.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "lds-chatbot.fullname" -}}
+{{- define "alien-agents.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Chart name and version for the chart label.
 */}}
-{{- define "lds-chatbot.chart" -}}
+{{- define "alien-agents.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "lds-chatbot.labels" -}}
-helm.sh/chart: {{ include "lds-chatbot.chart" . }}
-{{ include "lds-chatbot.selectorLabels" . }}
+{{- define "alien-agents.labels" -}}
+helm.sh/chart: {{ include "alien-agents.chart" . }}
+{{ include "alien-agents.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -43,7 +43,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "lds-chatbot.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "lds-chatbot.name" . }}
+{{- define "alien-agents.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "alien-agents.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

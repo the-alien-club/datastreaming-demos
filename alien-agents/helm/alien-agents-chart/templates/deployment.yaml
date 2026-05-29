@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "lds-chatbot.fullname" . }}
+  name: {{ include "alien-agents.fullname" . }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    {{- include "alien-agents.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "lds-chatbot.selectorLabels" . | nindent 6 }}
+      {{- include "alien-agents.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: app
   template:
     metadata:
@@ -22,7 +22,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "lds-chatbot.selectorLabels" . | nindent 8 }}
+        {{- include "alien-agents.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -32,7 +32,7 @@ spec:
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
       containers:
-        - name: lds-chatbot
+        - name: alien-agents
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -41,20 +41,20 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "lds-chatbot.fullname" . }}-config
+                name: {{ include "alien-agents.fullname" . }}-config
             - secretRef:
-                name: {{ include "lds-chatbot.fullname" . }}-authentik
+                name: {{ include "alien-agents.fullname" . }}-authentik
             - secretRef:
-                name: {{ include "lds-chatbot.fullname" . }}-app
+                name: {{ include "alien-agents.fullname" . }}-app
             {{- if .Values.secrets.chatbot.scalewaySecretName }}
             - secretRef:
-                name: {{ include "lds-chatbot.fullname" . }}-chatbot
+                name: {{ include "alien-agents.fullname" . }}-chatbot
             {{- end }}
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "lds-chatbot.fullname" . }}-postgres
+                  name: {{ include "alien-agents.fullname" . }}-postgres
                   key: DATABASE_URL
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}

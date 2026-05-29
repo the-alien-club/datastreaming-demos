@@ -1,4 +1,4 @@
-# LDS Chatbot — Helm / ArgoCD Deployment
+# Alien Agents — Helm / ArgoCD Deployment
 
 ## Architecture
 
@@ -7,9 +7,9 @@ Internet
    │
    ▼
 Istio Ingress Gateway          (demo.alien.club:443, shared)
-   │   └── /agents    → VirtualService (lds-chatbot)
+   │   └── /agents    → VirtualService (alien-agents)
    ▼
-VirtualService                 (namespace: demo-lds-chatbot)
+VirtualService                 (namespace: alien-agents)
    │
    ▼
 Service  ClusterIP:80
@@ -34,11 +34,11 @@ Deployment  replicas=1         (stateless Next.js app, basePath=/agents)
 
 | Resource | Value |
 |---|---|
-| ArgoCD Application | `demo-lds-chatbot-prod` |
-| Helm release name | `demo-lds-chatbot-prod` |
-| Kubernetes namespace | `demo-lds-chatbot` |
-| All resources | prefixed `demo-lds-chatbot-prod-…` |
-| Image repo | `rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot` |
+| ArgoCD Application | `alien-agents-prod` |
+| Helm release name | `alien-agents-prod` |
+| Kubernetes namespace | `alien-agents` |
+| All resources | prefixed `alien-agents-prod-…` |
+| Image repo | `rg.fr-par.scw.cloud/ns-data-streaming/alien-agents` |
 | k8s context | `platform-prod` |
 
 ---
@@ -47,8 +47,8 @@ Deployment  replicas=1         (stateless Next.js app, basePath=/agents)
 
 These two Secrets are annotated `helm.sh/resource-policy: keep` and survive chart upgrades. **Never delete or edit them directly.**
 
-- `demo-lds-chatbot-prod-postgres` — Postgres password (generated once at first install)
-- `demo-lds-chatbot-prod-app` — `BETTER_AUTH_SECRET` (generated once at first install)
+- `alien-agents-prod-postgres` — Postgres password (generated once at first install)
+- `alien-agents-prod-app` — `BETTER_AUTH_SECRET` (generated once at first install)
 
 Deleting either will break the app irreversibly (all sessions invalidated; Postgres data unreachable).
 
@@ -61,7 +61,7 @@ Deleting either will break the app irreversibly (all sessions invalidated; Postg
 All three must be green before building. Fix any errors; warnings are acceptable.
 
 ```bash
-cd datastreaming-demos/lds-chatbot
+cd datastreaming-demos/alien-agents
 
 npx tsc --noEmit          # 0 errors
 npm test -- --run         # all tests pass (currently 49/49)
@@ -74,7 +74,7 @@ Bump **both** files to the same version (e.g. `0.2.6`):
 
 ```bash
 # 1. package.json — "version" field
-# 2. helm/lds-chatbot-chart/values.yaml — image.tag
+# 2. helm/alien-agents-chart/values.yaml — image.tag
 ```
 
 They must stay in sync. The Helm tag is what ArgoCD deploys; `package.json` is what shows in logs and `npm run --version`.
@@ -86,7 +86,7 @@ Stage only production files — never commit debug scripts, spike files, or `.lo
 ```bash
 git add \
   package.json \
-  helm/lds-chatbot-chart/values.yaml \
+  helm/alien-agents-chart/values.yaml \
   <...any changed source files...>
 
 # Example:
@@ -100,14 +100,14 @@ No `Co-Authored-By` lines. No `spike_*.mjs`, `*.log`, or scratch files.
 `NEXT_PUBLIC_BASE_PATH=/agents` is **baked into the client bundle** at build time. It must match `istio.path` in `values.yaml` — both are `/agents`.
 
 ```bash
-cd datastreaming-demos/lds-chatbot
+cd datastreaming-demos/alien-agents
 
 docker build \
   --build-arg NEXT_PUBLIC_BASE_PATH=/agents \
-  -t rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot:0.2.6 \
+  -t rg.fr-par.scw.cloud/ns-data-streaming/alien-agents:0.2.6 \
   .
 
-docker push rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot:0.2.6
+docker push rg.fr-par.scw.cloud/ns-data-streaming/alien-agents:0.2.6
 ```
 
 Build takes ~5–7 min. Push takes ~1–2 min (layers are cached after first push).
@@ -118,11 +118,11 @@ Build takes ~5–7 min. Push takes ~1–2 min (layers are cached after first pus
 git push origin main
 ```
 
-ArgoCD has `automated.selfHeal: true` on `demo-lds-chatbot-prod`. It polls git every ~3 min. To force immediate pickup:
+ArgoCD has `automated.selfHeal: true` on `alien-agents-prod`. It polls git every ~3 min. To force immediate pickup:
 
 ```bash
 kubectl --context platform-prod \
-  annotate application demo-lds-chatbot-prod -n argocd \
+  annotate application alien-agents-prod -n argocd \
   argocd.argoproj.io/refresh=hard --overwrite
 ```
 
@@ -132,9 +132,9 @@ Watch the rollout:
 # Poll sync + health + running image
 for i in $(seq 1 20); do
   sleep 10
-  STATUS=$(kubectl --context platform-prod get application demo-lds-chatbot-prod \
+  STATUS=$(kubectl --context platform-prod get application alien-agents-prod \
     -n argocd -o jsonpath='{.status.sync.status} {.status.health.status}' 2>&1)
-  IMAGE=$(kubectl --context platform-prod get pods -n demo-lds-chatbot \
+  IMAGE=$(kubectl --context platform-prod get pods -n alien-agents \
     -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null)
   echo "$(date -u +%H:%M:%S) $STATUS | $IMAGE"
   [[ "$STATUS" == "Synced Healthy" && "$IMAGE" == *"0.2.6"* ]] && break
@@ -144,8 +144,8 @@ done
 ### 6. Verify startup logs
 
 ```bash
-kubectl --context platform-prod logs -n demo-lds-chatbot \
-  deploy/demo-lds-chatbot-prod --tail=30
+kubectl --context platform-prod logs -n alien-agents \
+  deploy/alien-agents-prod --tail=30
 ```
 
 Expected clean boot sequence:
@@ -220,7 +220,7 @@ kubectl --context platform-prod apply -f helm/argocd-application.yaml
 
 ## Configuration Knobs
 
-Edit `helm/lds-chatbot-chart/values.yaml` (or pass `--set` / ArgoCD parameters):
+Edit `helm/alien-agents-chart/values.yaml` (or pass `--set` / ArgoCD parameters):
 
 | Key | Purpose | Current |
 |---|---|---|
@@ -250,7 +250,7 @@ Edit `helm/lds-chatbot-chart/values.yaml` (or pass `--set` / ArgoCD parameters):
 ### App pod `CrashLoopBackOff`
 
 ```bash
-kubectl --context platform-prod logs -n demo-lds-chatbot deploy/demo-lds-chatbot-prod
+kubectl --context platform-prod logs -n alien-agents deploy/alien-agents-prod
 ```
 
 The entrypoint waits up to ~2 min for Postgres, then runs Prisma + better-auth migrations. Most startup failures are visible here.
@@ -275,8 +275,8 @@ Redis TLS stall on `responseStore.create()`. The fix (fire-and-forget Redis writ
 PVC unbound — storage class mismatch:
 
 ```bash
-kubectl --context platform-prod describe pvc -n demo-lds-chatbot \
-  data-demo-lds-chatbot-prod-postgres-0
+kubectl --context platform-prod describe pvc -n alien-agents \
+  data-alien-agents-prod-postgres-0
 kubectl --context platform-prod get storageclass
 ```
 
@@ -290,7 +290,7 @@ Authentik redirect URI must exactly match `${BETTER_AUTH_URL}/api/auth/oauth2/ca
 
 ```bash
 kubectl --context platform-prod get gateway -n istio-system
-kubectl --context platform-prod get vs -n demo-lds-chatbot -o yaml | grep -A2 gateways:
+kubectl --context platform-prod get vs -n alien-agents -o yaml | grep -A2 gateways:
 ```
 
 The VirtualService `gateways` reference (`istio-system/<sharedGatewayName>`) must point at an existing Gateway whose `hosts` includes `demo.alien.club`.
@@ -301,11 +301,11 @@ The ArgoCD Image Updater stores the image tag as a **Helm parameter override** d
 
 ```bash
 # Check what tag ArgoCD is actually using
-kubectl --context platform-prod get application demo-lds-chatbot-prod \
+kubectl --context platform-prod get application alien-agents-prod \
   -n argocd -o jsonpath='{.spec.source.helm.parameters}'
 
 # Patch it directly to force the correct tag
-kubectl --context platform-prod patch application demo-lds-chatbot-prod \
+kubectl --context platform-prod patch application alien-agents-prod \
   -n argocd --type json \
   -p '[{"op":"replace","path":"/spec/source/helm/parameters/0/value","value":"0.2.6"}]'
 ```

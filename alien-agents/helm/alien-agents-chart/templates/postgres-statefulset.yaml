@@ -2,22 +2,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "lds-chatbot.fullname" . }}-postgres
+  name: {{ include "alien-agents.fullname" . }}-postgres
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    {{- include "alien-agents.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
-  serviceName: {{ include "lds-chatbot.fullname" . }}-postgres
+  serviceName: {{ include "alien-agents.fullname" . }}-postgres
   replicas: 1
   selector:
     matchLabels:
-      {{- include "lds-chatbot.selectorLabels" . | nindent 6 }}
+      {{- include "alien-agents.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        {{- include "lds-chatbot.selectorLabels" . | nindent 8 }}
+        {{- include "alien-agents.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
       securityContext:
@@ -36,17 +36,17 @@ spec:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "lds-chatbot.fullname" . }}-postgres
+                  name: {{ include "alien-agents.fullname" . }}-postgres
                   key: POSTGRES_DB
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "lds-chatbot.fullname" . }}-postgres
+                  name: {{ include "alien-agents.fullname" . }}-postgres
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "lds-chatbot.fullname" . }}-postgres
+                  name: {{ include "alien-agents.fullname" . }}-postgres
                   key: POSTGRES_PASSWORD
             # Use a subdirectory so lost+found etc. on the PVC root doesn't
             # break initdb.

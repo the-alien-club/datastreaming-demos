@@ -11,10 +11,10 @@
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: {{ include "lds-chatbot.fullname" . }}-gateway
+  name: {{ include "alien-agents.fullname" . }}-gateway
   namespace: {{ .Values.istio.gatewayNamespace }}
   labels:
-    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    {{- include "alien-agents.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
 spec:
   selector:
@@ -23,7 +23,7 @@ spec:
     # HTTP server for ACME HTTP-01 challenges (no redirect).
     - port:
         number: 80
-        name: http-lds-chatbot
+        name: http-alien-agents
         protocol: HTTP
       hosts:
         {{- range $ownHosts }}
@@ -36,7 +36,7 @@ spec:
     # The credential covers every `own` host as SANs (see certificate.yaml).
     - port:
         number: 443
-        name: https-lds-chatbot
+        name: https-alien-agents
         protocol: HTTPS
       hosts:
         {{- range $ownHosts }}
@@ -44,6 +44,6 @@ spec:
         {{- end }}
       tls:
         mode: SIMPLE
-        credentialName: {{ include "lds-chatbot.fullname" . }}-tls
+        credentialName: {{ include "alien-agents.fullname" . }}-tls
 {{- end }}
 {{- end }}

@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "lds-chatbot.fullname" . }}-postgres
+  name: {{ include "alien-agents.fullname" . }}-postgres
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "lds-chatbot.labels" . | nindent 4 }}
+    {{- include "alien-agents.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
   type: ClusterIP
@@ -17,6 +17,6 @@ spec:
       protocol: TCP
       name: postgres
   selector:
-    {{- include "lds-chatbot.selectorLabels" . | nindent 4 }}
+    {{- include "alien-agents.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 {{- end }}

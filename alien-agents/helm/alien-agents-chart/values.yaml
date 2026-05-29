@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: rg.fr-par.scw.cloud/ns-data-streaming/demo-lds-chatbot
+  repository: rg.fr-par.scw.cloud/ns-data-streaming/alien-agents
   # IfNotPresent — image tags are immutable numeric versions, so re-pulling
   # on every pod start is wasted bandwidth + slower restarts (D-P1.4).
   pullPolicy: Always
@@ -14,7 +14,7 @@ service:
   port: 80
   targetPort: 3000
 
-namespace: demo-lds-chatbot
+namespace: alien-agents
 
 # Each entry has `host`, `path` prefix, optional `rewrite`, and `gateway` selector:
 #   - path:    URI prefix the VirtualService matches inbound requests against
@@ -37,18 +37,6 @@ istio:
     - host: demo.alien.club
       path: /agents
       gateway: shared
-    # Order matters for legaldataspace.eu: the explicit /agents route must
-    # come before the catch-all rewrite, otherwise a path like /agents/foo
-    # (emitted by the app after the first redirect, since the pod still
-    # carries NEXT_PUBLIC_BASE_PATH=/agents) would match the rewrite and
-    # get double-prefixed to /agents/agents/foo → 404.
-    - host: demo.legaldataspace.eu
-      path: /agents
-      gateway: own
-    - host: demo.legaldataspace.eu
-      path: /
-      rewrite: /agents
-      gateway: own
 
   gatewayNamespace: istio-system
   # REQUIRED if any host uses `gateway: shared`. Name of an existing Istio
@@ -90,8 +78,8 @@ postgres:
     repository: postgres
     tag: "16-alpine"
     pullPolicy: IfNotPresent
-  database: lds_chatbot
-  username: lds_chatbot
+  database: alien_agents
+  username: alien_agents
   # Password is generated once and preserved across upgrades (see postgres-secret.yaml).
   port: 5432
   persistence:
@@ -116,11 +104,14 @@ resources:
     memory: 1Gi
 
 config:
-  # Pointed at alpha while the lds-chatbot platform-side code (workflow engine
+  # Pointed at alpha while the alien-agents platform-side code (workflow engine
   # changes for this demo) hasn't been promoted to prod yet.
   platformApiUrl: https://api.alien.club
+  # TODO: clusterId + datalclusterMcpUrl carry over from the LDS client demo.
+  # Update both to the data cluster + MCP we want this public Alien Agents
+  # demo to query against before re-pointing demo.alien.club at this release.
   clusterId: "32"
-  datalclusterMcpUrl: https://mcp-legaldataspace-eu-1776173212459.mcp.alien.club/mcp
+  datalclusterMcpUrl: ""
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
   # better-auth's baseURL is the bare host — basePath is added at the
@@ -140,10 +131,10 @@ config:
   # CSRF/origin checks beyond `betterAuthUrl` (which is auto-trusted).
   # Required when serving the chatbot under multiple hostnames so that
   # sign-in / API calls from those hosts pass origin validation.
-  betterAuthTrustedOrigins: "https://demo.legaldataspace.eu"
+  betterAuthTrustedOrigins: ""
   # Service name reported to SigNoz. Keep stable across deploys so dashboards
   # and alerts don't need to be updated on every rename.
-  otelServiceName: "lds-chatbot-prod"
+  otelServiceName: "alien-agents-prod"
 
 # Scaleway Secret Manager references for secrets.
 secrets:
