@@ -4,7 +4,6 @@ import { redirect } from "next/navigation"
 import { resolveAccessToken } from "@/lib/auth-helpers"
 import { ensureOrgMembership, getMe } from "@/lib/platform/onboarding"
 import { AppSidebar } from "@/components/app-sidebar"
-import { WizardStartProvider } from "@/components/wizards/agents/start/wizard-context"
 
 const ORG_ID = process.env.ORG_ID
 
@@ -28,11 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <WizardStartProvider>
-      <div className="flex h-dvh">
-        <AppSidebar user={session.user} />
-        <main className="flex-1 overflow-auto">{children}</main>
-      </div>
-    </WizardStartProvider>
+    <div className="flex h-dvh">
+      <AppSidebar user={session.user} />
+      <main className="flex-1 overflow-auto">{children}</main>
+    </div>
   )
 }

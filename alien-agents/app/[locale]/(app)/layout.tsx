@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
-import { WizardStartProvider } from "@/components/wizards/agents/start/wizard-context"
 import { getUserOrgRole } from "@/lib/platform/onboarding"
 
 export default async function AppLayout({
@@ -17,13 +16,11 @@ export default async function AppLayout({
   const isOrgClient = orgRole === "org-client"
 
   return (
-    <WizardStartProvider>
-      <div className="flex h-dvh">
-        <AppSidebar user={session.user} isOrgClient={isOrgClient} />
-        <main className="flex-1 overflow-auto pt-14 md:pt-0">
-          {children}
-        </main>
-      </div>
-    </WizardStartProvider>
+    <div className="flex h-dvh">
+      <AppSidebar user={session.user} isOrgClient={isOrgClient} />
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">
+        {children}
+      </main>
+    </div>
   )
 }

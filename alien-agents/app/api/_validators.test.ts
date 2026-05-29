@@ -13,21 +13,21 @@ function jsonRequest(body: unknown): Request {
 }
 
 const FULL_BODY = {
-  name: "Jurisprudence Researcher",
-  description: "Research case law",
-  systemPrompt: "You are a legal research assistant.",
+  name: "Literature Researcher",
+  description: "Search and summarise scientific literature",
+  systemPrompt: "You are a research assistant.",
   steps: [
-    { name: "search", prompt: "search the legifrance corpus" },
+    { name: "search", prompt: "search the corpus" },
     { name: "summarise", prompt: "summarise findings" },
   ],
   model: "mistral-large-2512",
   subagents: [
     {
-      name: "Case Law Searcher",
+      name: "Paper Searcher",
       description: "",
-      systemPrompt: "Search case law via the legifrance MCP.",
+      systemPrompt: "Search the corpus via the search MCP.",
       model: "mistral-large-2512",
-      mcpIds: ["legifrance-mcp-id"],
+      mcpIds: ["search-mcp-id"],
       datasetId: null,
     },
   ],
@@ -98,11 +98,11 @@ describe("PUT /api/agents/{id} — updateAgentBodySchema", () => {
     const parsed = await parseBody(jsonRequest(FULL_BODY), updateAgentBodySchema)
     expect(parsed).not.toBeInstanceOf(Response)
     if (parsed instanceof Response) return
-    expect(parsed.name).toBe("Jurisprudence Researcher")
+    expect(parsed.name).toBe("Literature Researcher")
     expect(parsed.steps).toHaveLength(2)
     expect(parsed.subagents).toHaveLength(1)
     expect(parsed.subagents[0]?.datasetId).toBeNull()
-    expect(parsed.subagents[0]?.mcpIds).toEqual(["legifrance-mcp-id"])
+    expect(parsed.subagents[0]?.mcpIds).toEqual(["search-mcp-id"])
   })
 
   it("accepts an empty subagents array (explicit zero) without rejecting", async () => {

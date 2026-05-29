@@ -74,8 +74,8 @@ export type McpRow = Mcp
 export type McpResponse = McpRow & { isOwn?: boolean }
 export type McpListResponse = McpResponse[]
 
-// Available MCPs (the curated picker in the wizard). Exported from here so
-// the route file and consumer components share the same definition.
+// Available MCPs (the curated picker). Exported from here so the route file
+// and consumer components share the same definition.
 export interface AvailableMcp {
   id: string
   name: string
@@ -84,7 +84,6 @@ export interface AvailableMcp {
 }
 
 export type AvailableMcpsResponse = {
-  legal: AvailableMcp[]
-  otherBuiltin: AvailableMcp[]
+  builtin: AvailableMcp[]
   userMcps: AvailableMcp[]
 }

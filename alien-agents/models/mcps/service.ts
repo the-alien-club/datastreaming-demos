@@ -5,14 +5,14 @@ import { DEFAULT_MCP_TRANSPORT } from "@/lib/constants"
 import type { Mcp } from "./schema"
 import type { CreateMcpBody, UpdateMcpBody, AvailableMcp, AvailableMcpsResponse } from "./types"
 
-// MCPs that are bootstrapped via `scripts/seed-mcps.mjs`. The chatbot UI
-// surfaces these under a curated "Legal" section; everything else (whether
-// seeded or user-created) shows up under "User MCPs". The split is purely
+// MCPs that are bootstrapped via `scripts/seed-mcps.mjs`. The UI surfaces
+// these under a curated "Built-in" section; everything else (whether seeded
+// or user-created) shows up under "User MCPs". The split is purely
 // presentational — both source rows live in the same `mcps` table.
 //
 // Seeded ids follow the `<slug>:<userId>` shape (one built-in per user) — we
 // match by slug prefix so any user of the system gets the curated list.
-const BUILTIN_MCP_SLUGS = new Set(["legifrance", "convention-collective"])
+const BUILTIN_MCP_SLUGS = new Set<string>()
 
 function builtinSlug(id: string): string | null {
   const colon = id.indexOf(":")
@@ -87,10 +87,9 @@ export async function deleteMcp(id: string): Promise<void> {
 
 /**
  * Returns the categorised list of MCP servers available to `userId` for use
- * in the wizard picker and subagent configuration.
+ * in the subagent configuration UI.
  *
- * - `legal`: seeded built-in MCPs (matched by slug prefix allow-list)
- * - `otherBuiltin`: reserved for future non-legal built-ins; always empty today
+ * - `builtin`: seeded built-in MCPs (matched by slug prefix allow-list)
  * - `userMcps`: all other user-created or non-seeded enabled MCPs
  */
 export async function getAvailableMcps(userId: string): Promise<AvailableMcpsResponse> {
@@ -105,9 +104,8 @@ export async function getAvailableMcps(userId: string): Promise<AvailableMcpsRes
 
   const all: AvailableMcp[] = rows.map(toAvailable)
 
-  const legal = all.filter((m) => m.source === "builtin")
-  const otherBuiltin: AvailableMcp[] = []
+  const builtin = all.filter((m) => m.source === "builtin")
   const userMcps = all.filter((m) => m.source === "user")
 
-  return { legal, otherBuiltin, userMcps }
+  return { builtin, userMcps }
 }

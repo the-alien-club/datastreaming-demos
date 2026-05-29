@@ -78,12 +78,12 @@ describe("buildAgentWorkflow", () => {
             description: "",
             systemPrompt: "research",
             model: "mistral-large-2512",
-            mcpIds: ["legal:user-1"],
+            mcpIds: ["search:user-1"],
           },
         ],
       },
       [
-        { id: "legal:user-1", serverUrl: "https://example.com/legal", authToken: null },
+        { id: "search:user-1", serverUrl: "https://example.com/mcp", authToken: null },
       ],
     )
     const innerIds = innerGraph(nodes).nodes.map((n) => n.id)

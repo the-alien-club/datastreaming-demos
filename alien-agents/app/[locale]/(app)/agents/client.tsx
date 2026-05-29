@@ -3,8 +3,7 @@
 import { Link } from "@/i18n/routing"
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
-import { Bot, Plus } from "lucide-react"
-import { AutoOpenIfEmpty } from "@/components/wizards/agents/start/wizard-context"
+import { Bot, Book, Plus } from "lucide-react"
 import { LayoutAgentsGrid } from "@/components/layouts/agents/grid"
 import type { AgentWithSubagents } from "@/models/agents/schema"
 
@@ -18,7 +17,6 @@ export function AgentsClient({ initialAgents, initialAuthorNames }: AgentsClient
 
   return (
     <div className="p-4 sm:p-6">
-      <AutoOpenIfEmpty agentCount={initialAgents.length} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{t("myTitle")}</h1>
@@ -37,12 +35,20 @@ export function AgentsClient({ initialAgents, initialAuthorNames }: AgentsClient
           <Bot className="h-12 w-12 text-muted-foreground mb-4" />
           <h2 className="text-lg font-semibold mb-2">{t("emptyTitle")}</h2>
           <p className="text-muted-foreground mb-6 max-w-sm">{t("emptyDescription")}</p>
-          <Button asChild>
-            <Link href="/agents/new">
-              <Plus className="h-4 w-4 mr-2" />
-              {t("createFirst")}
-            </Link>
-          </Button>
+          <div className="flex gap-3">
+            <Button asChild>
+              <Link href="/agents/library">
+                <Book className="h-4 w-4 mr-2" />
+                {t("browseLibrary")}
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/agents/new">
+                <Plus className="h-4 w-4 mr-2" />
+                {t("createFirst")}
+              </Link>
+            </Button>
+          </div>
         </div>
       ) : (
         <LayoutAgentsGrid agents={initialAgents} authorNames={initialAuthorNames} editable />

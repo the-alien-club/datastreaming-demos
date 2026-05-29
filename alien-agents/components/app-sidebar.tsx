@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { Separator } from "@/components/ui/separator"
-import { useWizardStart } from "@/components/wizards/agents/start/wizard-context"
 import { LocaleSwitcher } from "@/components/locale-switcher"
 import { AlertDialogSignOut } from "@/components/alerts/auth/sign-out"
 import { SheetMobileNav } from "@/components/sheets/navigation/mobile"
@@ -61,7 +60,6 @@ function SidebarContent({
 }) {
   const t = useTranslations("nav")
   const pathname = usePathname()
-  const { openWizard } = useWizardStart()
 
   const allNavigation: NavItem[] = [
     {
@@ -177,15 +175,13 @@ function SidebarContent({
           <Separator />
           <div className="px-3 py-3">
             <Button
-              type="button"
-              onClick={() => {
-                openWizard()
-                onNavigate?.()
-              }}
+              asChild
               className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
             >
-              <Sparkles className="h-4 w-4" />
-              {t("start")}
+              <Link href="/agents/new" onClick={onNavigate}>
+                <Sparkles className="h-4 w-4" />
+                {t("start")}
+              </Link>
             </Button>
           </div>
         </>
