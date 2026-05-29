@@ -107,10 +107,8 @@ config:
   # Pointed at alpha while the alien-agents platform-side code (workflow engine
   # changes for this demo) hasn't been promoted to prod yet.
   platformApiUrl: https://api.alien.club
-  # TODO: clusterId + datalclusterMcpUrl carry over from the LDS client demo.
-  # Update both to the data cluster + MCP we want this public Alien Agents
-  # demo to query against before re-pointing demo.alien.club at this release.
-  clusterId: "32"
+  clusterId: "41"
+  # Empty = use platform default MCP routing for the configured cluster.
   datalclusterMcpUrl: ""
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming

@@ -22,7 +22,7 @@ spec:
         - name: istio.sharedGatewayName
           value: demo-openaire-prod-gateway
         - name: config.orgId
-          value: "3"
+          value: "134"
         - name: secrets.chatbot.scalewaySecretName
           value: alien-agents-prod
 
