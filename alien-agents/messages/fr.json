@@ -133,12 +133,12 @@
     "poweredBy": "propulsé par Alien Intelligence"
   },
   "meta": {
-    "title": "Legal Data Space",
-    "description": "Assistants juridiques propulsés par l'IA et conformes"
+    "title": "Alien Agents",
+    "description": "Créez des agents IA sur vos données"
   },
   "auth": {
     "signIn": {
-      "title": "Legal Data Space",
+      "title": "Alien Agents",
       "description": "Connectez-vous pour créer et discuter avec des assistants IA",
       "button": "Se connecter avec Alien Intelligence"
     }
@@ -397,7 +397,7 @@
     "transportLabel": "Transport",
     "categoryLabel": "Catégorie",
     "categoryHint": "(optionnel)",
-    "categoryPlaceholder": "ex. recherche, données, juridique",
+    "categoryPlaceholder": "ex : recherche, données, science",
     "authTokenLabel": "Jeton d'authentification",
     "authTokenHint": "(optionnel)",
     "authTokenPlaceholder": "Jeton Bearer ou clé API",

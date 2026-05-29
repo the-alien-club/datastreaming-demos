@@ -133,12 +133,12 @@
     "poweredBy": "powered by Alien Intelligence"
   },
   "meta": {
-    "title": "Legal Data Space",
-    "description": "AI-powered and compliant legal assistants"
+    "title": "Alien Agents",
+    "description": "Build AI agents on top of your data"
   },
   "auth": {
     "signIn": {
-      "title": "Legal Data Space",
+      "title": "Alien Agents",
       "description": "Sign in to create and chat with AI assistants",
       "button": "Connect with Alien Intelligence"
     }
@@ -397,7 +397,7 @@
     "transportLabel": "Transport",
     "categoryLabel": "Category",
     "categoryHint": "(optional)",
-    "categoryPlaceholder": "e.g. research, data, legal",
+    "categoryPlaceholder": "e.g. research, data, search",
     "authTokenLabel": "Auth token",
     "authTokenHint": "(optional)",
     "authTokenPlaceholder": "Bearer token or API key",

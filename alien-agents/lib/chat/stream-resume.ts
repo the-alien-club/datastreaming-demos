@@ -11,7 +11,7 @@
 // and is cleared on terminal events (`response.completed`/`failed`) or
 // when the resume endpoint reports 404/410.
 
-const STORAGE_KEY_PREFIX = "lds-chatbot:stream-progress:"
+const STORAGE_KEY_PREFIX = "alien-agents:stream-progress:"
 
 export interface StreamProgressBeacon {
   responseId: string
