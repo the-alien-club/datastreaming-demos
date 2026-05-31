@@ -21,16 +21,9 @@ export class McpPolicy {
     return mcp.userId === this.user.id || mcp.isPublic
   }
 
-  /**
-   * Non-client org members may create MCP server configurations.
-   *
-   * orgRole is resolved by withAuth from the platform API and injected into
-   * PolicyUser. When orgRole is null (platform unreachable or ORG_ID not
-   * configured), we treat the user as non-client so standalone deployments
-   * remain functional.
-   */
+  /** Any authenticated user may create an MCP server configuration. */
   create(): boolean {
-    return this.user.orgRole !== "org-client"
+    return true
   }
 
   /** Only the owner may edit. */

@@ -311,12 +311,9 @@ No global store. Three tiers:
 
 New users land on `/agents` with an empty-state offering two CTAs: **Browse library** → `/agents/library` (primary, recommended path) and **Create from scratch** → `/agents/new` (plain form). The sidebar "Start" button also routes to `/agents/new`. No wizard.
 
-### Role Gating
+### Authorization
 
-`isOrgClient` is computed server-side in `(app)/layout.tsx` from `getUserOrgRole()` (calls `GET /users/me` on the platform). Navigation items with `clientVisible: false` are filtered in `app-sidebar.tsx`.
-
-- `org-client`: sees only Agents + Conversations; Chat button only on public agents; no create/edit
-- Full users: own agents with Chat, Settings, Publish, Delete; plus Specialists, Datasets, MCP management
+Every authenticated user gets the full app — no platform-side role gating. Per-resource authorization is owner-only for write actions (`edit` / `delete` / `publish`) via the per-model `Policy` classes (`models/*/policy.ts`); `view` allows owner-or-public. The `bouncer.with(Policy).authorize(action, resource)` pattern in API routes enforces this. The platform backend still enforces workflow execution permissions independently (so a user without the right platform role would hit 403 from the API even though the local UI lets them try).
 
 ### Notable Patterns
 

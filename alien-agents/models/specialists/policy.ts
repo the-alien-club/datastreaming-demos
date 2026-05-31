@@ -21,16 +21,9 @@ export class SpecialistPolicy {
     return specialist.userId === this.user.id || specialist.isPublic
   }
 
-  /**
-   * Non-client org members may create specialists.
-   *
-   * orgRole is resolved by withAuth from the platform API and injected into
-   * PolicyUser. When orgRole is null (platform unreachable or ORG_ID not
-   * configured), we treat the user as non-client so standalone deployments
-   * remain functional.
-   */
+  /** Any authenticated user may create a specialist. */
   create(): boolean {
-    return this.user.orgRole !== "org-client"
+    return true
   }
 
   /** Only the owner may edit. */
@@ -48,8 +41,8 @@ export class SpecialistPolicy {
     return specialist.userId === this.user.id
   }
 
-  /** Non-client org members may fork specialists. */
+  /** Any authenticated user may fork a public specialist. */
   fork(): boolean {
-    return this.user.orgRole !== "org-client"
+    return true
   }
 }

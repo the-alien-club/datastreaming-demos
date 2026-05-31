@@ -5,17 +5,10 @@ import type { auth } from "@/lib/auth"
 // separate manual type declaration.
 type SessionUser = typeof auth.$Infer.Session.user
 
-// PolicyUser is the enriched user object injected by withAuth. It carries the
-// base session fields plus orgRole resolved from the platform API. Policies
-// declare their constructor as `(user: PolicyUser)` and read this type via
-// `this.user` — they never receive the user as a method argument.
-//
-// orgRole values mirror the platform's role slugs. `null` means the platform
-// is unreachable or ORG_ID is not configured; callers must treat null as
-// non-client (permissive fallback) to avoid locking out standalone deployments.
-export type PolicyUser = SessionUser & {
-  orgRole: string | null
-}
+// PolicyUser is the user object injected by withAuth. Policies declare their
+// constructor as `(user: PolicyUser)` and read this type via `this.user` —
+// they never receive the user as a method argument.
+export type PolicyUser = SessionUser
 
 // Re-export as `User` so existing imports of `type { User } from "@/lib/bouncer"`
 // continue to compile while we migrate callers to PolicyUser.

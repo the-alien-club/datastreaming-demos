@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { getUserOrgRole } from "@/lib/platform/onboarding"
 import { getMcps } from "@/models/mcps/queries"
 import { McpsClient } from "./client"
 import type { McpRecord } from "@/components/cards/mcps/mcp"
@@ -10,8 +9,6 @@ export default async function McpsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) redirect("/sign-in")
 
-  const orgRole = await getUserOrgRole(session.user.id)
-  if (orgRole === "org-client") redirect("/agents")
 
   const rows = await getMcps(session.user.id)
 
