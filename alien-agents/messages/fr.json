@@ -361,7 +361,8 @@
       "aiInstructionsEmpty": "Aucune instruction. Cliquez sur le crayon pour expliquer à l’IA comment utiliser ce corpus.",
       "aiInstructionsPlaceholder": "Que doit savoir l’IA sur ce corpus ?",
       "aiInstructionsHint": "L’enregistrement met à jour le prompt sur chaque assistant auquel ce corpus est attaché.",
-      "aiInstructionsSaved": "Instructions enregistrées"
+      "aiInstructionsSaved": "Instructions enregistrées",
+      "aiInstructionsAddCta": "Ajouter des instructions — expliquez à l’IA comment utiliser ce corpus"
     }
   },
   "mcps": {

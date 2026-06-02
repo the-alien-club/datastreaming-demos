@@ -313,71 +313,6 @@ export function DatasetDetailClient({ initialDataset }: DatasetDetailClientProps
           {dataset.description && (
             <p className="text-sm text-muted-foreground mt-0.5">{dataset.description}</p>
           )}
-
-          {/* AI instructions inline editor — corpus-subagent prompt addition */}
-          <div className="mt-3 rounded-lg border bg-card p-3">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("aiInstructionsTitle")}
-              </h3>
-              {aiInstructionsDraft === null && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setAiInstructionsDraft(dataset.aiInstructions ?? "")}
-                  title={t("aiInstructionsEdit")}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-
-            {aiInstructionsDraft !== null ? (
-              <div className="space-y-2">
-                <Textarea
-                  value={aiInstructionsDraft}
-                  onChange={(e) => setAiInstructionsDraft(e.target.value)}
-                  placeholder={t("aiInstructionsPlaceholder")}
-                  className="min-h-32 resize-y text-sm"
-                  disabled={savingAiInstructions}
-                  autoFocus
-                />
-                <p className="text-xs text-muted-foreground">{t("aiInstructionsHint")}</p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleSaveAiInstructions}
-                    disabled={savingAiInstructions}
-                  >
-                    {savingAiInstructions ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <Check className="h-3.5 w-3.5 mr-1.5" />
-                    )}
-                    {tCommon("save")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAiInstructionsDraft(null)}
-                    disabled={savingAiInstructions}
-                  >
-                    <X className="h-3.5 w-3.5 mr-1.5" />
-                    {tCommon("cancel")}
-                  </Button>
-                </div>
-              </div>
-            ) : dataset.aiInstructions ? (
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                {dataset.aiInstructions}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground italic">
-                {t("aiInstructionsEmpty")}
-              </p>
-            )}
-          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={() => setAttachOpen(true)}>
@@ -417,6 +352,76 @@ export function DatasetDetailClient({ initialDataset }: DatasetDetailClientProps
             onChange={(e) => handleUploadFiles(e.target.files)}
           />
         </div>
+      </div>
+
+      {/* AI instructions — full-width card sitting between header and entries.
+          Three states: collapsed-empty (compact prompt + Add button), filled
+          (read-only with edit affordance), editing (textarea + save/cancel). */}
+      <div className="mb-6">
+        {aiInstructionsDraft !== null ? (
+          <div className="rounded-lg border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">{t("aiInstructionsTitle")}</h3>
+              <span className="text-xs text-muted-foreground">{t("aiInstructionsHint")}</span>
+            </div>
+            <Textarea
+              value={aiInstructionsDraft}
+              onChange={(e) => setAiInstructionsDraft(e.target.value)}
+              placeholder={t("aiInstructionsPlaceholder")}
+              className="min-h-32 resize-y text-sm"
+              disabled={savingAiInstructions}
+              autoFocus
+            />
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={handleSaveAiInstructions} disabled={savingAiInstructions}>
+                {savingAiInstructions ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                {tCommon("save")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAiInstructionsDraft(null)}
+                disabled={savingAiInstructions}
+              >
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                {tCommon("cancel")}
+              </Button>
+            </div>
+          </div>
+        ) : dataset.aiInstructions ? (
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-medium mb-1">{t("aiInstructionsTitle")}</h3>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">
+                  {dataset.aiInstructions}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAiInstructionsDraft(dataset.aiInstructions ?? "")}
+                className="shrink-0"
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                {tCommon("edit")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAiInstructionsDraft("")}
+            className="w-full text-left rounded-lg border border-dashed bg-card/30 px-4 py-3 text-sm text-muted-foreground hover:bg-card hover:text-foreground hover:border-solid transition-colors flex items-center gap-2"
+          >
+            <Pencil className="h-3.5 w-3.5 shrink-0" />
+            <span>{t("aiInstructionsAddCta")}</span>
+          </button>
+        )}
       </div>
 
       {loadingEntries ? (

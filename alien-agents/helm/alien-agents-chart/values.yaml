@@ -5,7 +5,7 @@ image:
   # IfNotPresent — image tags are immutable numeric versions, so re-pulling
   # on every pod start is wasted bandwidth + slower restarts (D-P1.4).
   pullPolicy: Always
-  tag: "0.3.9"
+  tag: "0.3.10"
 
 imagePullSecrets: []
 

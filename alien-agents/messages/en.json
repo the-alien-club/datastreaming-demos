@@ -361,7 +361,8 @@
       "aiInstructionsEmpty": "No instructions set. Click the pencil to tell the AI how to use this corpus.",
       "aiInstructionsPlaceholder": "What should the AI know about this corpus?",
       "aiInstructionsHint": "Saving will update the prompt on every agent this corpus is attached to.",
-      "aiInstructionsSaved": "AI instructions saved"
+      "aiInstructionsSaved": "AI instructions saved",
+      "aiInstructionsAddCta": "Add AI instructions — tell the AI how to use this corpus"
     }
   },
   "mcps": {
