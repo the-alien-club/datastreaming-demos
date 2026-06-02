@@ -20,16 +20,9 @@ export class DatasetPolicy {
     return dataset.userId === this.user.id || dataset.isPublic
   }
 
-  /**
-   * Non-client org members may create datasets.
-   *
-   * orgRole is resolved by withAuth from the platform API and injected into
-   * PolicyUser. When orgRole is null (platform unreachable or ORG_ID not
-   * configured), we treat the user as non-client so standalone deployments
-   * remain functional.
-   */
+  /** Any authenticated user may create a dataset. */
   create(): boolean {
-    return this.user.orgRole !== "org-client"
+    return true
   }
 
   edit(dataset: DatasetSelect): boolean {

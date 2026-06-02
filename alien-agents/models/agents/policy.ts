@@ -23,17 +23,9 @@ export class AgentPolicy {
     return agent.userId === this.user.id || agent.isPublic
   }
 
-  /**
-   * Non-client org members may create agents.
-   *
-   * orgRole is resolved by withAuth from the platform API and injected into
-   * PolicyUser. When orgRole is null (platform unreachable or ORG_ID not
-   * configured), we treat the user as non-client so standalone deployments
-   * remain functional. This is explicitly not a delegation to another layer —
-   * the policy enforces the constraint itself.
-   */
+  /** Any authenticated user may create an agent. */
   create(): boolean {
-    return this.user.orgRole !== "org-client"
+    return true
   }
 
   /**
@@ -57,12 +49,8 @@ export class AgentPolicy {
     return agent.userId === this.user.id
   }
 
-  /**
-   * Non-client org members may fork a public agent into their own workspace.
-   * Mirrors the same constraint as `create` — org-client users are consumers,
-   * not builders.
-   */
+  /** Any authenticated user may fork a public agent into their own workspace. */
   fork(): boolean {
-    return this.user.orgRole !== "org-client"
+    return true
   }
 }

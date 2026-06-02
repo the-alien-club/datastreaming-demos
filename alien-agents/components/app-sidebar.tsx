@@ -32,7 +32,6 @@ interface AppSidebarProps {
     email: string
     image?: string | null
   }
-  isOrgClient?: boolean
 }
 
 type NavSubItem = {
@@ -45,74 +44,65 @@ type NavItem = {
   name: string
   href: string
   icon: React.ElementType
-  clientVisible: boolean
   subItems?: NavSubItem[]
 }
 
 function SidebarContent({
   user,
-  isOrgClient,
   onNavigate,
 }: {
   user: AppSidebarProps["user"]
-  isOrgClient?: boolean
   onNavigate?: () => void
 }) {
   const t = useTranslations("nav")
   const pathname = usePathname()
 
-  const allNavigation: NavItem[] = [
-    {
-      name: t("agents"),
-      href: "/agents",
-      icon: Bot,
-      clientVisible: true,
-      subItems: [
-        { name: t("myAgents"), href: "/agents", icon: Settings },
-        { name: t("agentLibrary"), href: "/agents/library", icon: Book },
-      ],
-    },
-    {
-      name: t("conversations"),
-      href: "/conversations",
-      icon: MessageSquare,
-      clientVisible: true,
-    },
-    {
-      name: t("specialists"),
-      href: "/specialists",
-      icon: BrainCircuit,
-      clientVisible: false,
-      subItems: [
-        { name: t("mySpecialists"), href: "/specialists", icon: Settings },
-        { name: t("specialistsLibrary"), href: "/specialists/library", icon: Book },
-      ],
-    },
-    {
-      name: t("corpus"),
-      href: "/datasets",
-      icon: FileText,
-      clientVisible: false,
-      subItems: [
-        { name: t("myCorpus"), href: "/datasets", icon: FolderOpen },
-        { name: t("corpusLibrary"), href: "/datasets/library", icon: Book },
-      ],
-    },
-    {
-      name: t("databases"),
-      href: "/mcps",
-      icon: Database,
-      clientVisible: false,
-      subItems: [
-        { name: t("myDatabases"), href: "/mcps", icon: Settings },
-        { name: t("databasesLibrary"), href: "/mcps/library", icon: Book },
-      ],
-    },
-  ]
-
-  const navigation = isOrgClient
-    ? allNavigation.filter((item) => item.clientVisible)
-    : allNavigation
+  const navigation: NavItem[] = useMemo(
+    () => [
+      {
+        name: t("agents"),
+        href: "/agents",
+        icon: Bot,
+        subItems: [
+          { name: t("myAgents"), href: "/agents", icon: Settings },
+          { name: t("agentLibrary"), href: "/agents/library", icon: Book },
+        ],
+      },
+      {
+        name: t("conversations"),
+        href: "/conversations",
+        icon: MessageSquare,
+      },
+      {
+        name: t("specialists"),
+        href: "/specialists",
+        icon: BrainCircuit,
+        subItems: [
+          { name: t("mySpecialists"), href: "/specialists", icon: Settings },
+          { name: t("specialistsLibrary"), href: "/specialists/library", icon: Book },
+        ],
+      },
+      {
+        name: t("corpus"),
+        href: "/datasets",
+        icon: FileText,
+        subItems: [
+          { name: t("myCorpus"), href: "/datasets", icon: FolderOpen },
+          { name: t("corpusLibrary"), href: "/datasets/library", icon: Book },
+        ],
+      },
+      {
+        name: t("databases"),
+        href: "/mcps",
+        icon: Database,
+        subItems: [
+          { name: t("myDatabases"), href: "/mcps", icon: Settings },
+          { name: t("databasesLibrary"), href: "/mcps/library", icon: Book },
+        ],
+      },
+    ],
+    [t],
+  )
 
   // Derive which nav group should be expanded from the current pathname.
   // This is pure derivation — no effect or setState needed.
@@ -167,22 +157,18 @@ function SidebarContent({
         <LocaleSwitcher />
       </div>
 
-      {!isOrgClient && (
-        <>
-          <Separator />
-          <div className="px-3 py-3">
-            <Button
-              asChild
-              className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
-            >
-              <Link href="/agents/new" onClick={onNavigate}>
-                <Sparkles className="h-4 w-4" />
-                {t("start")}
-              </Link>
-            </Button>
-          </div>
-        </>
-      )}
+      <Separator />
+      <div className="px-3 py-3">
+        <Button
+          asChild
+          className="w-full justify-start gap-2 bg-linear-to-r from-primary to-primary/80 text-primary-foreground shadow ring-1 ring-primary/30 hover:from-primary/90 hover:to-primary/70"
+        >
+          <Link href="/agents/new" onClick={onNavigate}>
+            <Sparkles className="h-4 w-4" />
+            {t("start")}
+          </Link>
+        </Button>
+      </div>
 
       <Separator />
 
@@ -287,14 +273,14 @@ function SidebarContent({
   )
 }
 
-export function AppSidebar({ user, isOrgClient }: AppSidebarProps) {
+export function AppSidebar({ user }: AppSidebarProps) {
   const [open, setOpen] = useState(false)
 
   return (
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-        <SidebarContent user={user} isOrgClient={isOrgClient} />
+        <SidebarContent user={user} />
       </aside>
 
       {/* Mobile top bar */}
@@ -302,7 +288,6 @@ export function AppSidebar({ user, isOrgClient }: AppSidebarProps) {
         <SheetMobileNav open={open} onOpenChange={setOpen}>
           <SidebarContent
             user={user}
-            isOrgClient={isOrgClient}
             onNavigate={() => setOpen(false)}
           />
         </SheetMobileNav>
