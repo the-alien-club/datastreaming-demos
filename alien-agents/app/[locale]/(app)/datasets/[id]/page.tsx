@@ -22,6 +22,7 @@ export default async function DatasetDetailPage({
     clusterDatasetId: dataset.clusterDatasetId,
     name: dataset.name,
     description: dataset.description ?? null,
+    aiInstructions: dataset.aiInstructions ?? null,
     status: dataset.status ?? null,
     attachedAgents: dataset.attachedAgents,
   }

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AlertCircle, ArrowLeft, Upload, Loader2, RefreshCw, Link2, Pencil, Check, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-fetch"
 import { timeAgo } from "@/lib/time"
@@ -20,6 +21,7 @@ export interface DatasetRecord {
   clusterDatasetId: number | null
   name: string
   description: string | null
+  aiInstructions: string | null
   status: string | null
   attachedAgents: { id: string; name: string }[]
 }
@@ -98,6 +100,37 @@ export function DatasetDetailClient({ initialDataset }: DatasetDetailClientProps
 
   const [renameDraft, setRenameDraft] = useState<string | null>(null)
   const [savingName, setSavingName] = useState(false)
+
+  // null = displaying current value; string = editing in textarea
+  const [aiInstructionsDraft, setAiInstructionsDraft] = useState<string | null>(null)
+  const [savingAiInstructions, setSavingAiInstructions] = useState(false)
+
+  async function handleSaveAiInstructions() {
+    if (aiInstructionsDraft === null) return
+    const next = aiInstructionsDraft.trim()
+    // Send null to clear, the trimmed string otherwise. Service treats both
+    // as "field changed" and re-propagates to attached agents.
+    setSavingAiInstructions(true)
+    try {
+      const res = await apiFetch(`/api/datasets/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aiInstructions: next || null }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`)
+      }
+      const updated = await res.json()
+      setDataset((prev) => ({ ...prev, aiInstructions: updated.aiInstructions ?? null }))
+      setAiInstructionsDraft(null)
+      toast.success(t("aiInstructionsSaved"))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("failedLoadDataset"))
+    } finally {
+      setSavingAiInstructions(false)
+    }
+  }
 
   async function handleRename() {
     if (renameDraft === null) return
@@ -280,6 +313,71 @@ export function DatasetDetailClient({ initialDataset }: DatasetDetailClientProps
           {dataset.description && (
             <p className="text-sm text-muted-foreground mt-0.5">{dataset.description}</p>
           )}
+
+          {/* AI instructions inline editor — corpus-subagent prompt addition */}
+          <div className="mt-3 rounded-lg border bg-card p-3">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("aiInstructionsTitle")}
+              </h3>
+              {aiInstructionsDraft === null && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setAiInstructionsDraft(dataset.aiInstructions ?? "")}
+                  title={t("aiInstructionsEdit")}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+
+            {aiInstructionsDraft !== null ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={aiInstructionsDraft}
+                  onChange={(e) => setAiInstructionsDraft(e.target.value)}
+                  placeholder={t("aiInstructionsPlaceholder")}
+                  className="min-h-32 resize-y text-sm"
+                  disabled={savingAiInstructions}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">{t("aiInstructionsHint")}</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveAiInstructions}
+                    disabled={savingAiInstructions}
+                  >
+                    {savingAiInstructions ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    {tCommon("save")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAiInstructionsDraft(null)}
+                    disabled={savingAiInstructions}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1.5" />
+                    {tCommon("cancel")}
+                  </Button>
+                </div>
+              </div>
+            ) : dataset.aiInstructions ? (
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                {dataset.aiInstructions}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">
+                {t("aiInstructionsEmpty")}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={() => setAttachOpen(true)}>

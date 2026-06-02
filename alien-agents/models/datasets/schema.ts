@@ -43,6 +43,7 @@ export const datasetRow = {
     clusterDatasetId: true,
     name: true,
     description: true,
+    aiInstructions: true,
     status: true,
     isPublic: true,
     createdAt: true,
@@ -61,6 +62,7 @@ export type DatasetInsert = {
   clusterDatasetId?: number | null
   name: string
   description?: string | null
+  aiInstructions?: string | null
   status?: string | null
   isPublic?: boolean
   createdAt?: Date

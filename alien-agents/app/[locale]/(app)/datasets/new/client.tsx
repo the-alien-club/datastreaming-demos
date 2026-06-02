@@ -23,6 +23,7 @@ export function DatasetNewClient() {
       body: JSON.stringify({
         name: payload.name,
         description: payload.description || undefined,
+        aiInstructions: payload.aiInstructions || undefined,
       }),
     })
 

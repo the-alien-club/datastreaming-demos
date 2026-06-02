@@ -328,7 +328,10 @@
       "atLeastOneFile": "Veuillez ajouter au moins un fichier",
       "createUpload": "Créer & Importer",
       "created": "Jeu de données créé et fichiers importés",
-      "failedCreate": "Impossible de créer le jeu de données"
+      "failedCreate": "Impossible de créer le jeu de données",
+      "aiInstructionsLabel": "Instructions pour l’IA",
+      "aiInstructionsPlaceholder": "Que doit savoir l’IA sur ce corpus ? Ex : « Les documents sont des articles scientifiques de 2010 à 2023. Préférez le résumé pour les questions générales ; citez les numéros de section pour les questions techniques. »",
+      "aiInstructionsHint": "Ajouté au prompt système de l’agent corpus quand ce jeu de données est attaché à un assistant. Optionnel."
     },
     "detail": {
       "attachToAgent": "Associer à un assistant",
@@ -352,7 +355,13 @@
       "attach": "Associer",
       "attached": "Jeu de données associé à l'assistant en tant qu'agent IA spécialisé corpus",
       "failedAttach": "Impossible d'associer",
-      "failedLoadAgents": "Impossible de charger les assistants"
+      "failedLoadAgents": "Impossible de charger les assistants",
+      "aiInstructionsTitle": "Instructions pour l’IA",
+      "aiInstructionsEdit": "Modifier les instructions",
+      "aiInstructionsEmpty": "Aucune instruction. Cliquez sur le crayon pour expliquer à l’IA comment utiliser ce corpus.",
+      "aiInstructionsPlaceholder": "Que doit savoir l’IA sur ce corpus ?",
+      "aiInstructionsHint": "L’enregistrement met à jour le prompt sur chaque assistant auquel ce corpus est attaché.",
+      "aiInstructionsSaved": "Instructions enregistrées"
     }
   },
   "mcps": {

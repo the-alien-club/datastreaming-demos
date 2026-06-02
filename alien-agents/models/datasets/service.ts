@@ -19,6 +19,7 @@ import {
   getAgent,
   insertSubagent,
   updateAgentRecord,
+  updateSubagentRecord,
   getSubagentByAgentAndDataset,
   getAttachedAgentCountsByDataset,
   getAgentsByDataset,
@@ -149,6 +150,7 @@ export async function createDataset(
     clusterDatasetId: clusterDataset.id,
     name,
     description: description || null,
+    aiInstructions: data.aiInstructions?.trim() || null,
     status: DATASET_STATUS.Pending,
     createdAt: now,
     updatedAt: now,
@@ -156,6 +158,42 @@ export async function createDataset(
 }
 
 // ─── Corpus subagent attachment ───────────────────────────────────────────────
+
+/**
+ * Builds the system prompt for the corpus subagent generated when a dataset
+ * is attached to an agent. The boilerplate restricts the subagent to this
+ * specific cluster dataset id and enumerates the available search tools.
+ *
+ * If the dataset has user-provided `aiInstructions`, they are appended under
+ * a `## How to use this corpus` section so the model treats them as
+ * caller-supplied guidance on top of the mechanical tool/dataset constraints.
+ *
+ * Shared by:
+ *   - `attachDatasetToAgent` — first-time generation at attach time
+ *   - `propagateDatasetPromptToAttachedAgents` — regeneration after the
+ *     dataset's `aiInstructions` field is edited
+ *
+ * `dataset.clusterDatasetId` MUST be non-null; callers guard with
+ * DatasetNotSyncedError before reaching this point.
+ */
+function buildCorpusSystemPrompt(dataset: DatasetSelect): string {
+  const boilerplate = `You are a document search specialist for the "${dataset.name}" corpus.
+
+When searching, ALWAYS use datasetIds=[${dataset.clusterDatasetId}] to restrict searches to this specific corpus.
+
+Your tools allow you to:
+- Search documents by keyword (keyword_search)
+- Search documents by semantic similarity (vector_search_chunks)
+- Get full document content (get_entry_content)
+- List documents in a dataset (get_entry_documents)
+
+Always include dataset ID ${dataset.clusterDatasetId} in your search queries.
+Return relevant excerpts with source references (entry IDs and titles).`
+
+  const extra = dataset.aiInstructions?.trim()
+  if (!extra) return boilerplate
+  return `${boilerplate}\n\n## How to use this corpus\n\n${extra}`
+}
 
 /**
  * Attaches a dataset to an agent by creating a corpus specialist subagent node
@@ -190,19 +228,7 @@ export async function attachDatasetToAgent(
   if (alreadyAttached) throw new DatasetAlreadyAttachedError(datasetId, agentId)
 
   // 4. Build corpus subagent config
-  const corpusSystemPrompt = `You are a document search specialist for the "${dataset.name}" corpus.
-
-When searching, ALWAYS use datasetIds=[${dataset.clusterDatasetId}] to restrict searches to this specific corpus.
-
-Your tools allow you to:
-- Search documents by keyword (keyword_search)
-- Search documents by semantic similarity (vector_search_chunks)
-- Get full document content (get_entry_content)
-- List documents in a dataset (get_entry_documents)
-
-Always include dataset ID ${dataset.clusterDatasetId} in your search queries.
-Return relevant excerpts with source references (entry IDs and titles).`
-
+  const corpusSystemPrompt = buildCorpusSystemPrompt(dataset)
   const corpusDescription = `Specialist for searching the "${dataset.name}" corpus. Searches and retrieves documents from dataset ${dataset.clusterDatasetId}.`
 
   const corpusSubagentConfig: SubagentConfig = {
@@ -346,16 +372,116 @@ export async function getEntryStatus(
  */
 export async function updateDataset(
   datasetId: string,
+  userId: string,
   data: UpdateDatasetData,
 ): Promise<DatasetSelect> {
-  const updates: Partial<{ name: string; description: string | null; isPublic: boolean }> = {}
+  const updates: Partial<{
+    name: string
+    description: string | null
+    aiInstructions: string | null
+    isPublic: boolean
+  }> = {}
   if (data.name !== undefined) updates.name = data.name.trim()
   if ("description" in data) updates.description = data.description ?? null
+  if ("aiInstructions" in data) {
+    const trimmed = data.aiInstructions?.trim()
+    updates.aiInstructions = trimmed ? trimmed : null
+  }
   if (data.isPublic !== undefined) updates.isPublic = data.isPublic
 
   const updated = await updateDatasetRecord(datasetId, updates)
   if (!updated) throw new DatasetNotFoundError(datasetId)
+
+  // When aiInstructions changes, rebuild the corpus-subagent system prompt
+  // on every agent this dataset is attached to and PATCH each affected
+  // workflow on the platform. Best-effort per agent: a single failure is
+  // logged and skipped — the dataset row update has already committed and
+  // the rest of the agents still get the new prompt.
+  if ("aiInstructions" in data) {
+    await propagateDatasetPromptToAttachedAgents(updated, userId)
+  }
+
   return updated
+}
+
+/**
+ * For every agent this dataset is attached to (owned by `userId`), rebuild
+ * the corpus subagent's system prompt from the (post-update) dataset row and
+ * PATCH the agent's workflow on the platform.
+ *
+ * Best-effort: errors per agent are logged and swallowed so one broken agent
+ * doesn't block the rest of the propagation. The local DB row for each
+ * subagent is updated before the platform PATCH; on platform failure the
+ * DB drifts ahead of the workflow until the next successful attach/update.
+ *
+ * No-op when there are no attached agents.
+ */
+async function propagateDatasetPromptToAttachedAgents(
+  dataset: DatasetSelect,
+  userId: string,
+): Promise<void> {
+  if (!dataset.clusterDatasetId) return
+
+  const attached = await getAgentsByDataset(dataset.id, userId)
+  if (attached.length === 0) return
+
+  const corpusSystemPrompt = buildCorpusSystemPrompt(dataset)
+  const mcpConfigs = await loadEnabledMcpConfigs(userId)
+  const token = await resolveAccessToken(userId)
+  const now = new Date()
+
+  for (const { id: agentId } of attached) {
+    try {
+      const agent = await getAgent(agentId, userId)
+      if (!agent || !agent.workflowId) continue
+
+      // Locate this dataset's corpus subagent row on this agent.
+      const corpusRow = await getSubagentByAgentAndDataset(agentId, dataset.id)
+      if (!corpusRow) continue
+
+      // Rebuild every subagent's config, swapping in the regenerated prompt
+      // for the corpus subagent. Other subagents pass through unchanged.
+      const allSubagents: SubagentConfig[] = agent.subagents.map(
+        (sa: { id: string; name: string; systemPrompt: string; model?: string | null; mcpIds?: string | null }) => {
+          const isThisCorpus = sa.id === corpusRow.id
+          return {
+            name: sa.name,
+            description: "",
+            systemPrompt: isThisCorpus ? corpusSystemPrompt : sa.systemPrompt,
+            model: sa.model ?? DEFAULT_MODEL_SLUG,
+            mcpIds: sa.mcpIds ? (JSON.parse(sa.mcpIds) as string[]) : [],
+          }
+        },
+      )
+
+      const steps: { name: string; prompt: string }[] = agent.steps
+        ? (JSON.parse(agent.steps) as { name: string; prompt: string }[])
+        : []
+
+      const { nodes, edges } = buildAgentWorkflow(
+        {
+          name: agent.name,
+          systemPrompt: agent.systemPrompt ?? "",
+          steps,
+          model: agent.model ?? DEFAULT_MODEL_SLUG,
+          subagents: allSubagents,
+        },
+        mcpConfigs,
+      )
+
+      // Persist the new subagent prompt locally before PATCHing the platform
+      // so a network failure can't leave the DB out of date relative to a
+      // successful platform update.
+      await updateSubagentRecord(corpusRow.id, { systemPrompt: corpusSystemPrompt })
+      await updateWorkflow(agent.workflowId, { nodes, edges }, token)
+      await updateAgentRecord(agentId, userId, { updatedAt: now })
+    } catch (err) {
+      console.error(
+        `[datasets] failed to propagate aiInstructions for dataset=${dataset.id} → agent=${agentId}:`,
+        err,
+      )
+    }
+  }
 }
 
 // ─── Batch file upload ────────────────────────────────────────────────────────

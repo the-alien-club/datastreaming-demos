@@ -328,7 +328,10 @@
       "atLeastOneFile": "Please add at least one file",
       "createUpload": "Create & Upload",
       "created": "Dataset created and files uploaded",
-      "failedCreate": "Failed to create dataset"
+      "failedCreate": "Failed to create dataset",
+      "aiInstructionsLabel": "AI instructions",
+      "aiInstructionsPlaceholder": "What should the AI know about this corpus? e.g. \"Documents are scientific papers from 2010-2023. Prefer the abstract for high-level questions; cite section numbers when answering technical ones.\"",
+      "aiInstructionsHint": "Appended to the corpus subagent system prompt when this dataset is attached to an agent. Optional."
     },
     "detail": {
       "attachToAgent": "Attach to assistant",
@@ -352,7 +355,13 @@
       "attach": "Attach",
       "attached": "Dataset attached to assistant as corpus specialized AI agent",
       "failedAttach": "Failed to attach",
-      "failedLoadAgents": "Failed to load assistants"
+      "failedLoadAgents": "Failed to load assistants",
+      "aiInstructionsTitle": "AI instructions",
+      "aiInstructionsEdit": "Edit AI instructions",
+      "aiInstructionsEmpty": "No instructions set. Click the pencil to tell the AI how to use this corpus.",
+      "aiInstructionsPlaceholder": "What should the AI know about this corpus?",
+      "aiInstructionsHint": "Saving will update the prompt on every agent this corpus is attached to.",
+      "aiInstructionsSaved": "AI instructions saved"
     }
   },
   "mcps": {

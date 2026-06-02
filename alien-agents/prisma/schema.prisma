@@ -90,6 +90,9 @@ model Dataset {
   clusterDatasetId Int?            @map("cluster_dataset_id")
   name             String
   description      String?
+  // Free-form instructions appended to the corpus-subagent system prompt
+  // when this dataset is attached to an agent. Null = no extra instructions.
+  aiInstructions   String?         @map("ai_instructions")
   // "pending" | "processing" | "ready" | "error"
   status           String?         @default("pending")
   isPublic         Boolean         @default(false) @map("is_public")

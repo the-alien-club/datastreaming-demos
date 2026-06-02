@@ -29,6 +29,7 @@ interface FileItem {
 const datasetCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
+  aiInstructions: z.string().max(8000, "max 8000 chars").optional(),
 })
 
 export type FormDatasetCreateData = z.infer<typeof datasetCreateSchema>
@@ -56,7 +57,7 @@ export function FormDatasetCreate({ onSubmit }: FormDatasetCreateProps) {
 
   const form = useForm<FormDatasetCreateData>({
     resolver: zodResolver(datasetCreateSchema),
-    defaultValues: { name: "", description: "" },
+    defaultValues: { name: "", description: "", aiInstructions: "" },
   })
 
   function addFiles(incoming: FileList | File[]) {
@@ -157,6 +158,25 @@ export function FormDatasetCreate({ onSubmit }: FormDatasetCreateProps) {
                     {...field}
                   />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="aiInstructions"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("aiInstructionsLabel")}</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder={t("aiInstructionsPlaceholder")}
+                    className="min-h-32 resize-y"
+                    {...field}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">{t("aiInstructionsHint")}</p>
                 <FormMessage />
               </FormItem>
             )}

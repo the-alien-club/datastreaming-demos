@@ -7,11 +7,15 @@ import type { DatasetSelect } from "./schema"
 
 const NAME = z.string().trim().min(1, "must be non-empty").max(120, "max 120 chars")
 const SHORT_TEXT = z.string().max(2_000, "max 2000 chars")
+// Free-form prompt content: appended to the corpus-subagent system prompt
+// on attach, so it needs more headroom than description.
+const PROMPT_TEXT = z.string().max(8_000, "max 8000 chars")
 const ID = z.string().trim().min(1, "must be non-empty")
 
 export const createDatasetSchema = z.object({
   name: NAME,
   description: SHORT_TEXT.optional(),
+  aiInstructions: PROMPT_TEXT.optional(),
 })
 export type CreateDatasetData = z.infer<typeof createDatasetSchema>
 
@@ -20,6 +24,7 @@ export type CreateDatasetData = z.infer<typeof createDatasetSchema>
 export const updateDatasetSchema = z.object({
   name: NAME.optional(),
   description: SHORT_TEXT.nullable().optional(),
+  aiInstructions: PROMPT_TEXT.nullable().optional(),
   isPublic: z.boolean().optional(),
 })
 export type UpdateDatasetData = z.infer<typeof updateDatasetSchema>
