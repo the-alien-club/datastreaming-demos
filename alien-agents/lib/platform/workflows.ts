@@ -27,6 +27,61 @@ export interface AgentConfig {
   subagents: SubagentConfig[]
 }
 
+// ─── Slug helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Slugify a free-form name into something safe for a workflow node id and for
+ * the DeepAgent compiler to surface as the subagent's `task()` tool name.
+ *
+ * Rules:
+ *   - lowercase
+ *   - strip accents (NFKD + combining-mark removal)
+ *   - collapse any run of non-alphanumeric chars to a single `-`
+ *   - trim leading / trailing `-`
+ *   - cap at 40 chars (then trim trailing `-` again in case the cap landed
+ *     mid-separator)
+ *   - if the result is empty (name was e.g. "###" or all-whitespace), return
+ *     the supplied `fallback`
+ *
+ * The output character set `[a-z0-9-]` is the lowest-common-denominator across
+ * the consumers we care about: the OpenAI Responses-API `item.id` regex
+ * (`agent:[^:]+::…`) accepts anything but `:`, the LangChain DeepAgents
+ * `task()` tool name is a free-form string, and React Flow node ids are
+ * opaque strings.
+ */
+function slugify(name: string, fallback: string): string {
+  const slug = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/, "")
+  return slug || fallback
+}
+
+/**
+ * Return `candidate` if unused, otherwise append `-2`, `-3`, … until unique.
+ * Mutates `used` to record the chosen id so subsequent calls keep diverging.
+ *
+ * Why a Set instead of just appending an incrementing index: subagent names
+ * are user-supplied and may collide either with each other ("Research" used
+ * twice) or with the fixed skeleton ids ("agentInput" as a subagent name).
+ * Tracking everything in one set covers both cases uniformly.
+ */
+function uniqueId(candidate: string, used: Set<string>): string {
+  if (!used.has(candidate)) {
+    used.add(candidate)
+    return candidate
+  }
+  let n = 2
+  while (used.has(`${candidate}-${n}`)) n++
+  const result = `${candidate}-${n}`
+  used.add(result)
+  return result
+}
+
 // ─── Param helpers ────────────────────────────────────────────────────────────
 
 function param(value: unknown, isExpression = false) {
@@ -297,23 +352,39 @@ export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[])
     },
   ]
 
-  // Dynamic subagent nodes start at index 6
-  let nextNodeIndex = 6
+  // Subagent / MCP node ids are slugified from the subagent name and the
+  // MCP id rather than numeric. This matters because the DeepAgent compiler
+  // (workers/nodes/deep_agent/compiler/deep_agent_compiler.py:339) does
+  // `name = node_id` for each subagent — the LLM sees this string as the
+  // `task()` tool name. Readable names → better dispatch by the main agent.
+  //
+  // `usedIds` is seeded with the fixed skeleton ids so a subagent unfortunate
+  // enough to be named "deepAgent" doesn't clobber the core graph.
+  const usedIds = new Set<string>([
+    "httpRequest-0",
+    "aiAgent-1",
+    "httpResponse-2",
+    "agentInput-3",
+    "deepAgent-4",
+    "agentOutput-5",
+  ])
   const subagentNodeIds: string[] = []
 
   config.subagents.forEach((subagent, subIdx) => {
-    const subagentNodeId = `subagent-${nextNodeIndex}`
-    const subagentIdx = nextNodeIndex
+    const subagentNodeId = uniqueId(
+      `subagent-${slugify(subagent.name, `${subIdx + 1}`)}`,
+      usedIds,
+    )
     subagentNodeIds.push(subagentNodeId)
-    nextNodeIndex++
 
     const subagentYOffset = 300 + subIdx * 200
 
     innerNodes.push(buildSubagentNode(subagentNodeId, subagent, subagentYOffset))
 
-    // Edge: deepAgent-4 → subagent
+    // Edge: deepAgent-4 → subagent. Edge id derives from the (unique) target
+    // node id so collisions are not possible within a single graph build.
     innerEdges.push({
-      id: `e-deep-sub${subagentIdx}`,
+      id: `e-deep-${subagentNodeId}`,
       source: "deepAgent-4",
       target: subagentNodeId,
       sourceHandle: "agents",
@@ -334,9 +405,10 @@ export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[])
 
       const authToken = mcpConfig?.authToken ?? null
 
-      const mcpNodeId = `mcpServer-${nextNodeIndex}`
-      const mcpIdx_ = nextNodeIndex
-      nextNodeIndex++
+      const mcpNodeId = uniqueId(
+        `mcpServer-${slugify(mcpId, `${mcpIdx + 1}`)}`,
+        usedIds,
+      )
 
       innerNodes.push(
         buildMcpServerNode(
@@ -348,9 +420,9 @@ export function buildAgentWorkflow(config: AgentConfig, mcpConfigs: McpConfig[])
         )
       )
 
-      // Edge: subagent → mcpServer
+      // Edge: subagent → mcpServer. Composite of two already-unique ids.
       innerEdges.push({
-        id: `e-sub${subagentIdx}-mcp${mcpIdx_}`,
+        id: `e-${subagentNodeId}-${mcpNodeId}`,
         source: subagentNodeId,
         target: mcpNodeId,
         sourceHandle: "tools",

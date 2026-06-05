@@ -87,8 +87,53 @@ describe("buildAgentWorkflow", () => {
       ],
     )
     const innerIds = innerGraph(nodes).nodes.map((n) => n.id)
-    expect(innerIds).toContain("subagent-6")
-    expect(innerIds).toContain("mcpServer-7")
+    // Subagent id is a slug of the subagent's name; MCP id is a slug of the
+    // MCP id string. Both prefixed by their node type so they don't collide
+    // with the fixed skeleton ids.
+    expect(innerIds).toContain("subagent-researcher")
+    expect(innerIds).toContain("mcpServer-search-user-1")
+  })
+
+  it("disambiguates colliding subagent slugs with a numeric suffix", () => {
+    const { nodes } = buildAgentWorkflow(
+      {
+        name: "Test",
+        systemPrompt: "",
+        steps: [],
+        model: "mistral-large-2512",
+        subagents: [
+          { name: "Research", description: "", systemPrompt: "a", model: "mistral-large-2512", mcpIds: [] },
+          { name: "Research", description: "", systemPrompt: "b", model: "mistral-large-2512", mcpIds: [] },
+          // Mixed case + accented form should collapse to the same base slug
+          // as the two plain "Research" entries above; expect -3 suffix.
+          { name: "Résëärch", description: "", systemPrompt: "c", model: "mistral-large-2512", mcpIds: [] },
+        ],
+      },
+      NO_MCPS,
+    )
+    const innerIds = innerGraph(nodes).nodes.map((n) => n.id)
+    expect(innerIds).toContain("subagent-research")
+    expect(innerIds).toContain("subagent-research-2")
+    expect(innerIds).toContain("subagent-research-3")
+  })
+
+  it("falls back to an index-based slug when the subagent name is empty / non-alphanumeric", () => {
+    const { nodes } = buildAgentWorkflow(
+      {
+        name: "Test",
+        systemPrompt: "",
+        steps: [],
+        model: "mistral-large-2512",
+        subagents: [
+          { name: "", description: "", systemPrompt: "", model: "mistral-large-2512", mcpIds: [] },
+          { name: "###", description: "", systemPrompt: "", model: "mistral-large-2512", mcpIds: [] },
+        ],
+      },
+      NO_MCPS,
+    )
+    const innerIds = innerGraph(nodes).nodes.map((n) => n.id)
+    expect(innerIds).toContain("subagent-1")
+    expect(innerIds).toContain("subagent-2")
   })
 
   it("throws if a subagent references an unknown MCP id and no env override", () => {
@@ -140,7 +185,7 @@ describe("buildAgentWorkflow", () => {
         NO_MCPS,
       )
       const innerIds = innerGraph(nodes).nodes.map((n) => n.id)
-      expect(innerIds).toContain("mcpServer-7")
+      expect(innerIds).toContain("mcpServer-datacluster")
     } finally {
       if (prev === undefined) delete process.env.DATACLUSTER_MCP_URL
       else process.env.DATACLUSTER_MCP_URL = prev
