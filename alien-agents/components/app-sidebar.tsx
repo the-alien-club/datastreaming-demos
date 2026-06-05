@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import Image from "next/image"
 import { useTranslations } from "next-intl"
 import { Link, usePathname } from "@/i18n/routing"
 import {
@@ -144,15 +143,10 @@ function SidebarContent({
     <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-4">
         <Link href="/agents" className="flex items-center" onClick={onNavigate}>
-          <Image
-            src="/images/logo-with-text.svg"
-            alt="Alien"
-            width={160}
-            height={28}
-            className="h-7"
-            style={{ width: "auto" }}
-            unoptimized
-          />
+          {/* Plain <img>: the SVG's intrinsic dims don't match what Next/Image
+              expects, so even with `unoptimized` it can render at zero size.
+              Frontend repo uses the same pattern. */}
+          <img src="/images/logo-w.svg" alt="Alien" className="h-7 w-auto" />
         </Link>
         <LocaleSwitcher />
       </div>
@@ -293,15 +287,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         </SheetMobileNav>
 
         <Link href="/agents">
-          <Image
-            src="/images/logo-with-text.svg"
-            alt="Alien"
-            width={160}
-            height={24}
-            className="h-6"
-            style={{ width: "auto" }}
-            unoptimized
-          />
+          <img src="/images/logo-w.svg" alt="Alien" className="h-6 w-auto" />
         </Link>
 
         <LocaleSwitcher />
