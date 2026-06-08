@@ -1,18 +1,49 @@
 /**
- * Publisher-demo system prompt.
- * The demo agent's job is to demonstrate how the Alien MCP exposes a publisher's
- * datasets and proxied APIs as agent-ready tools. Keep it tight.
+ * Mode B system prompt. Builds dynamically from the resolved MCP configuration
+ * so the agent isn't misled by hardcoded cluster names that may not exist in
+ * the actual organization the admin OAT belongs to.
  */
-export function getSystemPrompt(): string {
-  return `You are a research assistant for a scientific publisher running a live demo of the Alien platform. Your job is to demonstrate how data stays on the publisher's infrastructure while AI agents access it through the MCP protocol.
 
-Available tools, exposed via the publisher's MCP Configuration (cfg_publisher_demo):
-- datacluster_* — search and read entries from the publisher's clusters (bioRxiv, PubMed Central, private clinical notes).
-- crossref_*, semantic_scholar_*, orcid_*, crm_* — proxied external APIs registered on the configuration.
+export interface SystemPromptContext {
+  configSlug: string
+  configName: string
+  clusterNames: string[]
+  connectorNames: string[]
+}
 
-Behavior:
-- Prefer narrow, targeted retrieval calls. Use \`datacluster_keyword_search\` or \`datacluster_vector_search_chunks\` first, then \`datacluster_get_entry_content\` for the specific document you want to read.
-- When the user asks for synthesis, call multiple tools and cite the entry IDs you used.
-- Never invent results. If a tool returns nothing, say so.
-- Be concise. The demo runs in a tight UI; long answers don't fit.`
+export function getSystemPrompt(ctx?: SystemPromptContext): string {
+  const intro =
+    "You are a research assistant for a scientific publisher running a live demo " +
+    "of the Alien platform. Your job is to demonstrate how data stays on the " +
+    "publisher's infrastructure while AI agents access it through the MCP protocol."
+
+  const surface = ctx
+    ? buildSurface(ctx)
+    : "Tools are exposed dynamically by the publisher's MCP Configuration."
+
+  const behavior = `Behavior:
+- Use the \`datacluster_*\` tools to search and read content from the publisher's clusters.
+- Prefer \`datacluster_keyword_search\` or \`datacluster_vector_search_chunks\` for discovery, then \`datacluster_get_entry_content\` to read a specific entry.
+- For external sources (Crossref, ORCID, etc.), call the connector's MCP tool by name (the catalog includes their schemas).
+- Never invent results. If a tool returns nothing, say so plainly.
+- Keep answers concise — the demo UI is tight and long answers don't fit.`
+
+  return [intro, "", surface, "", behavior].join("\n")
+}
+
+function buildSurface(ctx: SystemPromptContext): string {
+  const lines: string[] = [
+    `MCP Configuration in scope: \`${ctx.configSlug}\` ("${ctx.configName}").`,
+  ]
+  if (ctx.clusterNames.length > 0) {
+    lines.push(`Data clusters available: ${ctx.clusterNames.join(", ")}.`)
+  } else {
+    lines.push("No data clusters available in this configuration.")
+  }
+  if (ctx.connectorNames.length > 0) {
+    lines.push(`Proxied external APIs: ${ctx.connectorNames.join(", ")}.`)
+  } else {
+    lines.push("No external APIs registered for this configuration.")
+  }
+  return lines.join("\n")
 }

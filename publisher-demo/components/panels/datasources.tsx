@@ -1,43 +1,42 @@
 "use client"
 
-import { type ReactNode, useState } from "react"
-import type { Datasource } from "@/lib/seed-data"
+import { type ReactNode, useEffect, useState } from "react"
+import { useDemoEventListener } from "@/hooks/use-demo-events"
+import type { ConfigView } from "@/hooks/use-config"
 import { Icon } from "../icons"
-import { InfoTip, StatusDot } from "../widgets"
+import { InfoTip } from "../widgets"
 
-export type DsPulse = { ds: { id: string; n: number } | null }
+type Pulse = { clusterId: number | null; datasetId: number | null; n: number }
 
 function Cbx({ state }: { state: "on" | "off" | "mixed" }) {
   return (
-    <span className={`cbx ${state === "on" ? "on" : state === "mixed" ? "mixed" : ""}`}>
+    <span className={"cbx " + (state === "on" ? "on" : state === "mixed" ? "mixed" : "")}>
       {state === "on" && <Icon name="check" size={11} strokeWidth={2.8} />}
     </span>
   )
 }
 
 function Row({
-  id,
+  rowKey,
   selected,
   parent,
   child,
   isPulse,
-  pulseN,
   onClick,
   children,
 }: {
-  id: string
+  rowKey: string
   selected?: boolean
   parent?: boolean
   child?: boolean
   isPulse: boolean
-  pulseN: number
   onClick: () => void
   children: ReactNode
 }) {
   const [rip, setRip] = useState(0)
   return (
     <div
-      key={id + (isPulse ? `#${pulseN}` : "")}
+      key={rowKey}
       className={
         "ds-row" +
         (child ? " child" : "") +
@@ -57,26 +56,51 @@ function Row({
 }
 
 export function Datasources({
-  sources,
-  pulse,
-  onToggle,
-  onExpand,
+  view,
+  isLoading,
+  errorMessage,
+  onToggleDataset,
+  onToggleCluster,
 }: {
-  sources: Datasource[]
-  pulse: DsPulse
-  onToggle: (id: string) => void
-  onExpand: (id: string) => void
+  view: ConfigView | null
+  isLoading: boolean
+  errorMessage: string | null
+  onToggleDataset: (clusterId: number, datasetId: number) => void
+  onToggleCluster: (clusterId: number) => void
 }) {
-  let sel = 0
-  sources.forEach((s) => {
-    if (s.leaf) {
-      if (s.checked) sel++
-    } else {
-      s.children?.forEach((c) => {
-        if (c.checked) sel++
-      })
-    }
+  const [openClusters, setOpenClusters] = useState<Set<number>>(new Set())
+  // Default-open the first cluster the first time data arrives so the demo
+  // shows a populated tree on load.
+  const [didInitOpen, setDidInitOpen] = useState(false)
+  useEffect(() => {
+    if (didInitOpen || !view || view.clusters.length === 0) return
+    setOpenClusters(new Set([view.clusters[0].cluster_id]))
+    setDidInitOpen(true)
+  }, [view, didInitOpen])
+
+  const [pulse, setPulse] = useState<Pulse>({ clusterId: null, datasetId: null, n: 0 })
+  useDemoEventListener("tool-call", (event) => {
+    if (event.kind !== "dataset" || event.datasetIds.length === 0) return
+    // Highlight the first touched dataset; finding its cluster is done in
+    // render via the view tree below.
+    setPulse((p) => ({ clusterId: null, datasetId: event.datasetIds[0], n: p.n + 1 }))
   })
+
+  const selectedCount = view
+    ? view.clusters.reduce(
+        (acc, c) => acc + c.datasets.filter((d) => d.checked).length,
+        0,
+      )
+    : 0
+
+  const expand = (clusterId: number) => {
+    setOpenClusters((prev) => {
+      const next = new Set(prev)
+      if (next.has(clusterId)) next.delete(clusterId)
+      else next.add(clusterId)
+      return next
+    })
+  }
 
   return (
     <section className="panel p-ds">
@@ -84,90 +108,90 @@ export function Datasources({
         <Icon name="database" size={15} style={{ color: "var(--neutral-400)" }} />
         <span className="panel-title">Datasources</span>
         <span className="spacer" />
-        <span className="meta-chip">{sel} selected</span>
+        <span className="meta-chip">{selectedCount} selected</span>
         <InfoTip text="Toggle what the agent is allowed to retrieve from." />
       </header>
       <div className="panel-body">
-        <div className="ds-list">
-          {sources.map((s) => {
-            const isPulseRow = pulse.ds?.id === s.id
-            const pulseN = pulse.ds?.n ?? 0
-            if (s.leaf) {
+        {isLoading && (
+          <div style={{ padding: 16, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--neutral-500)" }}>
+            Loading sources…
+          </div>
+        )}
+        {!isLoading && errorMessage && (
+          <div
+            style={{
+              padding: 16,
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              color: "var(--destructive)",
+            }}
+          >
+            Could not load datasources: {errorMessage}
+          </div>
+        )}
+        {!isLoading && !errorMessage && view?.clusters.length === 0 && (
+          <div
+            style={{ padding: 16, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--neutral-500)" }}
+          >
+            No clusters available for this organization.
+          </div>
+        )}
+        {!isLoading && !errorMessage && view && (
+          <div className="ds-list">
+            {view.clusters.map((c) => {
+              const enabledCount = c.datasets.filter((d) => d.checked).length
+              const totalCount = c.datasets.length
+              const pstate: "on" | "off" | "mixed" =
+                enabledCount === 0 ? "off" : enabledCount === totalCount ? "on" : "mixed"
+              const isOpen = openClusters.has(c.cluster_id)
               return (
-                <Row
-                  key={s.id}
-                  id={s.id}
-                  selected={s.checked}
-                  parent
-                  isPulse={isPulseRow}
-                  pulseN={pulseN}
-                  onClick={() => onToggle(s.id)}
-                >
-                  <span className="ds-chev-spacer" />
-                  <Cbx state={s.checked ? "on" : "off"} />
-                  <span className="ds-name">{s.name}</span>
-                  {s.priv && (
-                    <span className="priv-tag" title={s.priv}>
-                      Private
-                    </span>
-                  )}
-                  {s.status && <StatusDot status={s.status} />}
-                </Row>
-              )
-            }
-            const cc = s.children?.filter((c) => c.checked).length ?? 0
-            const total = s.children?.length ?? 0
-            const pstate: "on" | "off" | "mixed" = cc === 0 ? "off" : cc === total ? "on" : "mixed"
-            return (
-              <div key={s.id}>
-                <Row
-                  id={s.id}
-                  selected={cc > 0}
-                  parent
-                  isPulse={isPulseRow}
-                  pulseN={pulseN}
-                  onClick={() => onToggle(s.id)}
-                >
-                  <button
-                    type="button"
-                    className="ds-chev"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onExpand(s.id)
-                    }}
-                    aria-label={s.open ? "Collapse" : "Expand"}
+                <div key={c.cluster_id}>
+                  <Row
+                    rowKey={`cluster-${c.cluster_id}`}
+                    selected={enabledCount > 0}
+                    parent
+                    isPulse={false}
+                    onClick={() => onToggleCluster(c.cluster_id)}
                   >
-                    <Icon name={s.open ? "chevD" : "chevR"} size={13} />
-                  </button>
-                  <Cbx state={pstate} />
-                  <span className="ds-name">{s.name}</span>
-                  <span className="ds-count">{s.datasets} datasets</span>
-                </Row>
-                {s.open &&
-                  s.children?.map((c) => {
-                    const cIsPulse = pulse.ds?.id === c.id
-                    return (
-                      <Row
-                        key={c.id}
-                        id={c.id}
-                        selected={c.checked}
-                        child
-                        isPulse={cIsPulse}
-                        pulseN={pulse.ds?.n ?? 0}
-                        onClick={() => onToggle(c.id)}
-                      >
-                        <Cbx state={c.checked ? "on" : "off"} />
-                        <span className="ds-name">{c.name}</span>
-                        <span className="ds-docs">{c.docs} docs</span>
-                        <StatusDot status={c.status} />
-                      </Row>
-                    )
-                  })}
-                {s.open && s.more && <div className="ds-more">{s.more}</div>}
-              </div>
-            )
-          })}
-        </div>
+                    <button
+                      type="button"
+                      className="ds-chev"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        expand(c.cluster_id)
+                      }}
+                      aria-label={isOpen ? "Collapse" : "Expand"}
+                    >
+                      <Icon name={isOpen ? "chevD" : "chevR"} size={13} />
+                    </button>
+                    <Cbx state={pstate} />
+                    <span className="ds-name">{c.name}</span>
+                    <span className="ds-count">{totalCount} datasets</span>
+                  </Row>
+                  {isOpen &&
+                    c.datasets.map((d) => {
+                      const isPulse = pulse.datasetId === d.id
+                      return (
+                        <Row
+                          key={d.id}
+                          rowKey={`dataset-${d.id}` + (isPulse ? `#${pulse.n}` : "")}
+                          selected={d.checked}
+                          child
+                          isPulse={isPulse}
+                          onClick={() => onToggleDataset(c.cluster_id, d.id)}
+                        >
+                          <Cbx state={d.checked ? "on" : "off"} />
+                          <span className="ds-name">{d.name}</span>
+                          {!d.is_public && <span className="priv-tag">Private</span>}
+                          <span className="status-dot indexed" />
+                        </Row>
+                      )
+                    })}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </section>
   )

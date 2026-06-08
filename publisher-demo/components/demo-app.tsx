@@ -1,78 +1,110 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { resolveToolSource, useConfig } from "@/hooks/use-config"
+import { useDemoEvents } from "@/hooks/use-demo-events"
+import { useMode, type Mode } from "@/hooks/use-mode"
+import { usePricing } from "@/hooks/use-pricing"
 import type { JobProgress, ToolActivity } from "@/lib/claude-sdk/job-store"
-import { usePricing } from "@/lib/pricing"
-import {
-  type AgentMessage,
-  APIS,
-  ATTRIBUTION,
-  buildRun,
-  CONFIG_JSON,
-  DATASOURCES,
-  type Datasource,
-  DONE3,
-  EMPTY_STATE,
-  FEED,
-  MESSAGES,
-  type Message,
-  MODEL,
-  type ScriptedTool,
-  SUGGESTIONS,
-} from "@/lib/seed-data"
-import { resolveLiveTool } from "@/lib/tool-resolver"
 import { readUiMessageChunks } from "@/lib/ui-stream"
 import { Icon } from "./icons"
-import { AccessMode, type Mode } from "./panels/access-mode"
+import { AccessMode } from "./panels/access-mode"
 import { Agent, type Timeline } from "./panels/agent"
 import { Datasources } from "./panels/datasources"
 import { ExternalApis } from "./panels/external-apis"
 import { Observability } from "./panels/observability"
 import { DsButton } from "./widgets"
 
-type Pulse = {
-  ds: { id: string; n: number } | null
-  api: { id: string; n: number } | null
-  attr: { key: string; n: number } | null
+const MODEL = "Claude Opus 4.7"
+const DONE3 = { planner: "done", specialist: "done", critic: "done" } as const
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+const SUGGESTIONS: Record<Mode, string[]> = {
+  dataflow: [
+    "Summarize today's neuroscience preprint activity",
+    "Cross-reference with my private notes",
+    "Draft a literature review with citations",
+  ],
+  agentic: [
+    "Plan a systematic review of recent D2 antagonist trials",
+    "Reconcile preprint claims against my clinical cohort",
+    "Build an evidence table with citations and gaps",
+  ],
 }
 
-const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x))
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const EMPTY_STATE: Record<Mode, string> = {
+  dataflow:
+    "Live chat on the active MCP Configuration. Every read is metered and attributed.",
+  agentic:
+    "Live workflow on the active MCP Configuration. Give the planner a multi-step task.",
+}
+
+type ChatMessage =
+  | { uid: number; role: "user"; text: string }
+  | {
+      uid: number
+      role: "agent"
+      sender: string
+      tools: AgentTool[]
+      text: string
+      streaming: boolean
+      faded?: boolean
+      fresh: boolean
+      chain?: { who: string; text: string }[]
+    }
+  | { uid: number; role: "scope"; text: string }
+
+interface AgentTool {
+  icon: string
+  name: string
+  summary: string
+  args: string
+  result: string
+}
+
+function configJson(slug: string, mcpUrl: string): string {
+  const base = mcpUrl.replace(/\/$/, "")
+  return JSON.stringify(
+    { mcpServers: { alien: { url: `${base}/mcp?config=${slug}` } } },
+    null,
+    2,
+  )
+}
 
 function ConfigChip({
+  slug,
   dsCount,
   apiCount,
-  dirty,
-  pulseKey,
+  isDirty,
+  isSaving,
+  justSaved,
   onSave,
 }: {
+  slug: string
   dsCount: number
   apiCount: number
-  dirty: boolean
-  pulseKey: number
+  isDirty: boolean
+  isSaving: boolean
+  justSaved: boolean
   onSave: () => void
 }) {
   return (
-    <div
-      className={`cfg-chip${dirty ? " dirty" : ""}`}
-      key={`cfg${pulseKey}`}
-      data-pulse={pulseKey}
-    >
+    <div className={"cfg-chip" + (isDirty ? " dirty" : "")} key={justSaved ? "saved" : "idle"}>
       <span className="cfg-ic">
         <Icon name="gear" size={15} />
       </span>
       <div className="cfg-text">
         <span className="cfg-title">
-          MCP Configuration · <code>cfg_publisher_demo</code>
+          MCP Configuration · <code>{slug}</code>
         </span>
         <span className="cfg-sub">
-          {dsCount} datasources · {apiCount} APIs · used by both modes
+          {dsCount} clusters · {apiCount} APIs · used by both modes
         </span>
       </div>
-      {dirty && (
-        <button type="button" className="cfg-save" onClick={onSave}>
+      {isDirty && (
+        <button type="button" className="cfg-save" onClick={onSave} disabled={isSaving}>
           <Icon name="check" size={13} strokeWidth={2.4} />
-          Save
+          {isSaving ? "Saving…" : "Save"}
         </button>
       )}
     </div>
@@ -80,394 +112,392 @@ function ConfigChip({
 }
 
 export function DemoApp() {
+  const config = useConfig()
+  const pricing = usePricing()
+  const events = useDemoEvents()
+  const { mode, setMode } = useMode()
+
   const uidRef = useRef(1000)
-  const nid = () => {
+  const nid = useCallback(() => {
     uidRef.current += 1
     return uidRef.current
-  }
-  const init = useMemo(() => makeInitialState(), [])
-  const pricing = usePricing()
+  }, [])
 
-  const [datasources, setDatasources] = useState<Datasource[]>(init.datasources)
-  const [apis, setApis] = useState(init.apis)
-  const [attribution, setAttribution] = useState(init.attribution)
-  const [mode, setMode] = useState<Mode>("dataflow")
-  const [counters, setCounters] = useState(init.counters)
-  const [feed, setFeed] = useState(init.feed)
-  const [messages, setMessages] = useState<Message[]>(init.messages)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [timeline, setTimeline] = useState<Timeline>({ ...DONE3 })
-  const [pulse, setPulse] = useState<Pulse>({ ds: null, api: null, attr: null })
+  const [railActive, setRailActive] = useState(false)
   const [input, setInput] = useState("")
   const [pressed, setPressed] = useState<number | null>(null)
-  const [railActive, setRailActive] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [cfgPulse, setCfgPulse] = useState(0)
-  const [feedFlash, setFeedFlash] = useState(0)
   const [pendingMode, setPendingMode] = useState<Mode | null>(null)
+
   const runningRef = useRef(false)
   const cancelRef = useRef(false)
-  const applyingUntil = useRef(0)
-  // Pricing is sampled into a ref so async event dispatchers don't need to
-  // re-render when pricing arrives mid-turn.
-  const pricingRef = useRef(pricing)
-  pricingRef.current = pricing
+  // Latest sources + pricing snapshots accessible from inside async loops
+  // without re-subscribing on every render.
+  const sourcesRef = useRef(config.sources)
+  sourcesRef.current = config.sources
+  const computeRoyaltyRef = useRef(pricing.computeRoyalty)
+  computeRoyaltyRef.current = pricing.computeRoyalty
 
-  function addMsg(m: Omit<Message, "uid">) {
-    const uid = nid()
-    setMessages((ms) => [...ms, { ...(m as Message), uid }])
-    return uid
-  }
+  const slug = config.configuration?.slug ?? "cfg_publisher_demo"
+  const mcpUrl =
+    process.env.NEXT_PUBLIC_MCP_ALIEN_URL ?? "https://mcp.alien.club"
+  const configJsonString = useMemo(() => configJson(slug, mcpUrl), [slug, mcpUrl])
 
-  function fireEvent(tool: ScriptedTool, agentUid: number) {
-    setMessages((ms) =>
-      ms.map((m) => {
-        if (m.uid === agentUid && m.role === "agent") {
-          return {
-            ...m,
-            fresh: true,
-            tools: [...(m.tools || []), tool],
-          } as AgentMessage
-        }
-        return m
-      }),
-    )
-    setTimeout(() => {
-      setFeed((f) =>
-        [
-          { uid: nid(), t: tool.t, tool: tool.feedTool, meta: tool.feedMeta, fresh: true },
-          ...f.map((r) => ({ ...r, fresh: false })),
-        ].slice(0, 8),
-      )
-    }, 100)
-    setTimeout(() => {
-      setCounters((c) => ({
-        ...c,
-        apiCalls: c.apiCalls + 1,
-        royalties: +(c.royalties + tool.royalty).toFixed(4),
-      }))
-    }, 200)
-    setTimeout(() => {
-      if (tool.type === "dataset") {
-        setPulse((p) => ({ ...p, ds: { id: tool.dsRow!, n: nid() } }))
-      } else {
-        setApis((arr) =>
-          arr.map((a) =>
-            a.id === tool.apiRow
-              ? {
-                  ...a,
-                  last: "just now",
-                  spark: [...a.spark.slice(1), 3 + Math.floor(Math.random() * 5)],
-                }
-              : a,
-          ),
-        )
-        setPulse((p) => ({ ...p, api: { id: tool.apiRow!, n: nid() } }))
-      }
-    }, 300)
-    setTimeout(() => {
-      setAttribution((arr) =>
-        arr.map((s) =>
-          s.key === tool.sourceKey
-            ? { ...s, weight: s.weight + (tool.type === "dataset" ? 9 : 4) }
-            : s,
-        ),
-      )
-      setPulse((p) => ({ ...p, attr: { key: tool.sourceKey, n: nid() } }))
-    }, 400)
-  }
-
-  function setAgentText(agentUid: number, text: string, streaming: boolean) {
-    setMessages((ms) =>
-      ms.map((m) =>
-        m.uid === agentUid && m.role === "agent"
-          ? ({ ...m, text, streaming, faded: false } as AgentMessage)
-          : m,
-      ),
-    )
-  }
-
-  async function runAgent(query: string) {
-    if (runningRef.current) return
-    runningRef.current = true
-    cancelRef.current = false
-
-    const agentic = mode === "agentic"
-    setInput("")
-    addMsg({ role: "user", text: query })
-    const agentUid = addMsg({
-      role: "agent",
-      sender: agentic ? "DeepAgent" : "Claude",
-      tools: [],
-      text: "",
-      fresh: false,
-    } as AgentMessage)
-
-    if (agentic) {
-      setRailActive(true)
-      setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
-    }
-
-    // Surface the "applying new config" inline notice if a recent save is
-    // still propagating.
-    const applying = Date.now() < applyingUntil.current
-    if (applying) {
+  const addUserMessage = useCallback(
+    (text: string) => {
+      const uid = nid()
+      setMessages((ms) => [...ms, { uid, role: "user", text }])
+      return uid
+    },
+    [nid],
+  )
+  const addAgentMessage = useCallback(
+    (sender: string) => {
       const uid = nid()
       setMessages((ms) => [
         ...ms,
-        { role: "scope", uid, text: "New MCP Configuration · applying…" } as Message,
+        { uid, role: "agent", sender, tools: [], text: "", streaming: true, fresh: false },
       ])
-      setTimeout(() => setMessages((ms) => ms.filter((m) => m.uid !== uid)), 1200)
-    }
+      return uid
+    },
+    [nid],
+  )
+  const addScopeMessage = useCallback(
+    (text: string) => {
+      const uid = nid()
+      setMessages((ms) => [...ms, { uid, role: "scope", text }])
+      return uid
+    },
+    [nid],
+  )
 
-    try {
-      if (agentic) {
-        await runModeA(query, agentUid)
-      } else {
-        await runModeB(query, agentUid)
-      }
-    } catch (err) {
-      console.error("[demo] live turn failed — falling back to scripted runner:", err)
-      // Backend unreachable or env not configured. Fall back to the design's
-      // scripted run so the demo always shows something, even offline.
-      await runScripted(query, agentUid, agentic)
-    } finally {
-      if (agentic) setTimeline({ ...DONE3 })
-      runningRef.current = false
-    }
-  }
-
-  async function runModeA(query: string, agentUid: number) {
-    const res = await fetch("/api/demo/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "agentic",
-        messages: [{ role: "user", content: query }],
-      }),
-    })
-    if (!res.ok || !res.body) {
-      throw new Error(`Mode A failed: ${res.status} ${res.statusText}`)
-    }
-
-    let accText = ""
-    let sawFirstTool = false
-    let sawFirstText = false
-
-    for await (const chunk of readUiMessageChunks(res.body)) {
-      if (cancelRef.current) break
-      const type = chunk.type as string | undefined
-      switch (type) {
-        case "text-delta": {
-          const delta = String(chunk.delta ?? "")
-          if (!delta) break
-          accText += delta
-          setAgentText(agentUid, accText, true)
-          if (!sawFirstText && sawFirstTool) {
-            sawFirstText = true
-            setTimeline({ planner: "done", specialist: "done", critic: "exec" })
-          }
-          break
-        }
-        case "data-toolCall": {
-          const data = chunk.data as { id?: string; name?: string; args?: unknown } | undefined
-          if (!data?.name) break
-          const tool = resolveLiveTool(data.name, data.args, pricingRef.current)
-          fireEvent(tool, agentUid)
-          if (!sawFirstTool) {
-            sawFirstTool = true
-            setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
-          }
-          break
-        }
-        case "data-subagent":
-          if (!sawFirstTool) {
-            setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
-          }
-          break
-        case "data-subagent-end":
-          // Closing back to MAIN; rail will resolve on finish.
-          break
-        case "finish":
-          setAgentText(agentUid, accText, false)
-          setTimeline({ ...DONE3 })
-          break
-        case "error": {
-          const errorText = String(chunk.errorText ?? "stream error")
-          throw new Error(errorText)
-        }
-        default:
-          break
-      }
-    }
-
-    setAgentText(agentUid, accText, false)
-  }
-
-  async function runModeB(query: string, agentUid: number) {
-    const startRes = await fetch("/api/demo/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "data",
-        messages: [{ role: "user", content: query }],
-      }),
-    })
-    if (!startRes.ok) throw new Error(`Mode B start failed: ${startRes.status}`)
-    const { jobId } = (await startRes.json()) as { jobId: string }
-
-    let seenActivity = 0
-    let seenMessages = 0
-    let accText = ""
-    let totalTokens = 0
-
-    while (true) {
-      if (cancelRef.current) {
-        await fetch(`/api/demo/stop/${jobId}`, { method: "POST" }).catch(() => {})
-        break
-      }
-      await sleep(1500)
-
-      const sres = await fetch(`/api/demo/status/${jobId}`)
-      if (!sres.ok) {
-        if (sres.status === 404) throw new Error("Mode B job vanished")
-        continue
-      }
-      const job = (await sres.json()) as JobProgress
-
-      while (seenActivity < job.toolActivity.length) {
-        const activity = job.toolActivity[seenActivity++] as ToolActivity
-        const tool = resolveLiveTool(activity.toolName, activity.input ?? {}, pricingRef.current)
-        fireEvent(tool, agentUid)
-        totalTokens += tool.tokens
-      }
-
-      while (seenMessages < job.messages.length) {
-        const msg = job.messages[seenMessages++]
-        if ((msg.type === "assistant-text" || msg.type === "complete") && msg.content) {
-          accText = msg.type === "complete" ? msg.content : accText + msg.content
-          setAgentText(agentUid, accText, msg.type !== "complete")
-        }
-      }
-
-      if (job.status === "complete" || job.status === "error") {
-        setAgentText(agentUid, accText, false)
-        if (totalTokens > 0) {
-          setCounters((c) => ({ ...c, tokens: c.tokens + totalTokens }))
-        }
-        if (job.status === "error" && job.error) {
-          console.error("[mode-b] job error:", job.error)
-        }
-        break
-      }
-    }
-  }
-
-  // Scripted fallback — drives the same fireEvent ripple from the design's
-  // deterministic buildRun() so the demo works offline / without env config.
-  async function runScripted(query: string, agentUid: number, agentic: boolean) {
-    const run = buildRun(query)
-
-    if (agentic) {
-      setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
-      await sleep(680)
-      setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
-    } else {
-      await sleep(440)
-    }
-
-    let totalTokens = 0
-    for (const tool of run.tools) {
-      if (cancelRef.current) return
-      fireEvent(tool, agentUid)
-      totalTokens += tool.tokens
-      await sleep(840)
-    }
-
-    if (agentic) {
-      setTimeline({ planner: "done", specialist: "done", critic: "exec" })
+  const setAgentMessage = useCallback(
+    (
+      agentUid: number,
+      updater: (m: Extract<ChatMessage, { role: "agent" }>) => Extract<ChatMessage, { role: "agent" }>,
+    ) => {
       setMessages((ms) =>
-        ms.map((m) =>
-          m.uid === agentUid && m.role === "agent"
-            ? ({ ...m, chain: run.chain } as AgentMessage)
-            : m,
-        ),
+        ms.map((m) => (m.uid === agentUid && m.role === "agent" ? updater(m) : m)),
       )
-      await sleep(440)
-    } else {
-      await sleep(280)
-    }
+    },
+    [],
+  )
 
-    const words = run.answer.split(" ")
-    let acc = ""
-    for (let i = 0; i < words.length; i++) {
-      if (cancelRef.current) return
-      acc += (i ? " " : "") + words[i]
-      setAgentText(agentUid, acc, true)
-      await sleep(24)
-    }
-    setAgentText(agentUid, acc, false)
-    setCounters((c) => ({ ...c, tokens: c.tokens + totalTokens }))
-  }
+  /**
+   * Resolve a live tool call against the loaded sources + pricing catalog
+   * and emit a `tool-call` event onto the cross-panel bus. Returns the
+   * resolved entry (used to also append a tool card to the agent message).
+   */
+  const dispatchToolCall = useCallback(
+    (toolName: string, args: Record<string, unknown> | null, agentUid: number) => {
+      const sources = sourcesRef.current
+      const computeRoyalty = computeRoyaltyRef.current
+      const source = resolveToolSource(sources, toolName)
+      const ts = Date.now()
 
-  function toggleDataset(id: string) {
-    setDatasources((srcs) =>
-      srcs.map((s) => {
-        if (s.leaf && s.id === id) return { ...s, checked: !s.checked }
-        if (!s.leaf && s.id === id && s.children) {
-          const allOn = s.children.every((c) => c.checked)
-          return { ...s, children: s.children.map((c) => ({ ...c, checked: !allOn })) }
+      let kind: "dataset" | "api"
+      let attributionKey: string
+      let attributionLabel: string
+      let connectorId: number | null = null
+      if (source?.kind === "dataset") {
+        kind = "dataset"
+        attributionKey = `cluster:${source.cluster.cluster_id}`
+        attributionLabel = source.cluster.name
+      } else if (source?.kind === "api") {
+        kind = "api"
+        attributionKey = `connector:${source.connector.connector_id}`
+        attributionLabel = source.connector.name
+        connectorId = source.connector.connector_id
+      } else {
+        kind = "dataset"
+        attributionKey = `tool:${toolName}`
+        attributionLabel = toolName
+      }
+
+      const { royaltyEur, datasetIds } = computeRoyalty(toolName, args, kind)
+
+      events.emit({
+        type: "tool-call",
+        toolName,
+        args,
+        kind,
+        datasetIds,
+        connectorId,
+        attributionKey,
+        attributionLabel,
+        royaltyEur,
+        tokensEstimate: 0,
+        timestamp: ts,
+      })
+
+      // Also append a tool card to the agent message so the chat UI shows
+      // the call inline with its args.
+      const summary = (() => {
+        if (kind === "dataset" && datasetIds.length > 0) {
+          return `${datasetIds.length} dataset(s) · ${attributionLabel}`
         }
-        if (!s.leaf && s.children) {
-          return {
-            ...s,
-            children: s.children.map((c) => (c.id === id ? { ...c, checked: !c.checked } : c)),
+        if (kind === "api") return attributionLabel
+        return attributionLabel
+      })()
+      setAgentMessage(agentUid, (m) => ({
+        ...m,
+        fresh: true,
+        tools: [
+          ...m.tools,
+          {
+            icon: kind === "dataset" ? "search" : "plug",
+            name: toolName,
+            summary,
+            args: JSON.stringify(args ?? {}, null, 2),
+            result: "(live)",
+          },
+        ],
+      }))
+    },
+    [events, setAgentMessage],
+  )
+
+  // ── Mode A (Agentic flow) ─────────────────────────────────────────────────
+
+  const runModeA = useCallback(
+    async (query: string, agentUid: number) => {
+      const res = await fetch("/api/demo/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "agentic",
+          messages: [{ role: "user", content: query }],
+        }),
+      })
+      if (!res.ok || !res.body) {
+        throw new Error(`Mode A failed: ${res.status} ${res.statusText}`)
+      }
+
+      let accText = ""
+      let sawFirstTool = false
+
+      for await (const chunk of readUiMessageChunks(res.body)) {
+        if (cancelRef.current) break
+        const type = chunk.type as string | undefined
+        switch (type) {
+          case "text-delta": {
+            const delta = String(chunk.delta ?? "")
+            if (!delta) break
+            accText += delta
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              text: accText,
+              streaming: true,
+              faded: false,
+            }))
+            break
+          }
+          case "data-toolCall": {
+            const data = chunk.data as
+              | { id?: string; name?: string; args?: unknown }
+              | undefined
+            if (!data?.name) break
+            const argsObj =
+              data.args && typeof data.args === "object"
+                ? (data.args as Record<string, unknown>)
+                : null
+            dispatchToolCall(data.name, argsObj, agentUid)
+            if (!sawFirstTool) {
+              sawFirstTool = true
+              setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
+            }
+            break
+          }
+          case "data-subagent":
+            if (!sawFirstTool) {
+              setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
+            }
+            break
+          case "data-subagent-end":
+            // Closing back to MAIN — rail resolves on finish.
+            break
+          case "finish":
+            setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
+            setTimeline({ ...DONE3 })
+            break
+          case "error":
+            throw new Error(String(chunk.errorText ?? "stream error"))
+          default:
+            break
+        }
+      }
+
+      setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
+    },
+    [dispatchToolCall, setAgentMessage],
+  )
+
+  // ── Mode B (Data flow) ────────────────────────────────────────────────────
+
+  const runModeB = useCallback(
+    async (query: string, agentUid: number) => {
+      const startRes = await fetch("/api/demo/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "data",
+          messages: [{ role: "user", content: query }],
+        }),
+      })
+      if (!startRes.ok) throw new Error(`Mode B start failed: ${startRes.status}`)
+      const { jobId } = (await startRes.json()) as { jobId: string }
+
+      let seenActivity = 0
+      let seenMessages = 0
+      let accText = ""
+
+      while (true) {
+        if (cancelRef.current) {
+          await fetch(`/api/demo/stop/${jobId}`, { method: "POST" }).catch(() => {})
+          break
+        }
+        await sleep(1500)
+
+        const sres = await fetch(`/api/demo/status/${jobId}`)
+        if (!sres.ok) {
+          if (sres.status === 404) throw new Error("Mode B job vanished")
+          continue
+        }
+        const job = (await sres.json()) as JobProgress
+
+        while (seenActivity < job.toolActivity.length) {
+          const activity = job.toolActivity[seenActivity++] as ToolActivity
+          dispatchToolCall(activity.toolName, activity.input ?? null, agentUid)
+        }
+
+        while (seenMessages < job.messages.length) {
+          const msg = job.messages[seenMessages++]
+          if ((msg.type === "assistant-text" || msg.type === "complete") && msg.content) {
+            accText = msg.type === "complete" ? msg.content : accText + msg.content
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              text: accText,
+              streaming: msg.type !== "complete",
+              faded: false,
+            }))
+          }
+          if (msg.type === "complete" && msg.usage) {
+            const usage = msg.usage as { input_tokens?: number; output_tokens?: number }
+            const input = Number(usage.input_tokens ?? 0)
+            const output = Number(usage.output_tokens ?? 0)
+            events.emit({
+              type: "usage",
+              inputTokens: Number.isFinite(input) ? input : null,
+              outputTokens: Number.isFinite(output) ? output : null,
+              totalTokens: input + output,
+            })
           }
         }
-        return s
-      }),
-    )
-    setDirty(true)
-  }
 
-  function toggleApi(id: string) {
-    setApis((arr) => arr.map((a) => (a.id === id ? { ...a, checked: !a.checked } : a)))
-    setDirty(true)
-  }
+        if (job.status === "complete" || job.status === "error") {
+          setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
+          if (job.status === "error" && job.error) {
+            console.error("[mode-b] job error:", job.error)
+          }
+          break
+        }
+      }
+    },
+    [dispatchToolCall, events, setAgentMessage],
+  )
 
-  function expandSource(id: string) {
-    setDatasources((srcs) => srcs.map((s) => (s.id === id ? { ...s, open: !s.open } : s)))
-  }
+  // ── Top-level dispatcher ──────────────────────────────────────────────────
 
-  function saveConfig() {
-    setDirty(false)
-    setCfgPulse(nid())
-    setFeedFlash(nid())
-    applyingUntil.current = Date.now() + 8000
+  const runAgent = useCallback(
+    async (query: string) => {
+      if (runningRef.current) return
+      runningRef.current = true
+      cancelRef.current = false
 
-    // Best-effort PUT — if the backend rejects we still optimistically pulse
-    // because the demo's value is the choreography, not the persistence.
-    const payload = buildConfigPayload(datasources, apis)
-    fetch("/api/demo/config", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }).catch((err) => console.error("[demo] config PUT failed:", err))
+      const agentic = mode === "agentic"
+      setInput("")
+      addUserMessage(query)
+      const agentUid = addAgentMessage(agentic ? "DeepAgent" : "Claude")
 
-    const uid = nid()
-    setMessages((ms) => [
-      ...ms,
-      { role: "scope", uid, text: "Configuration updated · applying…" } as Message,
-    ])
-    setTimeout(() => setMessages((ms) => ms.filter((m) => m.uid !== uid)), 3400)
-  }
+      if (agentic) {
+        setRailActive(true)
+        setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
+      }
 
-  function onChip(text: string, idx: number) {
-    setPressed(idx)
-    setInput(text)
-    setTimeout(() => setPressed(null), 240)
-  }
+      try {
+        if (agentic) await runModeA(query, agentUid)
+        else await runModeB(query, agentUid)
+      } catch (err) {
+        console.error("[demo] live turn failed:", err)
+        const msg = err instanceof Error ? err.message : String(err)
+        setAgentMessage(agentUid, (m) => ({
+          ...m,
+          streaming: false,
+          text:
+            m.text +
+            (m.text ? "\n\n" : "") +
+            `_Turn failed: ${msg}. Check .env and the platform's /agent/${process.env.NEXT_PUBLIC_DEMO_WORKFLOW_ID ?? "<id>"}/responses route._`,
+        }))
+      } finally {
+        if (agentic) setTimeline({ ...DONE3 })
+        runningRef.current = false
+      }
+    },
+    [addAgentMessage, addUserMessage, mode, runModeA, runModeB, setAgentMessage],
+  )
 
-  function confirmSwitch() {
+  // ── Configuration toggles + save ──────────────────────────────────────────
+
+  const onToggleDataset = useCallback(
+    (clusterId: number, datasetId: number) => {
+      config.toggle({ kind: "dataset", clusterId, datasetId })
+    },
+    [config],
+  )
+  const onToggleCluster = useCallback(
+    (clusterId: number) => {
+      config.toggle({ kind: "cluster-all", clusterId })
+    },
+    [config],
+  )
+  const onToggleConnector = useCallback(
+    (connectorId: number) => {
+      config.toggle({ kind: "connector", connectorId })
+    },
+    [config],
+  )
+
+  const onSaveConfig = useCallback(async () => {
+    try {
+      await config.save()
+      events.emit({ type: "config-saved" })
+      const scopeUid = addScopeMessage("Configuration updated · applying…")
+      window.setTimeout(() => {
+        setMessages((ms) => ms.filter((m) => m.uid !== scopeUid))
+      }, 3400)
+    } catch (err) {
+      console.error("[demo] save failed:", err)
+      addScopeMessage(`Save failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }, [addScopeMessage, config, events])
+
+  // ── Mode switching ────────────────────────────────────────────────────────
+
+  const onRequestSwitch = useCallback(
+    (target: Mode) => {
+      if (target === mode) return
+      // If the chat has any messages, confirm — otherwise apply immediately.
+      if (messages.length === 0 && !runningRef.current) {
+        setMode(target)
+      } else {
+        setPendingMode(target)
+      }
+    },
+    [messages.length, mode, setMode],
+  )
+
+  const confirmSwitch = useCallback(() => {
     const target = pendingMode
     if (!target) return
     setPendingMode(null)
@@ -479,31 +509,38 @@ export function DemoApp() {
     setRailActive(false)
     setInput("")
     setPressed(null)
-    setPulse({ ds: null, api: null, attr: null })
-  }
+    events.emit({ type: "reset-chat" })
+  }, [events, pendingMode, setMode])
 
-  function reset() {
+  // ── Reset (top-right button) ──────────────────────────────────────────────
+
+  const reset = useCallback(() => {
     cancelRef.current = true
     runningRef.current = false
-    const s = makeInitialState()
-    setDatasources(s.datasources)
-    setApis(s.apis)
-    setAttribution(s.attribution)
     setMode("dataflow")
-    setCounters(s.counters)
-    setFeed(s.feed)
-    setMessages(s.messages)
+    setMessages([])
     setTimeline({ ...DONE3 })
-    setPulse({ ds: null, api: null, attr: null })
+    setRailActive(false)
     setInput("")
     setPressed(null)
-    setRailActive(false)
-    setDirty(false)
     setPendingMode(null)
-    applyingUntil.current = 0
-  }
+    config.reset()
+    events.emit({ type: "reset-chat" })
+  }, [config, events, setMode])
 
-  const selectedApiCount = apis.filter((a) => a.checked).length
+  // ── Composer ──────────────────────────────────────────────────────────────
+
+  const onChip = useCallback((text: string, idx: number) => {
+    setPressed(idx)
+    setInput(text)
+    setTimeout(() => setPressed(null), 240)
+  }, [])
+
+  // ── Counts for the chip ───────────────────────────────────────────────────
+
+  const dsClusterCount = config.view?.clusters.length ?? 0
+  const apiSelectedCount =
+    config.view?.externalApis.filter((a) => a.checked).length ?? 0
 
   return (
     <div className="app">
@@ -514,6 +551,16 @@ export function DemoApp() {
           Live demo
         </span>
         <span className="tb-spacer" />
+        {config.errorMessage && (
+          <span
+            className="tb-pill"
+            style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
+            title={config.errorMessage}
+          >
+            <span className="pulse-dot" style={{ background: "var(--destructive)" }} />
+            backend disconnected
+          </span>
+        )}
         <DsButton variant="ghost" size="sm" onClick={reset}>
           <Icon name="reset" size={14} />
           Reset
@@ -531,28 +578,30 @@ export function DemoApp() {
       <div className="grid">
         <div className="left-col">
           <ConfigChip
-            dsCount={datasources.length}
-            apiCount={selectedApiCount}
-            dirty={dirty}
-            pulseKey={cfgPulse}
-            onSave={saveConfig}
+            slug={slug}
+            dsCount={dsClusterCount}
+            apiCount={apiSelectedCount}
+            isDirty={config.isDirty}
+            isSaving={config.isSaving}
+            justSaved={config.justSaved}
+            onSave={onSaveConfig}
           />
           <Datasources
-            sources={datasources}
-            pulse={{ ds: pulse.ds }}
-            onToggle={toggleDataset}
-            onExpand={expandSource}
+            view={config.view}
+            isLoading={config.isLoading}
+            errorMessage={config.errorMessage}
+            onToggleDataset={onToggleDataset}
+            onToggleCluster={onToggleCluster}
           />
-          <ExternalApis apis={apis} pulse={{ api: pulse.api }} onToggle={toggleApi} />
+          <ExternalApis
+            view={config.view}
+            isLoading={config.isLoading}
+            errorMessage={config.errorMessage}
+            onToggle={onToggleConnector}
+          />
         </div>
-        <AccessMode mode={mode} onRequestSwitch={setPendingMode} />
-        <Observability
-          counters={counters}
-          feed={feed}
-          attribution={attribution}
-          pulse={{ attr: pulse.attr }}
-          flash={feedFlash}
-        />
+        <AccessMode mode={mode} onRequestSwitch={onRequestSwitch} />
+        <Observability />
         <Agent
           mode={mode}
           model={MODEL}
@@ -563,7 +612,7 @@ export function DemoApp() {
           pressed={pressed}
           suggestions={SUGGESTIONS[mode]}
           emptyState={EMPTY_STATE[mode]}
-          configJson={CONFIG_JSON}
+          configJson={configJsonString}
           onChip={onChip}
           onInput={setInput}
           onSend={() => {
@@ -577,8 +626,8 @@ export function DemoApp() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Switch to {pendingMode === "agentic" ? "Agentic flow" : "Data flow"}?</h3>
             <p>
-              Your current conversation will end. You'll start a fresh chat with the same data and
-              tools, but the agent's memory of this session won't carry over.
+              Your current conversation will end. You'll start a fresh chat with the same data
+              and tools, but the agent's memory of this session won't carry over.
             </p>
             <div className="modal-btns">
               <DsButton variant="ghost" size="sm" onClick={() => setPendingMode(null)}>
@@ -593,44 +642,4 @@ export function DemoApp() {
       )}
     </div>
   )
-}
-
-function makeInitialState() {
-  let uid = 1
-  return {
-    datasources: clone(DATASOURCES),
-    apis: clone(APIS),
-    attribution: clone(ATTRIBUTION),
-    counters: { apiCalls: 247, tokens: 184000, royalties: 3.412 },
-    feed: FEED.map((r) => ({ ...r, uid: uid++, fresh: false })),
-    messages: MESSAGES.map((m) => ({ ...m, uid: uid++ }) as Message),
-  }
-}
-
-/**
- * Translate the local datasources/APIs UI state into the wire shape the
- * backend's PUT /mcp-configurations/:slug expects. Each datasource becomes a
- * cluster with the checked children as `dataset_ids` (treated as numeric IDs
- * for now via name hashing — when real numeric IDs arrive from GET /config we
- * can swap to those). External APIs become `external_apis[].connector_id`.
- *
- * The backend treats unknown fields gracefully, so this payload is forward
- * compatible with the real schema even if some keys (e.g. dataset_ids as
- * numbers) need adjustment after live wiring.
- */
-function buildConfigPayload(sources: Datasource[], apis: { id: string; checked: boolean }[]) {
-  const clusters = sources.map((s) => {
-    if (s.leaf) {
-      return {
-        cluster_slug: s.id,
-        dataset_slugs: s.checked ? [s.id] : [],
-      }
-    }
-    return {
-      cluster_slug: s.id,
-      dataset_slugs: (s.children ?? []).filter((c) => c.checked).map((c) => c.id),
-    }
-  })
-  const external_apis = apis.filter((a) => a.checked).map((a) => ({ connector_slug: a.id }))
-  return { config: { clusters, external_apis } }
 }

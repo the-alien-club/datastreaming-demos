@@ -4,7 +4,17 @@ import { NextResponse } from "next/server"
 import { processQuery } from "@/lib/claude-sdk/agent-query"
 import { jobStore } from "@/lib/claude-sdk/job-store"
 import { env } from "@/lib/env"
+import { adminFetch } from "@/lib/platform/admin-fetch"
+import { resolveConfig } from "@/lib/platform/resolve-slug"
 import { platformProvider, runPlatformResponse } from "@/lib/platform/responses_stream"
+
+async function unwrap<T>(res: Response): Promise<T> {
+  const json = (await res.json()) as { data?: T } | T
+  if (json && typeof json === "object" && "data" in (json as object)) {
+    return (json as { data: T }).data
+  }
+  return json as T
+}
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -47,10 +57,47 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (body.mode === "data") {
+    // Mode B targets the same MCP Configuration the picker is editing — so
+    // we have to resolve the slug (env-pinned or default fallback) before
+    // building the mcp-alien URL.
+    const resolved = await resolveConfig().catch(() => null)
+    if (!resolved) {
+      return NextResponse.json(
+        {
+          error: "no-mcp-configuration",
+          message:
+            "No MCP configuration found on the platform for the admin OAT. " +
+            "Mode B needs a configuration to point mcp-alien at.",
+        },
+        { status: 404 },
+      )
+    }
+
+    // Build the system-prompt context from the available-sources catalog so
+    // the agent describes the actual clusters in scope (not hardcoded names).
+    const sourcesRes = await adminFetch("/mcp-configurations/available-sources")
+    const sources = sourcesRes.ok
+      ? await unwrap<{
+          clusters: Array<{ name: string }>
+          external_apis: Array<{ name: string }>
+        }>(sourcesRes)
+      : { clusters: [], external_apis: [] }
+
     const jobId = nanoid()
     jobStore.create(jobId)
-    void processQuery(jobId, body.messages, body.model ?? "claude-opus-4-7")
-    return NextResponse.json({ jobId, status: "started" })
+    void processQuery(
+      jobId,
+      body.messages,
+      body.model ?? "claude-opus-4-7",
+      resolved.slug,
+      {
+        configSlug: resolved.slug,
+        configName: resolved.configuration.name,
+        clusterNames: sources.clusters.map((c) => c.name),
+        connectorNames: sources.external_apis.map((a) => a.name),
+      },
+    )
+    return NextResponse.json({ jobId, status: "started", configSlug: resolved.slug })
   }
 
   return NextResponse.json({ error: "Unknown mode" }, { status: 400 })

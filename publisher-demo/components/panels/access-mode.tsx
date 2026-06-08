@@ -1,9 +1,10 @@
 "use client"
 
+import type { Mode } from "@/hooks/use-mode"
 import { Icon, type IconName } from "../icons"
 import { InfoTip } from "../widgets"
 
-export type Mode = "dataflow" | "agentic"
+export type { Mode }
 
 function ModeCard({
   active,

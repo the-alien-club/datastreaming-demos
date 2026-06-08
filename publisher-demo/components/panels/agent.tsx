@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import type { Message, ToolEntry } from "@/lib/seed-data"
+import type { ChatMessage, ToolEntry } from "@/lib/chat-messages"
 import { Icon, type IconName } from "../icons"
 import type { Mode } from "./access-mode"
 
@@ -82,7 +82,7 @@ function ChainOfThought({ chain }: { chain: { who: string; text: string }[] }) {
   )
 }
 
-function AgentMessage({ m }: { m: Message }) {
+function AgentMessage({ m }: { m: ChatMessage }) {
   if (m.role === "scope") {
     return (
       <div className="scope-notice">
@@ -173,7 +173,7 @@ export function Agent({
 }: {
   mode: Mode
   model: string
-  messages: Message[]
+  messages: ChatMessage[]
   timeline: Timeline
   railActive: boolean
   input: string

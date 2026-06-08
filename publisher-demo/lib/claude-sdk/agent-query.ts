@@ -10,17 +10,19 @@
 
 import { type McpServerConfig, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { env } from "../env"
-import { getSystemPrompt } from "./system-prompt"
+import { getSystemPrompt, type SystemPromptContext } from "./system-prompt"
 
 type ChatMessage = { role: "user" | "assistant"; content: string }
 
 export async function startQuery(
   messages: ChatMessage[],
   model: string,
+  configSlug: string,
+  promptContext?: SystemPromptContext,
   resumeSessionId?: string | null,
 ) {
-  const systemPrompt = getSystemPrompt()
-  const mcpUrl = `${env.MCP_ALIEN_URL.replace(/\/$/, "")}/mcp?config=${env.DEMO_CONFIG_SLUG}`
+  const systemPrompt = getSystemPrompt(promptContext)
+  const mcpUrl = `${env.MCP_ALIEN_URL.replace(/\/$/, "")}/mcp?config=${configSlug}`
 
   const mcpServers: Record<string, McpServerConfig> = {
     alien: {
@@ -30,10 +32,23 @@ export async function startQuery(
     } as McpServerConfig,
   }
 
+  // Block the SDK's built-in tools so the agent can't escape the MCP surface.
+  // ToolSearch in particular masks MCP tools — when present, the model calls
+  // ToolSearch to "discover" tools rather than dispatching the mcp__alien__*
+  // tools directly. With it blocked, the MCP tool list is presented inline
+  // and the model uses them straight away.
+  const BLOCKED_TOOLS = [
+    "Bash", "Read", "Write", "Edit", "Glob", "Grep",
+    "WebFetch", "WebSearch", "ToolSearch", "NotebookEdit",
+  ]
+
   const queryOptions: Record<string, unknown> = {
     model,
     systemPrompt,
     mcpServers,
+    // Built-ins restricted to nothing — only mcp__alien__* tools are usable.
+    tools: [],
+    disallowedTools: BLOCKED_TOOLS,
     allowedTools: ["mcp__alien__*"],
     permissionMode: "acceptEdits",
     persistSession: true,
@@ -63,13 +78,15 @@ export async function processQuery(
   jobId: string,
   messages: ChatMessage[],
   model: string,
+  configSlug: string,
+  promptContext?: SystemPromptContext,
 ): Promise<void> {
   const { jobStore } = await import("./job-store")
   const startedAt = Date.now()
   jobStore.setStatus(jobId, "running")
 
   try {
-    const iter = await startQuery(messages, model)
+    const iter = await startQuery(messages, model, configSlug, promptContext)
     for await (const msg of iter as AsyncIterable<Record<string, unknown>>) {
       if (jobStore.isCancelled(jobId)) break
 
