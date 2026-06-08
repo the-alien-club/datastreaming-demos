@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import type { AttributionEntry, FeedEntry } from "@/lib/seed-data"
 import { Icon } from "../icons"
 import { BumpNum, InfoTip, RollingText } from "../widgets"
-import type { AttributionEntry, FeedEntry } from "@/lib/seed-data"
 
 export type AttrPulse = { attr: { key: string; n: number } | null }
 
-const fmtTokens = (n: number) => (n >= 1000 ? Math.round(n / 1000) + "k" : String(n))
+const fmtTokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
 export function Observability({
   counters,
@@ -55,7 +55,7 @@ export function Observability({
           <span className="lab">Tokens</span>
         </div>
         <div className="counter royalty">
-          <RollingText text={"€" + counters.royalties.toFixed(3)} />
+          <RollingText text={`€${counters.royalties.toFixed(3)}`} />
           <span className="lab">Royalties</span>
         </div>
       </div>
@@ -68,7 +68,7 @@ export function Observability({
           </div>
         )}
         {feed.slice(0, 6).map((r) => (
-          <div key={r.uid} className={"tape-row" + (r.fresh ? " enter" : "")}>
+          <div key={r.uid} className={`tape-row${r.fresh ? " enter" : ""}`}>
             <div className="tape-line1">
               <span className="tape-time">{r.t}</span>
               <span className="tape-arr">agent →</span>
@@ -87,13 +87,13 @@ export function Observability({
           const isPulse = pulse.attr?.key === s.key
           return (
             <div
-              key={s.key + (isPulse ? "#" + pulse.attr?.n : "")}
-              className={"attrib-row" + (isPulse ? " pulsing" : "")}
+              key={s.key + (isPulse ? `#${pulse.attr?.n}` : "")}
+              className={`attrib-row${isPulse ? " pulsing" : ""}`}
             >
               <span className="attrib-name">{s.name}</span>
               <span className="attrib-pct">{pct}%</span>
               <span className="attrib-track">
-                <span className="attrib-fill" style={{ width: pct + "%" }} />
+                <span className="attrib-fill" style={{ width: `${pct}%` }} />
               </span>
             </div>
           )

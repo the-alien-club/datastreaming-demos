@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { Icon } from "./icons"
 
 function RollingDigit({ char }: { char: string }) {
@@ -19,7 +19,7 @@ function RollingDigit({ char }: { char: string }) {
     }
   }, [char])
   return (
-    <span className={"odo" + (roll ? " rolling" : "")}>
+    <span className={`odo${roll ? " rolling" : ""}`}>
       <span className="roll" key={char}>
         {char}
       </span>
@@ -52,7 +52,7 @@ export function BumpNum({ display }: { display: string }) {
       }
     }
   }, [display])
-  return <span className={"num" + (bump ? " bump" : "")}>{display}</span>
+  return <span className={`num${bump ? " bump" : ""}`}>{display}</span>
 }
 
 export function Sparkline({ values, fresh }: { values: number[]; fresh?: boolean }) {
@@ -61,12 +61,12 @@ export function Sparkline({ values, fresh }: { values: number[]; fresh?: boolean
     <div className="sparkline">
       {values.map((v, i) => {
         const last = i === values.length - 1
-        const cls = "bar" + (v === 0 ? " empty" : "") + (last && fresh && v > 0 ? " fresh" : "")
+        const cls = `bar${v === 0 ? " empty" : ""}${last && fresh && v > 0 ? " fresh" : ""}`
         return (
           <div
             key={(fresh ? "f" : "n") + i}
             className={cls}
-            style={{ height: Math.max(2, (v / max) * 18) + "px" }}
+            style={{ height: `${Math.max(2, (v / max) * 18)}px` }}
           />
         )
       })}
@@ -76,7 +76,7 @@ export function Sparkline({ values, fresh }: { values: number[]; fresh?: boolean
 
 export function InfoTip({ text }: { text: string }) {
   return (
-    <span className="info-btn" tabIndex={0}>
+    <span className="info-btn">
       <Icon name="info" size={14} />
       <span className="tip">{text}</span>
     </span>
@@ -84,7 +84,7 @@ export function InfoTip({ text }: { text: string }) {
 }
 
 export function StatusDot({ status }: { status: string }) {
-  return <span className={"status-dot " + status} title={status} />
+  return <span className={`status-dot ${status}`} title={status} />
 }
 
 export function AuthBadge({ auth }: { auth: string }) {

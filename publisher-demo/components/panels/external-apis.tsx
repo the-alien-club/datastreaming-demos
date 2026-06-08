@@ -1,14 +1,14 @@
 "use client"
 
+import type { ApiConnector } from "@/lib/seed-data"
 import { Icon } from "../icons"
 import { AuthBadge, InfoTip, Sparkline } from "../widgets"
-import type { ApiConnector } from "@/lib/seed-data"
 
 export type ApiPulse = { api: { id: string; n: number } | null }
 
 function Cbx({ on }: { on: boolean }) {
   return (
-    <span className={"cbx " + (on ? "on" : "")}>
+    <span className={`cbx ${on ? "on" : ""}`}>
       {on && <Icon name="check" size={11} strokeWidth={2.8} />}
     </span>
   )
@@ -40,7 +40,7 @@ export function ExternalApis({
             const off = !a.checked
             return (
               <div
-                key={a.id + (isPulse ? "#" + pulse.api?.n : "")}
+                key={a.id + (isPulse ? `#${pulse.api?.n}` : "")}
                 className={
                   "api-row" +
                   (off ? " off" : "") +

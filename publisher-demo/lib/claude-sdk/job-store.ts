@@ -49,7 +49,7 @@ export interface JobProgress {
 
 class JobStore {
   private jobs = new Map<string, JobProgress>()
-  private cleanupInterval: NodeJS.Timeout | null = null
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null
 
   constructor() {
     if (typeof setInterval === "function") {

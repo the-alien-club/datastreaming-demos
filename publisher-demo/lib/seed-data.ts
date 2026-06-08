@@ -80,11 +80,41 @@ export const DATASOURCES: Datasource[] = [
     open: true,
     more: "+47 more datasets",
     children: [
-      { id: "bx-neuro", name: "Neuroscience preprints", docs: "12,847", status: "indexed", checked: true },
-      { id: "bx-genom", name: "Genomics preprints", docs: "8,201", status: "indexed", checked: false },
-      { id: "bx-cell", name: "Cell biology preprints", docs: "9,540", status: "indexed", checked: false },
-      { id: "bx-bioinfo", name: "Bioinformatics preprints", docs: "7,330", status: "indexed", checked: false },
-      { id: "bx-immuno", name: "Immunology preprints", docs: "6,118", status: "indexed", checked: false },
+      {
+        id: "bx-neuro",
+        name: "Neuroscience preprints",
+        docs: "12,847",
+        status: "indexed",
+        checked: true,
+      },
+      {
+        id: "bx-genom",
+        name: "Genomics preprints",
+        docs: "8,201",
+        status: "indexed",
+        checked: false,
+      },
+      {
+        id: "bx-cell",
+        name: "Cell biology preprints",
+        docs: "9,540",
+        status: "indexed",
+        checked: false,
+      },
+      {
+        id: "bx-bioinfo",
+        name: "Bioinformatics preprints",
+        docs: "7,330",
+        status: "indexed",
+        checked: false,
+      },
+      {
+        id: "bx-immuno",
+        name: "Immunology preprints",
+        docs: "6,118",
+        status: "indexed",
+        checked: false,
+      },
     ],
   },
   {
@@ -95,8 +125,20 @@ export const DATASOURCES: Datasource[] = [
     open: false,
     more: "+28 more datasets",
     children: [
-      { id: "pmc-oa", name: "Open-access subset", docs: "41,302", status: "indexed", checked: false },
-      { id: "pmc-ct", name: "Clinical trials abstracts", docs: "6,710", status: "syncing", checked: false },
+      {
+        id: "pmc-oa",
+        name: "Open-access subset",
+        docs: "41,302",
+        status: "indexed",
+        checked: false,
+      },
+      {
+        id: "pmc-ct",
+        name: "Clinical trials abstracts",
+        docs: "6,710",
+        status: "syncing",
+        checked: false,
+      },
       { id: "pmc-rev", name: "Review articles", docs: "18,440", status: "indexed", checked: false },
     ],
   },
@@ -113,10 +155,43 @@ export const DATASOURCES: Datasource[] = [
 ]
 
 export const APIS: ApiConnector[] = [
-  { id: "crossref", name: "Crossref Search", auth: "OAuth", last: "2s ago", endpoints: 14, checked: true, spark: [1, 3, 5, 2, 7, 6] },
-  { id: "s2", name: "Semantic Scholar", auth: "API key", last: "14s ago", endpoints: 9, checked: true, spark: [1, 2, 1, 1, 3, 2] },
-  { id: "orcid", name: "ORCID lookup", auth: "OAuth", last: "1m ago", endpoints: 5, checked: true, spark: [1, 1, 2, 1, 1, 1] },
-  { id: "crm", name: "Publisher CRM (proxied)", auth: "mTLS", last: "idle", endpoints: 7, checked: true, idle: true, spark: [0, 0, 0, 0, 0, 0] },
+  {
+    id: "crossref",
+    name: "Crossref Search",
+    auth: "OAuth",
+    last: "2s ago",
+    endpoints: 14,
+    checked: true,
+    spark: [1, 3, 5, 2, 7, 6],
+  },
+  {
+    id: "s2",
+    name: "Semantic Scholar",
+    auth: "API key",
+    last: "14s ago",
+    endpoints: 9,
+    checked: true,
+    spark: [1, 2, 1, 1, 3, 2],
+  },
+  {
+    id: "orcid",
+    name: "ORCID lookup",
+    auth: "OAuth",
+    last: "1m ago",
+    endpoints: 5,
+    checked: true,
+    spark: [1, 1, 2, 1, 1, 1],
+  },
+  {
+    id: "crm",
+    name: "Publisher CRM (proxied)",
+    auth: "mTLS",
+    last: "idle",
+    endpoints: 7,
+    checked: true,
+    idle: true,
+    spark: [0, 0, 0, 0, 0, 0],
+  },
 ]
 
 export const ATTRIBUTION: AttributionEntry[] = [
@@ -127,11 +202,31 @@ export const ATTRIBUTION: AttributionEntry[] = [
 ]
 
 export const FEED: FeedEntry[] = [
-  { t: "14:03:22", tool: 'datacluster_keyword_search("dopamine receptors", k=8)', meta: "8 hits · 1,240 tok · €0.0042 · bioRxiv/Neuroscience" },
-  { t: "14:03:19", tool: 'crossref_search_works(doi="10.1101/2024.11…")', meta: "1 hit · 320 tok · €0.0008 · Crossref Search" },
-  { t: "14:03:14", tool: 'datacluster_get_entry_content(id="bx-7714")', meta: "1 doc · 4,820 tok · €0.0163 · Internal clinical notes" },
-  { t: "14:03:08", tool: 'semantic_scholar_paper_lookup(id="s2-0194")', meta: "6 hits · 980 tok · €0.0031 · Semantic Scholar" },
-  { t: "14:02:51", tool: 'datacluster_vector_search_chunks("D2 antagonist")', meta: "5 hits · 1,510 tok · €0.0051 · bioRxiv/Neuroscience" },
+  {
+    t: "14:03:22",
+    tool: 'datacluster_keyword_search("dopamine receptors", k=8)',
+    meta: "8 hits · 1,240 tok · €0.0042 · bioRxiv/Neuroscience",
+  },
+  {
+    t: "14:03:19",
+    tool: 'crossref_search_works(doi="10.1101/2024.11…")',
+    meta: "1 hit · 320 tok · €0.0008 · Crossref Search",
+  },
+  {
+    t: "14:03:14",
+    tool: 'datacluster_get_entry_content(id="bx-7714")',
+    meta: "1 doc · 4,820 tok · €0.0163 · Internal clinical notes",
+  },
+  {
+    t: "14:03:08",
+    tool: 'semantic_scholar_paper_lookup(id="s2-0194")',
+    meta: "6 hits · 980 tok · €0.0031 · Semantic Scholar",
+  },
+  {
+    t: "14:02:51",
+    tool: 'datacluster_vector_search_chunks("D2 antagonist")',
+    meta: "5 hits · 1,510 tok · €0.0051 · bioRxiv/Neuroscience",
+  },
 ]
 
 export const MESSAGES: Message[] = [

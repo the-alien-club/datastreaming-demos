@@ -1,15 +1,15 @@
 "use client"
 
 import { type ReactNode, useState } from "react"
+import type { Datasource } from "@/lib/seed-data"
 import { Icon } from "../icons"
 import { InfoTip, StatusDot } from "../widgets"
-import type { Datasource } from "@/lib/seed-data"
 
 export type DsPulse = { ds: { id: string; n: number } | null }
 
 function Cbx({ state }: { state: "on" | "off" | "mixed" }) {
   return (
-    <span className={"cbx " + (state === "on" ? "on" : state === "mixed" ? "mixed" : "")}>
+    <span className={`cbx ${state === "on" ? "on" : state === "mixed" ? "mixed" : ""}`}>
       {state === "on" && <Icon name="check" size={11} strokeWidth={2.8} />}
     </span>
   )
@@ -37,7 +37,7 @@ function Row({
   const [rip, setRip] = useState(0)
   return (
     <div
-      key={id + (isPulse ? "#" + pulseN : "")}
+      key={id + (isPulse ? `#${pulseN}` : "")}
       className={
         "ds-row" +
         (child ? " child" : "") +
@@ -117,8 +117,7 @@ export function Datasources({
             }
             const cc = s.children?.filter((c) => c.checked).length ?? 0
             const total = s.children?.length ?? 0
-            const pstate: "on" | "off" | "mixed" =
-              cc === 0 ? "off" : cc === total ? "on" : "mixed"
+            const pstate: "on" | "off" | "mixed" = cc === 0 ? "off" : cc === total ? "on" : "mixed"
             return (
               <div key={s.id}>
                 <Row

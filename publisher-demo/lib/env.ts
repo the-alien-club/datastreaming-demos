@@ -50,5 +50,4 @@ export const env = new Proxy({} as Env, {
 })
 
 export const PUBLIC_CONFIG_SLUG = process.env.NEXT_PUBLIC_DEMO_CONFIG_SLUG ?? "cfg_publisher_demo"
-export const PUBLIC_MCP_URL =
-  process.env.NEXT_PUBLIC_MCP_ALIEN_URL ?? "https://mcp.alien.club"
+export const PUBLIC_MCP_URL = process.env.NEXT_PUBLIC_MCP_ALIEN_URL ?? "https://mcp.alien.club"

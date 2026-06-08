@@ -8,7 +8,7 @@
  * viz-mcp stdio server, no blocked-tools enforcement.
  */
 
-import { query, type McpServerConfig, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { type McpServerConfig, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { env } from "../env"
 import { getSystemPrompt } from "./system-prompt"
 

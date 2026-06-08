@@ -40,25 +40,56 @@ Visit <http://localhost:3000>.
 
 | Capability | Status |
 |---|---|
-| Visual demo (5 panels, scripted run, design parity) | ✅ wired |
+| Visual demo (5 panels, pixel-matched to design) | ✅ wired |
 | Backend route surface (`/api/demo/*`) | ✅ wired |
 | `GET /api/demo/config` — real proxy with admin OAT | ✅ wired |
 | `PUT /api/demo/config` — real proxy with admin OAT | ✅ wired |
 | `GET /api/demo/pricing` — resolves real dataset + endpoint prices | ✅ wired |
-| Mode B chat — Claude SDK against mcp-alien | ✅ wired (server-side); UI swap pending |
-| Mode A chat — Vercel AI SDK → platform Responses SSE | ⏳ stub; full port pending |
-| Cross-panel event bus driving real tool calls | ⏳ scripted runner in place |
+| Mode A chat — Vercel AI SDK → platform Responses SSE | ✅ wired |
+| Mode B chat — Claude Agent SDK against mcp-alien | ✅ wired |
+| `DemoApp.runAgent` drives both modes against the live API | ✅ wired |
+| Cross-panel ripple from real tool calls (royalty extraction) | ✅ wired |
+| Scripted fallback when env is absent or backend unreachable | ✅ wired |
 | Helm chart + ArgoCD application | ✅ wired |
 
-The demo page (`/`) currently uses the scripted runner from the design bundle.
-Switching it to drive Mode A/B from the live API requires:
+### Runtime behavior
 
-1. Replacing `DemoApp.runAgent` with calls to `/api/demo/chat`.
-2. For Mode B: a polling hook against `/api/demo/status/[jobId]`.
-3. For Mode A: porting `responses_stream.ts` from `alien-agents/lib/platform/`,
-   stripping Prisma/session-persistence references.
-4. Resolving `dataset_ids` / `connector_id` from tool args (royalty extraction)
-   and feeding the demo event bus.
+When the page loads, `runAgent(query)` dispatches a real `POST /api/demo/chat`:
+
+- **Mode A (Agentic flow)** — `{ mode: "agentic" }`. The route forwards the
+  turn to `POST ${PLATFORM_API_URL}/agent/${DEMO_WORKFLOW_ID}/responses` via
+  AI SDK `streamText` against the `@ai-sdk/openai` provider pointed at the
+  platform. UI message chunks (`text-delta`, `data-toolCall`, `data-subagent`,
+  `finish`) come back as SSE and the client decodes each chunk:
+  - `text-delta` → accumulates into the assistant bubble
+  - `data-toolCall` → resolved into a `ScriptedTool` shape and dispatched
+    through the existing `fireEvent` ripple (panel pulses, tape row, royalty
+    tick, attribution bump)
+  - `data-subagent` → drives the rail timeline (`planner → specialist`)
+  - `finish` → closes the bubble, advances timeline to `critic` then DONE
+- **Mode B (Data flow)** — `{ mode: "data" }`. Returns `{ jobId }`. The client
+  polls `GET /api/demo/status/[jobId]` every 1.5s, fires the ripple on each
+  new `ToolActivity`, and appends `assistant-text` / `complete` messages.
+- **Cancel** — switching mode or calling `reset` flips `cancelRef`; Mode B
+  fires `POST /api/demo/stop/[jobId]` so the server-side iterator halts.
+- **Graceful fallback** — if `POST /api/demo/chat` returns ≥400 (e.g. 503 from
+  missing env), `runAgent` catches and falls back to the deterministic
+  `buildRun()` scripted run from the design bundle. The demo never breaks
+  offline.
+
+### Royalty extraction
+
+`lib/tool-resolver.ts` maps `(toolName, args)` to a `ScriptedTool`:
+
+- **Kind** — datasets when the name starts with `datacluster_`; APIs when it
+  starts with `crossref_`, `semantic_scholar_`, `s2_`, `orcid_`, or `crm_`.
+- **Source row** — datasets resolve from `args.datasets[0]` (substring match)
+  or `args.id` prefix (`bx-` → bioRxiv/Neuroscience, etc.). APIs from the
+  tool name prefix.
+- **Royalty (€)** — `lib/pricing.ts` exposes `usePricing()` which fetches
+  `/api/demo/pricing` once on mount. `computeRoyalty()` sums the per-call
+  price plus per-dataset prices for each `dataset_ids` entry. Falls back to
+  `€0.005` per dataset hit, `€0.001` per API call when pricing isn't loaded.
 
 ## Deployment
 

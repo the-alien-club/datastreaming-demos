@@ -29,7 +29,7 @@ function ModeCard({
   return (
     <button
       type="button"
-      className={"mode-card" + (active ? " active" : "")}
+      className={`mode-card${active ? " active" : ""}`}
       onClick={onClick}
       aria-pressed={active}
     >
@@ -59,7 +59,7 @@ function ModeCard({
           </span>
         ))}
       </div>
-      <div className={"mode-foot" + (footerArrow ? " badge" : "")}>
+      <div className={`mode-foot${footerArrow ? " badge" : ""}`}>
         {footer}
         {footerArrow && <Icon name="chevR" size={12} />}
       </div>

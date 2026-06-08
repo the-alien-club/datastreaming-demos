@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Icon, type IconName } from "../icons"
 import type { Message, ToolEntry } from "@/lib/seed-data"
+import { Icon, type IconName } from "../icons"
 import type { Mode } from "./access-mode"
 
 const NODES = [
@@ -17,14 +17,14 @@ export type Timeline = Record<"planner" | "specialist" | "critic", TimelineState
 function ToolCard({ tool, fresh }: { tool: ToolEntry; fresh?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className={"tool-card" + (fresh ? " enter" : "")}>
+    <div className={`tool-card${fresh ? " enter" : ""}`}>
       <button
         type="button"
         className="tool-head"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className={"tool-chev" + (open ? " open" : "")}>
+        <span className={`tool-chev${open ? " open" : ""}`}>
           <Icon name="chevR" size={13} />
         </span>
         <span className="tool-ic">
@@ -59,7 +59,7 @@ function ChainOfThought({ chain }: { chain: { who: string; text: string }[] }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className={"tool-chev" + (open ? " open" : "")}>
+        <span className={`tool-chev${open ? " open" : ""}`}>
           <Icon name="chevR" size={13} />
         </span>
         <span className="tool-ic">
@@ -102,15 +102,16 @@ function AgentMessage({ m }: { m: Message }) {
     <div className="msg agent">
       <div className="agent-sender">
         <span className="agent-ava">
-          {/* biome-ignore lint/a11y/useAltText: decorative */}
           <img src="/assets/glyph-w.svg" alt="" />
         </span>
         <span className="nm">{m.sender || "Claude"}</span>
       </div>
       {m.chain && m.chain.length > 0 && <ChainOfThought chain={m.chain} />}
-      {m.tools?.map((t, i) => <ToolCard key={i} tool={t} fresh={m.fresh} />)}
+      {m.tools?.map((t, i) => (
+        <ToolCard key={i} tool={t} fresh={m.fresh} />
+      ))}
       {m.text && (
-        <div className={"agent-text" + (m.faded ? " faded" : "")}>
+        <div className={`agent-text${m.faded ? " faded" : ""}`}>
           {m.text}
           {m.streaming && <span className="cursor" />}
         </div>
@@ -133,7 +134,7 @@ function CopyConfigButton({ json }: { json: string }) {
     <span className="cfg-copy-wrap">
       <button
         type="button"
-        className={"copy-config-chip" + (open ? " on" : "")}
+        className={`copy-config-chip${open ? " on" : ""}`}
         onClick={() => setOpen((o) => !o)}
       >
         <Icon name="plug" size={12} />
@@ -145,11 +146,7 @@ function CopyConfigButton({ json }: { json: string }) {
             This same configuration powers the demo and any external agent.
           </div>
           <pre className="cfg-json">{json}</pre>
-          <button
-            type="button"
-            className={"cfg-copy-btn" + (copied ? " done" : "")}
-            onClick={copy}
-          >
+          <button type="button" className={`cfg-copy-btn${copied ? " done" : ""}`} onClick={copy}>
             <Icon name={copied ? "check" : "file"} size={13} />
             {copied ? "Copied" : "Copy"}
           </button>
@@ -189,6 +186,10 @@ export function Agent({
   onSend: () => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
+  // Scroll to bottom whenever the messages list changes (new turns, streaming
+  // deltas, tool calls). Biome's "exhaustive deps" rule flags this — it is
+  // intentional; we want to re-run the effect on every messages change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages is the trigger
   useEffect(() => {
     const el = bodyRef.current
     if (el) el.scrollTop = el.scrollHeight
@@ -216,19 +217,21 @@ export function Agent({
       </header>
 
       <div className="agent-stage">
-        <aside className={"rail" + (showRail ? "" : " hidden")}>
+        <aside className={`rail${showRail ? "" : " hidden"}`}>
           {NODES.map((n, i) => {
             const st = timeline[n.k]
             return (
               <span key={n.k} style={{ display: "contents" }}>
-                <div className={"rail-node " + (st === "exec" ? "exec" : st === "done" ? "done" : "")}>
+                <div
+                  className={`rail-node ${st === "exec" ? "exec" : st === "done" ? "done" : ""}`}
+                >
                   <span className="rail-ic">
                     <Icon name={n.ic} size={14} />
                     <span className="lab">{n.lab}</span>
                   </span>
                 </div>
                 {i < NODES.length - 1 && (
-                  <span className={"rail-link" + (st === "done" ? " done" : "")} />
+                  <span className={`rail-link${st === "done" ? " done" : ""}`} />
                 )}
               </span>
             )
@@ -240,14 +243,13 @@ export function Agent({
             {messages.length === 0 && (
               <div className="chat-empty">
                 <span className="agent-ava lg">
-                  {/* biome-ignore lint/a11y/useAltText: decorative */}
                   <img src="/assets/glyph-w.svg" alt="" />
                 </span>
                 <p>{emptyState}</p>
               </div>
             )}
             {messages.map((m, i) => (
-              <AgentMessage key={m.uid != null ? m.uid : "m" + i} m={m} />
+              <AgentMessage key={m.uid != null ? m.uid : `m${i}`} m={m} />
             ))}
           </div>
 
@@ -257,7 +259,7 @@ export function Agent({
                 <button
                   key={i}
                   type="button"
-                  className={"sugg" + (pressed === i ? " pressed" : "")}
+                  className={`sugg${pressed === i ? " pressed" : ""}`}
                   onClick={() => onChip(s, i)}
                 >
                   {s}
@@ -275,7 +277,7 @@ export function Agent({
               />
               <button
                 type="button"
-                className={"send-btn" + (input.trim() ? " active" : "")}
+                className={`send-btn${input.trim() ? " active" : ""}`}
                 disabled={!input.trim()}
                 onClick={onSend}
                 aria-label="Send"
