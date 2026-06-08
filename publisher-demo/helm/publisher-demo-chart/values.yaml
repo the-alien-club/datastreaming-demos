@@ -1,0 +1,51 @@
+replicaCount: 1
+
+image:
+  repository: registry.gitlab.com/alias3/datastreaming/publisher-demo
+  tag: 0.1.0
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: publisher-demo.staging.alien.club
+  tls:
+    enabled: true
+    secretName: publisher-demo-tls
+
+env:
+  PLATFORM_API_URL: https://api.staging.alien.club
+  MCP_ALIEN_URL: https://mcp.alien.club
+  DEMO_CONFIG_SLUG: cfg_publisher_demo
+  DEMO_WORKFLOW_ID: ""  # set per environment
+
+# Secrets are sourced from Vault via ExternalSecret matching the alien-agents pattern.
+externalSecret:
+  enabled: true
+  secretStoreRefName: vault-secret-store
+  secretStoreRefKind: ClusterSecretStore
+  refreshInterval: "1h"
+  # Vault keys → env var names
+  data:
+    ADMIN_OAT:
+      remoteKey: secret/data/publisher-demo
+      property: admin_oat
+    ANTHROPIC_API_KEY:
+      remoteKey: secret/data/publisher-demo
+      property: anthropic_api_key
+
+resources:
+  limits:
+    memory: 768Mi
+    cpu: 500m
+  requests:
+    memory: 256Mi
+    cpu: 100m
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

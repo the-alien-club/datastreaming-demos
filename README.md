@@ -89,6 +89,32 @@ See [avatar/README.md](./avatar/README.md) for full documentation.
 
 ---
 
+### Publisher Demo — Five-panel Live Demo
+
+**Location**: [`/publisher-demo`](./publisher-demo)
+
+A single-page live demo of the Alien platform for publishers. Five panels driven by one MCP Configuration row (`cfg_publisher_demo`): Datasources, External APIs, Access Mode (Data flow / Agentic flow), Live access (counters + tape + attribution), and the Agent. Every tool call ripples across all four observability panels in ~700ms.
+
+**Features:**
+- One MCP Configuration drives both modes — same datasets and proxied APIs in Data flow and Agentic flow
+- "Copy Claude Desktop config" affordance hands customers the same URL the demo uses
+- Real Mode B (Claude Agent SDK + mcp-alien) wired server-side
+- Pixel-matched to the Alien Demo design bundle (Claude Design handoff)
+
+**Tech Stack**: Next.js 16, React 19, TypeScript, Tailwind v4, Claude Agent SDK, Vercel AI SDK v6
+
+**Quick Start:**
+```bash
+cd publisher-demo
+cp .env.example .env
+npm install
+npm run dev
+```
+
+See [publisher-demo/README.md](./publisher-demo/README.md) for the full architecture and what's wired vs not.
+
+---
+
 ## Learn More
 
 - [Alien Intelligence Data Streaming](https://datastreaming.ai/how-it-works)

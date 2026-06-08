@@ -1,0 +1,6 @@
+apiVersion: v2
+name: publisher-demo
+version: 0.1.0
+description: Alien Publisher Demo — five-panel live demo of the publisher monetization platform
+type: application
+appVersion: "0.1.0"
