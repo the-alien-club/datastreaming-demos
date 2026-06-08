@@ -1,0 +1,12 @@
+/*
+ * Alien Intelligence — Webfonts
+ * The product ships Geist (UI / body / display) and Geist Mono (code, metrics,
+ * technical labels). Both are loaded from Google Fonts.
+ *
+ * SUBSTITUTION NOTE: the marketing site's big display headlines use
+ * "ES Klarheit Kurrent" (a commercial OH no Type grotesk, not freely
+ * licensable). Geist is the closest open grotesk already in the product and
+ * is used here for display as well. Swap in the real ES Klarheit files if you
+ * have a license — see --font-display in typography.css.
+ */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap");
