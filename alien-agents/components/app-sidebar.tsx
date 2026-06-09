@@ -145,8 +145,14 @@ function SidebarContent({
         <Link href="/agents" className="flex items-center" onClick={onNavigate}>
           {/* Plain <img>: the SVG's intrinsic dims don't match what Next/Image
               expects, so even with `unoptimized` it can render at zero size.
-              Frontend repo uses the same pattern. */}
-          <img src="/images/logo-w.svg" alt="Alien" className="h-7 w-auto" />
+              Frontend repo uses the same pattern. basePath must be prepended
+              manually — <img> does not get the auto-prefix that next/image
+              and <Link> provide. */}
+          <img
+            src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/images/logo-w.svg`}
+            alt="Alien"
+            className="h-7 w-auto"
+          />
         </Link>
         <LocaleSwitcher />
       </div>
@@ -287,7 +293,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
         </SheetMobileNav>
 
         <Link href="/agents">
-          <img src="/images/logo-w.svg" alt="Alien" className="h-6 w-auto" />
+          <img
+            src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/images/logo-w.svg`}
+            alt="Alien"
+            className="h-6 w-auto"
+          />
         </Link>
 
         <LocaleSwitcher />
