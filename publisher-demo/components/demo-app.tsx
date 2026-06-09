@@ -1,19 +1,28 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { resolveToolSource, useConfig } from "@/hooks/use-config"
-import { useDemoEvents } from "@/hooks/use-demo-events"
+import { useDemoEventListener, useDemoEvents } from "@/hooks/use-demo-events"
 import { useMode, type Mode } from "@/hooks/use-mode"
 import { usePricing } from "@/hooks/use-pricing"
 import type { JobProgress, ToolActivity } from "@/lib/claude-sdk/job-store"
+import type {
+  AttributionRow,
+  Counters,
+  ObservabilityPulse,
+  TapeRow,
+} from "@/lib/observability-types"
 import { readUiMessageChunks } from "@/lib/ui-stream"
+import { ConfigBar } from "./config-bar"
 import { Icon } from "./icons"
-import { AccessMode } from "./panels/access-mode"
 import { Agent, type Timeline } from "./panels/agent"
 import { Datasources } from "./panels/datasources"
 import { ExternalApis } from "./panels/external-apis"
 import { Observability } from "./panels/observability"
 import { DsButton } from "./widgets"
+
+const ROY_HIST_LEN = 32
+const MAX_TAPE_BUFFER = 12
 
 const MODEL = "Claude Opus 4.7"
 const DONE3 = { planner: "done", specialist: "done", critic: "done" } as const
@@ -71,46 +80,6 @@ function configJson(slug: string, mcpUrl: string): string {
   )
 }
 
-function ConfigChip({
-  slug,
-  dsCount,
-  apiCount,
-  isDirty,
-  isSaving,
-  justSaved,
-  onSave,
-}: {
-  slug: string
-  dsCount: number
-  apiCount: number
-  isDirty: boolean
-  isSaving: boolean
-  justSaved: boolean
-  onSave: () => void
-}) {
-  return (
-    <div className={"cfg-chip" + (isDirty ? " dirty" : "")} key={justSaved ? "saved" : "idle"}>
-      <span className="cfg-ic">
-        <Icon name="gear" size={15} />
-      </span>
-      <div className="cfg-text">
-        <span className="cfg-title">
-          MCP Configuration · <code>{slug}</code>
-        </span>
-        <span className="cfg-sub">
-          {dsCount} clusters · {apiCount} APIs · used by both modes
-        </span>
-      </div>
-      {isDirty && (
-        <button type="button" className="cfg-save" onClick={onSave} disabled={isSaving}>
-          <Icon name="check" size={13} strokeWidth={2.4} />
-          {isSaving ? "Saving…" : "Save"}
-        </button>
-      )}
-    </div>
-  )
-}
-
 export function DemoApp() {
   const config = useConfig()
   const pricing = usePricing()
@@ -129,6 +98,90 @@ export function DemoApp() {
   const [input, setInput] = useState("")
   const [pressed, setPressed] = useState<number | null>(null)
   const [pendingMode, setPendingMode] = useState<Mode | null>(null)
+  /** Bumped on every successful save to re-fire the `.config-bar` cfgGlow animation. */
+  const [cfgPulse, setCfgPulse] = useState(0)
+
+  // ── Observability lifted state ───────────────────────────────────────────
+  // Cross-panel ripple state lives here (not in <Observability>) so a future
+  // mobile shell can share the same state across mounted/unmounted panel
+  // instances without losing accumulated counters.
+  const [counters, setCounters] = useState<Counters>({
+    apiCalls: 0,
+    dataPoints: 0,
+    royalties: 0,
+  })
+  const [royHist, setRoyHist] = useState<number[]>([])
+  const [feed, setFeed] = useState<TapeRow[]>([])
+  const [attribution, setAttribution] = useState<AttributionRow[]>([])
+  const [pulse, setPulse] = useState<ObservabilityPulse>({
+    ds: null,
+    api: null,
+    attr: null,
+  })
+  /** Bumped on every successful save to flash the "Configuration updated" banner. */
+  const [feedFlash, setFeedFlash] = useState(0)
+
+  // Push every counters.royalties change onto the rolling royHist so the
+  // trend chart fills as data accrues. No backfill / fake history — the
+  // chart legitimately paints empty until the first tool call lands.
+  useEffect(() => {
+    setRoyHist((h) => [...h.slice(-(ROY_HIST_LEN - 1)), counters.royalties])
+  }, [counters.royalties])
+
+  const sessionRoyalty = counters.royalties
+
+  // 100/200/400ms cascade driven by the cross-panel `tool-call` bus. The
+  // ds/api row pulses (T+300) are already handled inside the Datasources +
+  // ExternalApis panels via their own listeners; here we accumulate the
+  // counters, the tape, and the per-source attribution.
+  useDemoEventListener("tool-call", (event) => {
+    const t = event.timestamp
+    const ts = new Date(t)
+    const row: TapeRow = {
+      uid: t,
+      t: `${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`,
+      tool: formatTapeTool(event.toolName, event.args),
+      meta: formatTapeMeta(event.tokensEstimate, event.royaltyEur, event.attributionLabel),
+      fresh: true,
+    }
+
+    window.setTimeout(() => {
+      setFeed((prev) =>
+        [row, ...prev.map((r) => ({ ...r, fresh: false }))].slice(0, MAX_TAPE_BUFFER),
+      )
+    }, 100)
+
+    window.setTimeout(() => {
+      // Data points = count of dataset hits for dataset tools, 1 for API calls.
+      const hits = event.kind === "dataset" ? Math.max(1, event.datasetIds.length) : 1
+      setCounters((c) => ({
+        apiCalls: c.apiCalls + 1,
+        dataPoints: c.dataPoints + hits,
+        royalties: round4(c.royalties + event.royaltyEur),
+      }))
+    }, 200)
+
+    window.setTimeout(() => {
+      setAttribution((rows) => upsertAttribution(rows, event))
+      setPulse((p) => ({
+        ...p,
+        attr: { key: event.attributionKey, n: p.attr ? p.attr.n + 1 : 1, amount: event.royaltyEur },
+      }))
+    }, 400)
+  })
+
+  useDemoEventListener("usage", (_event) => {
+    // Token usage no longer feeds a counter (rev-2 replaced Tokens with Data
+    // points). Hook kept open so we can route this to a future stat if needed.
+  })
+
+  useDemoEventListener("reset-chat", () => {
+    setCounters({ apiCalls: 0, dataPoints: 0, royalties: 0 })
+    setFeed([])
+    setAttribution([])
+    setRoyHist([])
+    setPulse({ ds: null, api: null, attr: null })
+  })
 
   const runningRef = useRef(false)
   const cancelRef = useRef(false)
@@ -139,10 +192,12 @@ export function DemoApp() {
   const computeRoyaltyRef = useRef(pricing.computeRoyalty)
   computeRoyaltyRef.current = pricing.computeRoyalty
 
-  const slug = config.configuration?.slug ?? "cfg_publisher_demo"
-  const mcpUrl =
-    process.env.NEXT_PUBLIC_MCP_ALIEN_URL ?? "https://mcp.alien.club"
-  const configJsonString = useMemo(() => configJson(slug, mcpUrl), [slug, mcpUrl])
+  // configJson string is no longer rendered in the Agent header (rev-2 dropped
+  // the Copy Claude Desktop config button), but we keep the derivation so it
+  // can be surfaced elsewhere later if needed.
+  const _slug = config.configuration?.slug ?? "cfg_publisher_demo"
+  const _mcpUrl = process.env.NEXT_PUBLIC_MCP_ALIEN_URL ?? "https://mcp.alien.club"
+  void configJson(_slug, _mcpUrl)
 
   const addUserMessage = useCallback(
     (text: string) => {
@@ -471,6 +526,8 @@ export function DemoApp() {
   const onSaveConfig = useCallback(async () => {
     try {
       await config.save()
+      setCfgPulse((n) => n + 1)
+      setFeedFlash((n) => n + 1)
       events.emit({ type: "config-saved" })
       const scopeUid = addScopeMessage("Configuration updated · applying…")
       window.setTimeout(() => {
@@ -575,17 +632,19 @@ export function DemoApp() {
         </h1>
       </div>
 
+      <ConfigBar
+        dsCount={dsClusterCount}
+        apiCount={apiSelectedCount}
+        dirty={config.isDirty}
+        isSaving={config.isSaving}
+        pulseKey={cfgPulse}
+        mode={mode}
+        onSave={onSaveConfig}
+        onRequestSwitch={onRequestSwitch}
+      />
+
       <div className="grid">
         <div className="left-col">
-          <ConfigChip
-            slug={slug}
-            dsCount={dsClusterCount}
-            apiCount={apiSelectedCount}
-            isDirty={config.isDirty}
-            isSaving={config.isSaving}
-            justSaved={config.justSaved}
-            onSave={onSaveConfig}
-          />
           <Datasources
             view={config.view}
             isLoading={config.isLoading}
@@ -600,8 +659,6 @@ export function DemoApp() {
             onToggle={onToggleConnector}
           />
         </div>
-        <AccessMode mode={mode} onRequestSwitch={onRequestSwitch} />
-        <Observability />
         <Agent
           mode={mode}
           model={MODEL}
@@ -612,12 +669,20 @@ export function DemoApp() {
           pressed={pressed}
           suggestions={SUGGESTIONS[mode]}
           emptyState={EMPTY_STATE[mode]}
-          configJson={configJsonString}
           onChip={onChip}
           onInput={setInput}
           onSend={() => {
             if (input.trim()) runAgent(input.trim())
           }}
+        />
+        <Observability
+          counters={counters}
+          royHist={royHist}
+          feed={feed}
+          attribution={attribution}
+          pulse={pulse}
+          flash={feedFlash}
+          sessionRoyalty={sessionRoyalty}
         />
       </div>
 
@@ -642,4 +707,53 @@ export function DemoApp() {
       )}
     </div>
   )
+}
+
+// ── Observability cascade helpers ──────────────────────────────────────────
+
+const pad = (n: number) => String(n).padStart(2, "0")
+const round4 = (n: number) => Math.round(n * 10000) / 10000
+
+function formatTapeTool(toolName: string, args: Record<string, unknown> | null): string {
+  if (!args || Object.keys(args).length === 0) return `${toolName}()`
+  const entries = Object.entries(args).slice(0, 2)
+  const summary = entries
+    .map(([k, v]) => {
+      if (typeof v === "string") {
+        const clipped = v.length > 28 ? `${v.slice(0, 25)}…` : v
+        return `${k}=${JSON.stringify(clipped)}`
+      }
+      if (Array.isArray(v)) return `${k}=[${v.length}]`
+      if (v && typeof v === "object") return `${k}={…}`
+      return `${k}=${String(v)}`
+    })
+    .join(", ")
+  const more = Object.keys(args).length > entries.length ? ", …" : ""
+  return `${toolName}(${summary}${more})`
+}
+
+function formatTapeMeta(tokens: number, royaltyEur: number, label: string): string {
+  const tokenLabel = tokens > 0 ? `${tokens.toLocaleString()} tok` : "—"
+  const eurLabel = royaltyEur > 0 ? `€${royaltyEur.toFixed(4)}` : "no price"
+  return `${tokenLabel} · ${eurLabel} · ${label}`
+}
+
+function upsertAttribution(
+  rows: AttributionRow[],
+  event: {
+    attributionKey: string
+    attributionLabel: string
+    royaltyEur: number
+  },
+): AttributionRow[] {
+  const idx = rows.findIndex((r) => r.key === event.attributionKey)
+  if (idx === -1) {
+    return [
+      ...rows,
+      { key: event.attributionKey, label: event.attributionLabel, eur: round4(event.royaltyEur) },
+    ]
+  }
+  const next = [...rows]
+  next[idx] = { ...next[idx], eur: round4(next[idx].eur + event.royaltyEur) }
+  return next
 }

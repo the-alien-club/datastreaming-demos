@@ -120,42 +120,6 @@ function AgentMessage({ m }: { m: ChatMessage }) {
   )
 }
 
-function CopyConfigButton({ json }: { json: string }) {
-  const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  function copy() {
-    try {
-      navigator.clipboard.writeText(json)
-    } catch {}
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1600)
-  }
-  return (
-    <span className="cfg-copy-wrap">
-      <button
-        type="button"
-        className={`copy-config-chip${open ? " on" : ""}`}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <Icon name="plug" size={12} />
-        Copy Claude Desktop config
-      </button>
-      {open && (
-        <div className="cfg-popover">
-          <div className="cfg-pop-title">
-            This same configuration powers the demo and any external agent.
-          </div>
-          <pre className="cfg-json">{json}</pre>
-          <button type="button" className={`cfg-copy-btn${copied ? " done" : ""}`} onClick={copy}>
-            <Icon name={copied ? "check" : "file"} size={13} />
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </div>
-      )}
-    </span>
-  )
-}
-
 export function Agent({
   mode,
   model,
@@ -166,7 +130,6 @@ export function Agent({
   pressed,
   suggestions,
   emptyState,
-  configJson,
   onChip,
   onInput,
   onSend,
@@ -180,20 +143,27 @@ export function Agent({
   pressed: number | null
   suggestions: string[]
   emptyState: string
-  configJson: string
   onChip: (text: string, idx: number) => void
   onInput: (text: string) => void
   onSend: () => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
-  // Scroll to bottom whenever the messages list changes (new turns, streaming
-  // deltas, tool calls). Biome's "exhaustive deps" rule flags this — it is
-  // intentional; we want to re-run the effect on every messages change.
+  // Scroll to bottom whenever the messages list changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: messages is the trigger
   useEffect(() => {
     const el = bodyRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages])
+
+  // Gently invite input if the composer sits untouched for >5.5s and is empty.
+  const [invite, setInvite] = useState(false)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages.length intentional
+  useEffect(() => {
+    setInvite(false)
+    if (input.trim()) return
+    const id = window.setTimeout(() => setInvite(true), 5500)
+    return () => window.clearTimeout(id)
+  }, [input, messages.length])
 
   const showRail = mode === "agentic" && railActive
 
@@ -204,7 +174,6 @@ export function Agent({
         <span className="panel-title">Agent</span>
         <span className="spacer" />
         <span className="chip-row">
-          {mode === "dataflow" && <CopyConfigButton json={configJson} />}
           <span className="mode-chip">
             <Icon name={mode === "agentic" ? "network" : "plug"} size={12} />
             {mode === "agentic" ? "Agentic flow" : "Data flow"}
@@ -266,7 +235,7 @@ export function Agent({
                 </button>
               ))}
             </div>
-            <div className="composer-input">
+            <div className={`composer-input${invite ? " invite" : ""}`}>
               <input
                 value={input}
                 placeholder="Ask the agent…"
@@ -275,15 +244,16 @@ export function Agent({
                   if (e.key === "Enter" && input.trim()) onSend()
                 }}
               />
-              <button
-                type="button"
-                className={`send-btn${input.trim() ? " active" : ""}`}
-                disabled={!input.trim()}
-                onClick={onSend}
-                aria-label="Send"
-              >
-                <Icon name="send" size={15} />
-              </button>
+              {input.trim() && (
+                <button
+                  type="button"
+                  className="send-btn active"
+                  onClick={onSend}
+                  aria-label="Send"
+                >
+                  <Icon name="send" size={15} />
+                </button>
+              )}
             </div>
           </div>
         </div>
