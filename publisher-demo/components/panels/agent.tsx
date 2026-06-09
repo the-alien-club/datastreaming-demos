@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { ChatMessage, ToolEntry } from "@/lib/chat-messages"
 import { Icon, type IconName } from "../icons"
-import type { Mode } from "./access-mode"
+import type { Mode } from "@/hooks/use-mode"
 
 const NODES = [
   { k: "planner", ic: "cpu" as IconName, lab: "Planner" },

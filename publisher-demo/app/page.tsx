@@ -1,5 +1,5 @@
-import { DemoApp } from "@/components/demo-app"
+import { ResponsiveShell } from "@/components/responsive-shell"
 
 export default function Page() {
-  return <DemoApp />
+  return <ResponsiveShell />
 }
