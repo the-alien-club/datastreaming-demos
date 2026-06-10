@@ -67,6 +67,8 @@ export interface PlatformProviderOptions {
   baseURL: string
   /** Admin OAT forwarded as `Authorization: Bearer`. */
   accessToken: string
+  /** Numeric organization id pinned via `x-organization-id`. */
+  orgId: string
 }
 
 export function platformProvider(opts: PlatformProviderOptions): ReturnType<typeof createOpenAI> {
@@ -76,6 +78,7 @@ export function platformProvider(opts: PlatformProviderOptions): ReturnType<type
     headers: {
       authorization: `Bearer ${opts.accessToken}`,
       "x-oauth-access-token": opts.accessToken,
+      "x-organization-id": opts.orgId,
     },
   })
 }

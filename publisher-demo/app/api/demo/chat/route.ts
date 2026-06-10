@@ -120,16 +120,18 @@ function streamAgenticTurn(prompt: string, signal: AbortSignal): Response {
   let platformBase: string
   let workflowId: string
   let oat: string
+  let orgId: string
   try {
     platformBase = env.PLATFORM_API_URL.replace(/\/$/, "")
     workflowId = env.DEMO_WORKFLOW_ID
     oat = env.ADMIN_OAT
+    orgId = env.ORG_ID
   } catch (err) {
     return NextResponse.json(
       {
         error: "platform-env-missing",
         message:
-          "Mode A requires PLATFORM_API_URL, DEMO_WORKFLOW_ID, and ADMIN_OAT. " +
+          "Mode A requires PLATFORM_API_URL, DEMO_WORKFLOW_ID, ADMIN_OAT and ORG_ID. " +
           "Fill in .env to enable the live platform workflow.",
         detail: err instanceof Error ? err.message : String(err),
       },
@@ -140,6 +142,7 @@ function streamAgenticTurn(prompt: string, signal: AbortSignal): Response {
   const provider = platformProvider({
     baseURL: `${platformBase}/agent/${workflowId}`,
     accessToken: oat,
+    orgId,
   })
 
   const stream = createUIMessageStream({

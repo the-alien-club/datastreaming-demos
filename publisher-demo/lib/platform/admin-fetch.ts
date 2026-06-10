@@ -8,6 +8,10 @@ export async function adminFetch(path: string, init: RequestInit = {}): Promise<
     headers: {
       "Content-Type": "application/json",
       authorization: `Bearer ${env.ADMIN_OAT}`,
+      // Pin every request to the demo's organization so the OAT user's other
+      // org memberships can't leak into the resolved configuration, catalogs,
+      // or pricing surface.
+      "x-organization-id": env.ORG_ID,
       connection: "close",
       ...(init.headers as Record<string, string> | undefined),
     },

@@ -28,7 +28,12 @@ export async function startQuery(
     alien: {
       type: "http",
       url: mcpUrl,
-      headers: { Authorization: `Bearer ${env.ADMIN_OAT}` },
+      headers: {
+        Authorization: `Bearer ${env.ADMIN_OAT}`,
+        // Pin every MCP call to the demo's organization so the OAT user's
+        // other org memberships can't surface a different tool set.
+        "x-organization-id": env.ORG_ID,
+      },
     } as McpServerConfig,
   }
 

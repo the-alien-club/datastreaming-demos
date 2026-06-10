@@ -10,7 +10,7 @@ shown in the UI is read from `/mcp-configurations`, `/datasets`, and
 ```bash
 cp .env.example .env
 # Fill in PLATFORM_API_URL, MCP_ALIEN_URL, ADMIN_OAT, DEMO_WORKFLOW_ID,
-# ANTHROPIC_API_KEY. DEMO_CONFIG_SLUG can stay as a placeholder — the demo
+# ANTHROPIC_API_KEY, ORG_ID. DEMO_CONFIG_SLUG can stay as a placeholder — the demo
 # falls back to the admin OAT user's default configuration if the env-pinned
 # slug isn't found on the platform.
 npm install
@@ -42,6 +42,12 @@ The admin OAT needs read access to:
 - `/datasets/*`
 - `/external-apis/*` and `/external-apis/:id/endpoints`
 - exec access to `/agent/:workflowId/responses` for Mode A
+
+`ORG_ID` is the numeric organization id forwarded as `x-organization-id` on
+every platform request. It locks the demo to a single tenant: even if the
+admin OAT user belongs to multiple organisations, only `ORG_ID`'s clusters
++ external APIs surface in the picker, and Mode B's mcp-alien only exposes
+that org's tools.
 
 ## What's on the page
 
