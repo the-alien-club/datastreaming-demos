@@ -1,8 +1,6 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
-import { nanoid } from "nanoid"
 import { NextResponse } from "next/server"
-import { processQuery } from "@/lib/claude-sdk/agent-query"
-import { jobStore } from "@/lib/claude-sdk/job-store"
+import { streamModeB, type StreamedToolEvent } from "@/lib/claude-sdk/agent-query"
 import { env } from "@/lib/env"
 import { adminFetch } from "@/lib/platform/admin-fetch"
 import { resolveConfig } from "@/lib/platform/resolve-slug"
@@ -28,13 +26,11 @@ type Body = {
 
 /**
  * Mode A — Agentic flow. Streams the platform workflow's Responses API via
- * AI SDK v6 `createUIMessageStream` and emits UI message chunks (text deltas,
- * tool-input-available, data-toolCall ripple events, data-subagent panels,
- * finish). The client decodes these chunks and drives the cross-panel
- * choreography.
+ * AI SDK v6 `createUIMessageStream`.
  *
- * Mode B — Data flow. Starts a Claude Agent SDK background job and returns
- * { jobId } for polling via /api/demo/status/[jobId].
+ * Mode B — Data flow. Streams from the official Anthropic Messages API with
+ * the MCP-connector beta. Returns NDJSON over `text/event-stream`; each event
+ * is a JSON-encoded `StreamedToolEvent`.
  */
 export async function POST(request: Request): Promise<Response> {
   let body: Body
@@ -57,50 +53,83 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (body.mode === "data") {
-    // Mode B targets the same MCP Configuration the picker is editing — so
-    // we have to resolve the slug (env-pinned or default fallback) before
-    // building the mcp-alien URL.
-    const resolved = await resolveConfig().catch(() => null)
-    if (!resolved) {
-      return NextResponse.json(
-        {
-          error: "no-mcp-configuration",
-          message:
-            "No MCP configuration found on the platform for the admin OAT. " +
-            "Mode B needs a configuration to point mcp-alien at.",
-        },
-        { status: 404 },
-      )
-    }
-
-    // Build the system-prompt context from the available-sources catalog so
-    // the agent describes the actual clusters in scope (not hardcoded names).
-    const sourcesRes = await adminFetch("/mcp-configurations/available-sources")
-    const sources = sourcesRes.ok
-      ? await unwrap<{
-          clusters: Array<{ name: string }>
-          external_apis: Array<{ name: string }>
-        }>(sourcesRes)
-      : { clusters: [], external_apis: [] }
-
-    const jobId = nanoid()
-    jobStore.create(jobId)
-    void processQuery(
-      jobId,
-      body.messages,
-      body.model ?? "claude-opus-4-7",
-      resolved.slug,
-      {
-        configSlug: resolved.slug,
-        configName: resolved.configuration.name,
-        clusterNames: sources.clusters.map((c) => c.name),
-        connectorNames: sources.external_apis.map((a) => a.name),
-      },
-    )
-    return NextResponse.json({ jobId, status: "started", configSlug: resolved.slug })
+    return streamDataTurn(body, request.signal)
   }
 
   return NextResponse.json({ error: "Unknown mode" }, { status: 400 })
+}
+
+async function streamDataTurn(body: Body, signal: AbortSignal): Promise<Response> {
+  const resolved = await resolveConfig().catch(() => null)
+  if (!resolved) {
+    return NextResponse.json(
+      {
+        error: "no-mcp-configuration",
+        message:
+          "No MCP configuration found on the platform for the admin OAT. " +
+          "Mode B needs a configuration to point the MCP connector at.",
+      },
+      { status: 404 },
+    )
+  }
+
+  // Catalog → system prompt context so the agent knows which clusters /
+  // connectors it's actually allowed to touch.
+  const sourcesRes = await adminFetch("/mcp-configurations/available-sources")
+  const sources = sourcesRes.ok
+    ? await unwrap<{
+        clusters: Array<{ name: string }>
+        external_apis: Array<{ name: string }>
+      }>(sourcesRes)
+    : { clusters: [], external_apis: [] }
+
+  // Sonnet 4.6 is materially faster than Opus 4.7 on this workload (the
+  // bottleneck is summarising large MCP tool results — ~20s on Opus, ~7s on
+  // Sonnet — at comparable quality). Override via body.model if needed.
+  const model = body.model ?? "claude-sonnet-4-6"
+  const promptContext = {
+    configSlug: resolved.slug,
+    configName: resolved.configuration.name,
+    clusterNames: sources.clusters.map((c) => c.name),
+    connectorNames: sources.external_apis.map((a) => a.name),
+  }
+
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: StreamedToolEvent): void => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+      }
+      try {
+        for await (const event of streamModeB(
+          body.messages,
+          model,
+          resolved.slug,
+          promptContext,
+          signal,
+        )) {
+          send(event)
+          if (event.type === "message-stop") break
+        }
+      } catch (err) {
+        send({
+          type: "error",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  })
 }
 
 function extractUserMessage(messages: ChatMessage[]): string {
