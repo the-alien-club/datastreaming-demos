@@ -78,7 +78,10 @@ export async function GET() {
           const toolName = deriveToolName(connector.slug, operationId, method, path)
           const cents = Number(ep.unit_price_cents ?? ep.unitPriceCents ?? 0)
           if (Number.isFinite(cents) && cents > 0) {
-            pricing[toolName] = cents / 100
+            const price = cents / 100
+            for (const key of nameVariants(toolName)) {
+              pricing[key] = price
+            }
           }
         }
       }),
@@ -161,4 +164,15 @@ function deriveToolName(
   const suffix = toSnakeCase(candidate)
   if (!suffix) return `${slug}_${method.toLowerCase()}`
   return `${slug}_${suffix}`
+}
+
+/**
+ * Different MCP servers normalise the connector slug differently in the
+ * tool name they expose: BNF servers convert dashes to underscores
+ * (`bnf_gallica_api_*`), OpenAIRE preserves them (`openaire-…-api_*`). We
+ * write the price under BOTH forms so the frontend's lookup hits either
+ * way, since there is no single rule that matches every MCP server.
+ */
+function nameVariants(name: string): string[] {
+  return Array.from(new Set([name, name.replace(/-/g, "_")]))
 }

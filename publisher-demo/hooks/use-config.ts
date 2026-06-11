@@ -23,9 +23,7 @@ async function fetchConfig(): Promise<DemoConfigResponse> {
   return (await res.json()) as DemoConfigResponse
 }
 
-async function putConfig(
-  payload: McpConfigurationPickerPayload,
-): Promise<DemoConfigResponse> {
+async function putConfig(payload: McpConfigurationPickerPayload): Promise<DemoConfigResponse> {
   const res = await fetch("/api/demo/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -164,9 +162,7 @@ function cloneDraft(d: DraftState): DraftState {
       Array.from(d.datasetIdsByCluster.entries()).map(([k, v]) => [k, new Set(v)]),
     ),
     enabledConnectors: new Set(d.enabledConnectors),
-    toolsByCluster: new Map(
-      Array.from(d.toolsByCluster.entries()).map(([k, v]) => [k, [...v]]),
-    ),
+    toolsByCluster: new Map(Array.from(d.toolsByCluster.entries()).map(([k, v]) => [k, [...v]])),
     toolsByConnector: new Map(
       Array.from(d.toolsByConnector.entries()).map(([k, v]) => [k, [...v]]),
     ),
@@ -200,7 +196,19 @@ function payloadsEqual(
   a: McpConfigurationPickerPayload,
   b: McpConfigurationPickerPayload,
 ): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+  return stableStringify(a) === stableStringify(b)
+}
+
+// JSON.stringify is insertion-order sensitive. The server returns clusters as
+// {tools, cluster_id, dataset_ids} but draftToPayload builds them as
+// {cluster_id, tools, dataset_ids} — same data, different output. Sort keys
+// so structurally equal payloads compare equal.
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`
+  const obj = value as Record<string, unknown>
+  const keys = Object.keys(obj).sort()
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`
 }
 
 function buildView(sources: DemoConfigResponse["sources"], draft: DraftState): ConfigView {
@@ -267,56 +275,57 @@ export function useConfig(): UseConfigResult {
     return buildView(query.data.sources, draft)
   }, [query.data, draft])
 
-  const toggle = useCallback((t: ConfigToggle) => {
-    setDraft((prev) => {
-      if (!prev) return prev
-      const next = cloneDraft(prev)
-      switch (t.kind) {
-        case "dataset": {
-          const set = next.datasetIdsByCluster.get(t.clusterId) ?? new Set<number>()
-          if (set.has(t.datasetId)) set.delete(t.datasetId)
-          else set.add(t.datasetId)
-          next.datasetIdsByCluster.set(t.clusterId, set)
-          break
-        }
-        case "cluster-all": {
-          // Find the catalog cluster to compute "all datasets". Cluster
-          // catalog is in the query data; capture via a closure-stable map
-          // by reading the cluster's known dataset ids from the draft side
-          // (we keep these populated even for unchecked clusters because
-          // buildDraftFromServer seeds them).
-          // For "all" toggling we need the catalog — read it from the cluster
-          // entry in the existing membership. We assume membership map keys
-          // for every catalog cluster (buildDraftFromServer guarantees this).
-          // Here we can't read sources directly; emit the existing set's
-          // inverse and rely on a separate clearing path. Instead, peek at
-          // catalog via global query cache.
-          // The membership maps were seeded with empty sets for all clusters;
-          // the catalog dataset IDs are needed. Fall back to reading from
-          // cache via the stale data we already have.
-          const cached = queryClient.getQueryData<DemoConfigResponse>(CONFIG_KEY)
-          const catalog = cached?.sources.clusters.find(
-            (c) => c.cluster_id === t.clusterId,
-          )
-          if (!catalog) break
-          const allIds = catalog.datasets.map((d) => d.id)
-          const current = next.datasetIdsByCluster.get(t.clusterId) ?? new Set<number>()
-          const allOn = allIds.length > 0 && allIds.every((id) => current.has(id))
-          next.datasetIdsByCluster.set(t.clusterId, allOn ? new Set() : new Set(allIds))
-          break
-        }
-        case "connector": {
-          if (next.enabledConnectors.has(t.connectorId)) {
-            next.enabledConnectors.delete(t.connectorId)
-          } else {
-            next.enabledConnectors.add(t.connectorId)
+  const toggle = useCallback(
+    (t: ConfigToggle) => {
+      setDraft((prev) => {
+        if (!prev) return prev
+        const next = cloneDraft(prev)
+        switch (t.kind) {
+          case "dataset": {
+            const set = next.datasetIdsByCluster.get(t.clusterId) ?? new Set<number>()
+            if (set.has(t.datasetId)) set.delete(t.datasetId)
+            else set.add(t.datasetId)
+            next.datasetIdsByCluster.set(t.clusterId, set)
+            break
           }
-          break
+          case "cluster-all": {
+            // Find the catalog cluster to compute "all datasets". Cluster
+            // catalog is in the query data; capture via a closure-stable map
+            // by reading the cluster's known dataset ids from the draft side
+            // (we keep these populated even for unchecked clusters because
+            // buildDraftFromServer seeds them).
+            // For "all" toggling we need the catalog — read it from the cluster
+            // entry in the existing membership. We assume membership map keys
+            // for every catalog cluster (buildDraftFromServer guarantees this).
+            // Here we can't read sources directly; emit the existing set's
+            // inverse and rely on a separate clearing path. Instead, peek at
+            // catalog via global query cache.
+            // The membership maps were seeded with empty sets for all clusters;
+            // the catalog dataset IDs are needed. Fall back to reading from
+            // cache via the stale data we already have.
+            const cached = queryClient.getQueryData<DemoConfigResponse>(CONFIG_KEY)
+            const catalog = cached?.sources.clusters.find((c) => c.cluster_id === t.clusterId)
+            if (!catalog) break
+            const allIds = catalog.datasets.map((d) => d.id)
+            const current = next.datasetIdsByCluster.get(t.clusterId) ?? new Set<number>()
+            const allOn = allIds.length > 0 && allIds.every((id) => current.has(id))
+            next.datasetIdsByCluster.set(t.clusterId, allOn ? new Set() : new Set(allIds))
+            break
+          }
+          case "connector": {
+            if (next.enabledConnectors.has(t.connectorId)) {
+              next.enabledConnectors.delete(t.connectorId)
+            } else {
+              next.enabledConnectors.add(t.connectorId)
+            }
+            break
+          }
         }
-      }
-      return next
-    })
-  }, [queryClient])
+        return next
+      })
+    },
+    [queryClient],
+  )
 
   const reset = useCallback(() => {
     if (query.data) {
@@ -365,23 +374,39 @@ export function useConfig(): UseConfigResult {
 export function resolveToolSource(
   sources: DemoConfigResponse["sources"] | null,
   toolName: string,
-): {
-  kind: "dataset"
-  cluster: AvailableCluster
-} | {
-  kind: "api"
-  connector: AvailableExternalApi
-} | null {
+):
+  | {
+      kind: "dataset"
+      cluster: AvailableCluster
+    }
+  | {
+      kind: "api"
+      connector: AvailableExternalApi
+    }
+  | null {
   if (!sources) return null
+  // The Claude SDK exposes MCP tools as `mcp__<server>__<tool>` (e.g.
+  // `mcp__alien__datacluster_keyword_search`). The catalog stores the bare
+  // tool name (`datacluster_keyword_search`). Strip the prefix before lookup.
+  const bare = stripMcpPrefix(toolName)
   for (const cluster of sources.clusters) {
-    if (cluster.tools.some((t) => t.name === toolName)) {
+    if (cluster.tools.some((t) => t.name === bare)) {
       return { kind: "dataset", cluster }
     }
   }
   for (const connector of sources.external_apis) {
-    if (connector.tools.some((t) => t.name === toolName)) {
+    if (connector.tools.some((t) => t.name === bare)) {
       return { kind: "api", connector }
     }
   }
   return null
+}
+
+export function stripMcpPrefix(toolName: string): string {
+  // MCP convention: mcp__<server>__<tool>. Both segments can contain single
+  // underscores; the delimiter is exactly `__`. Split on the double underscore
+  // and take everything after the second one.
+  const parts = toolName.split("__")
+  if (parts.length >= 3 && parts[0] === "mcp") return parts.slice(2).join("__")
+  return toolName
 }
