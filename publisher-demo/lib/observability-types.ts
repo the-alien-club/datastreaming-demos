@@ -5,14 +5,14 @@
 
 export interface Counters {
   apiCalls: number
-  /** Sum of `tool-call` event `datasetIds.length` (or 1 for API calls). */
+  /** Cumulative hits across every `tool-result` event (datasets touched). */
   dataPoints: number
   royalties: number
 }
 
 export interface TapeRow {
-  /** Stable react key. */
-  uid: number
+  /** Stable react key — toolUseId when known, else stringified timestamp. */
+  uid: string
   /** HH:MM:SS clock time the call landed. */
   t: string
   /** "tool_name(args)" line 1. */
@@ -30,6 +30,10 @@ export interface AttributionRow {
   label: string
   /** Cumulative € attributed to this source so far this session. */
   eur: number
+  /** Number of tool calls attributed to this source — visible even when
+   * some/all calls had unit_price_cents=0 in the platform DB so the user can
+   * see "3 calls · €0.010" instead of guessing why a counter looks low. */
+  calls: number
 }
 
 export interface ObservabilityPulse {

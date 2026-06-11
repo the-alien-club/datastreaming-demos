@@ -25,20 +25,18 @@ import {
  */
 export type ToolCallEvent = {
   type: "tool-call"
+  /** SDK tool_use_id when available; lets `tool-result` events correlate back. */
+  toolUseId: string | null
   toolName: string
   args: Record<string, unknown> | null
   /** "dataset" when the call hit a cluster tool, "api" for an external proxy. */
   kind: "dataset" | "api"
-  /** Numeric dataset IDs touched by this call (zero or more). */
-  datasetIds: number[]
   /** When `kind === "api"`, the platform connector id; null otherwise. */
   connectorId: number | null
   /** Stable attribution key — `dataset:<id>` or `connector:<id>` or a label. */
   attributionKey: string
   /** Display label for the source (cluster name, connector name, …). */
   attributionLabel: string
-  /** € paid for THIS single call, summed across all datasets touched. */
-  royaltyEur: number
   /** Estimated tokens for the live tape row when no usage is provided. */
   tokensEstimate: number
   /** ISO clock time the call landed (server time). */
@@ -52,10 +50,43 @@ export type UsageEvent = {
   totalTokens: number
 }
 
+/**
+ * Fires when a tool result lands. Carries the *actual* attribution extracted
+ * from the result payload (cluster_ids/dataset_ids/hits). Unlike `tool-call`
+ * which fires on dispatch (when we can only guess attribution from args),
+ * `tool-result` is the source of truth for royalties + data points.
+ */
+export type ToolResultEvent = {
+  type: "tool-result"
+  toolUseId: string
+  toolName: string
+  /** Stable per-call id used by `tool-call` for de-duping/ordering. */
+  callTimestamp: number
+  /** Per-cluster attribution rows. Display label resolved from catalog. */
+  attributionRows: Array<{
+    attributionKey: string
+    attributionLabel: string
+    clusterId: number | null
+    royaltyEur: number
+    datasetIds: number[]
+  }>
+  /** Total € across all clusters touched by this call. */
+  royaltyEur: number
+  /** Number of dataset hits the tool returned (drives "data points"). */
+  hits: number
+  /** Truncated text of the result (max 280 chars) for the chat message. */
+  resultSnippet: string
+}
+
 export type ConfigSavedEvent = { type: "config-saved" }
 export type ResetChatEvent = { type: "reset-chat" }
 
-export type DemoEvent = ToolCallEvent | UsageEvent | ConfigSavedEvent | ResetChatEvent
+export type DemoEvent =
+  | ToolCallEvent
+  | ToolResultEvent
+  | UsageEvent
+  | ConfigSavedEvent
+  | ResetChatEvent
 
 type Listener = (e: DemoEvent) => void
 

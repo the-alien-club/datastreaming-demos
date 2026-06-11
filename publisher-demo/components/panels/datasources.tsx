@@ -1,8 +1,8 @@
 "use client"
 
 import { type ReactNode, useEffect, useState } from "react"
-import { useDemoEventListener } from "@/hooks/use-demo-events"
 import type { ConfigView } from "@/hooks/use-config"
+import { useDemoEventListener } from "@/hooks/use-demo-events"
 import { Icon } from "../icons"
 import { InfoTip } from "../widgets"
 
@@ -79,18 +79,17 @@ export function Datasources({
   }, [view, didInitOpen])
 
   const [pulse, setPulse] = useState<Pulse>({ clusterId: null, datasetId: null, n: 0 })
-  useDemoEventListener("tool-call", (event) => {
-    if (event.kind !== "dataset" || event.datasetIds.length === 0) return
-    // Highlight the first touched dataset; finding its cluster is done in
-    // render via the view tree below.
-    setPulse((p) => ({ clusterId: null, datasetId: event.datasetIds[0], n: p.n + 1 }))
+  // Pulse on tool-result (settlement) — that's when we know which datasets
+  // were actually touched. Use the first dataset id from the first attribution
+  // row; render-time view tree maps it back to its cluster.
+  useDemoEventListener("tool-result", (event) => {
+    const firstId = event.attributionRows.find((r) => r.datasetIds.length > 0)?.datasetIds[0]
+    if (firstId === undefined) return
+    setPulse((p) => ({ clusterId: null, datasetId: firstId, n: p.n + 1 }))
   })
 
   const selectedCount = view
-    ? view.clusters.reduce(
-        (acc, c) => acc + c.datasets.filter((d) => d.checked).length,
-        0,
-      )
+    ? view.clusters.reduce((acc, c) => acc + c.datasets.filter((d) => d.checked).length, 0)
     : 0
 
   const expand = (clusterId: number) => {
@@ -113,7 +112,14 @@ export function Datasources({
       </header>
       <div className="panel-body">
         {isLoading && (
-          <div style={{ padding: 16, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--neutral-500)" }}>
+          <div
+            style={{
+              padding: 16,
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              color: "var(--neutral-500)",
+            }}
+          >
             Loading sources…
           </div>
         )}
@@ -131,7 +137,12 @@ export function Datasources({
         )}
         {!isLoading && !errorMessage && view?.clusters.length === 0 && (
           <div
-            style={{ padding: 16, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--neutral-500)" }}
+            style={{
+              padding: 16,
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              color: "var(--neutral-500)",
+            }}
           >
             No clusters available for this organization.
           </div>

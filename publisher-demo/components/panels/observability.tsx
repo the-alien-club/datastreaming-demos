@@ -199,7 +199,12 @@ export function Observability({
                   className={"src-row" + (isPulse ? " pulsing" : "")}
                 >
                   <div className="src-row-top">
-                    <span className="src-name">{s.label}</span>
+                    <span className="src-name">
+                      {s.label}
+                      <span className="src-calls" title="tool calls attributed">
+                        {s.calls} {s.calls === 1 ? "call" : "calls"}
+                      </span>
+                    </span>
                     <span className="src-eur">
                       €{s.eur.toFixed(3)}
                       {isPulse && pulse.attr?.amount != null && (
