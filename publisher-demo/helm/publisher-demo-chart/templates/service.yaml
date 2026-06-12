@@ -2,7 +2,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "publisher-demo.fullname" . }}
-  labels: {{- include "publisher-demo.labels" . | nindent 4 }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "publisher-demo.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -10,4 +12,6 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
-  selector: {{- include "publisher-demo.selectorLabels" . | nindent 4 }}
+  selector:
+    {{- include "publisher-demo.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: app

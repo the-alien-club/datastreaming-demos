@@ -1,0 +1,50 @@
+{{- if .Values.istio.virtualService.enabled }}
+{{- $ns := .Values.istio.gatewayNamespace }}
+{{- $gwRef := "" }}
+{{- if .Values.istio.gateway.create }}
+{{- $gwRef = printf "%s/%s-gateway" $ns (include "publisher-demo.fullname" .) }}
+{{- else }}
+{{- $sharedName := required "istio.sharedGatewayName must be set when istio.gateway.create=false — provide the name of an existing Istio Gateway in istio.gatewayNamespace that already terminates TLS for istio.host" .Values.istio.sharedGatewayName }}
+{{- $gwRef = printf "%s/%s" $ns $sharedName }}
+{{- end }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "publisher-demo.fullname" . }}-vs
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "publisher-demo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: virtualservice
+spec:
+  hosts:
+    - {{ .Values.istio.host }}
+  gateways:
+    - {{ $gwRef }}
+  http:
+    # `authority: exact` is required when multiple VirtualServices bind to
+    # the same host on a shared Gateway — without it, Istio merges routes
+    # across VSes and the precedence between equally-specific prefixes is
+    # undefined. With it, each VS only matches its own host (and longest-
+    # prefix wins between routes), so /agents and /openaire on the same
+    # host stay routed to their respective services.
+    - name: publisher-demo-route
+      match:
+        - uri:
+            prefix: {{ .Values.istio.path }}
+          authority:
+            exact: {{ .Values.istio.host }}
+          gateways:
+            - {{ $gwRef }}
+      route:
+        - destination:
+            host: {{ include "publisher-demo.fullname" . }}.{{ .Values.namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+      {{- with .Values.istio.virtualService.timeout }}
+      timeout: {{ . }}
+      {{- end }}
+      {{- with .Values.istio.virtualService.retries }}
+      retries:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

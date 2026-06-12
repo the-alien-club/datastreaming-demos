@@ -1,0 +1,34 @@
+{{- if .Values.istio.gateway.create }}
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: {{ include "publisher-demo.fullname" . }}-gateway
+  namespace: {{ .Values.istio.gatewayNamespace }}
+  labels:
+    {{- include "publisher-demo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTP server for ACME HTTP-01 challenges (no redirect to HTTPS).
+    - port:
+        number: 80
+        name: http-publisher-demo
+        protocol: HTTP
+      hosts:
+        - {{ .Values.istio.host }}
+      tls:
+        httpsRedirect: false
+
+    # HTTPS server with cert-manager issued certificate.
+    - port:
+        number: 443
+        name: https-publisher-demo
+        protocol: HTTPS
+      hosts:
+        - {{ .Values.istio.host }}
+      tls:
+        mode: SIMPLE
+        credentialName: {{ include "publisher-demo.fullname" . }}-tls
+{{- end }}

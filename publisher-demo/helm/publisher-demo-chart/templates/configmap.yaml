@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "publisher-demo.fullname" . }}-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "publisher-demo.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+data:
+  PLATFORM_API_URL: {{ .Values.config.platformApiUrl | quote }}
+  MCP_ALIEN_URL: {{ .Values.config.mcpAlienUrl | quote }}
+  DEMO_CONFIG_SLUG: {{ .Values.config.demoConfigSlug | quote }}
+  DEMO_WORKFLOW_ID: {{ .Values.config.demoWorkflowId | quote }}
+  ORG_ID: {{ .Values.config.orgId | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.config.otelServiceName | quote }}
