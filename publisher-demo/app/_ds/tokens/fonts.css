@@ -1,0 +1,12 @@
+/*
+ * Alien Intelligence — Webfonts
+ *
+ * The actual @import url(...) for Geist + Geist Mono lives at the top of
+ * app/globals.css. CSS @import rules must appear before all other rules
+ * (Lightning CSS enforces this in dev), so the Google Fonts URL is hoisted
+ * up to globals.css where it is guaranteed to be the very first statement.
+ *
+ * SUBSTITUTION NOTE: the marketing site's big display headlines use
+ * "ES Klarheit Kurrent" (commercial). Geist is the closest open grotesk
+ * already in the product and is used here for display as well.
+ */

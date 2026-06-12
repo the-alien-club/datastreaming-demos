@@ -1,0 +1,118 @@
+replicaCount: 1
+
+image:
+  repository: rg.fr-par.scw.cloud/ns-data-streaming/publisher-demo
+  pullPolicy: Always
+  tag: "0.1.0"
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+namespace: publisher-demo
+
+# Istio Gateway / VirtualService / Certificate configuration.
+#
+# Defaults bind to the shared `demo.alien.club` Gateway already serving
+# alien-agents (/agents) and openaire (/openaire). Publisher-demo claims the
+# catch-all (`prefix: /`) on the same host — Istio merges VirtualServices on
+# the same host and picks the longest-matching prefix per request, so the two
+# existing demos keep their routes and everything else lands here.
+istio:
+  host: demo.alien.club
+  path: /
+
+  gatewayNamespace: istio-system
+
+  # When `create: true`, the chart provisions its own Gateway (port 80 + 443)
+  # for `host` — used for the very first deploy of `demo.alien.club` if no
+  # shared Gateway exists yet. In platform-prod a shared Gateway already
+  # exists (`demo-openaire-prod-gateway`), so set this to false and bind to
+  # `sharedGatewayName` via ArgoCD parameter override.
+  gateway:
+    create: false
+
+  # REQUIRED when `gateway.create: false`. Name of an existing Istio Gateway
+  # (in `gatewayNamespace`) that already terminates TLS for `host`. Discover
+  # with: `kubectl get vs -A -o wide | grep <host>`
+  sharedGatewayName: ""
+
+  virtualService:
+    enabled: true
+    # The agentic flow streams from the platform Responses API; chops mid-
+    # stream are worse than letting long answers run, so leave timeout off.
+    timeout: null
+    # The /api/demo/chat route is non-idempotent (creates conversation +
+    # workflow run on Mode A). Disable automatic retries.
+    retries: null
+
+  certificate:
+    # Only true if `gateway.create: true` — when reusing the shared Gateway,
+    # cert-manager is already issuing the TLS credential for `host`.
+    enabled: false
+    issuerName: letsencrypt
+
+# Non-sensitive runtime config. Override these in the ArgoCD Application
+# `helm.parameters` to switch the demo between alpha / staging / prod.
+config:
+  platformApiUrl: https://api.alpha.alien.club
+  mcpAlienUrl: https://mcp.alpha.alien.club
+  demoConfigSlug: cfg_El_iPlRr8wHQ
+  demoWorkflowId: "238"
+  orgId: "3"
+  # Service name reported to SigNoz. Keep stable across deploys so dashboards
+  # and alerts don't need to be updated on every rename.
+  otelServiceName: "publisher-demo-alpha"
+
+# Secrets are pulled from Scaleway Secret Manager via ExternalSecret. Create
+# the Scaleway secret with two properties (ADMIN_OAT, ANTHROPIC_API_KEY)
+# before the first deploy.
+secrets:
+  scalewaySecretName: publisher-demo-alpha
+  adminOatProperty: ADMIN_OAT
+  anthropicApiKeyProperty: ANTHROPIC_API_KEY
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+# Probes hit `/` — Next.js serves the demo at root and returns 200 once the
+# server is up, independent of platform API availability.
+livenessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 8
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations:
+  # Inject the OTel Node.js auto-instrumentation sidecar. The Instrumentation
+  # CR lives in the signoz namespace so we reference it with namespace/name.
+  instrumentation.opentelemetry.io/inject-nodejs: "signoz/signoz-instrumentation"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
