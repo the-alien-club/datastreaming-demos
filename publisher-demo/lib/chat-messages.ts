@@ -29,16 +29,37 @@ export interface ToolEntry {
 }
 
 /**
+ * Mode A subagent roles. The orchestrator dispatches Planner → Specialist →
+ * Critic in sequence. Mode B has no subagents — its text is always authored
+ * by "main" implicitly (the field is omitted).
+ */
+export type AgentAuthor = "main" | "planner" | "specialist" | "critic"
+
+/**
  * An agent turn is a chronological sequence of parts emitted by the model.
  * Within one turn the order is given by the stream (one content block at a
  * time); across the client-side tool loop the order is preserved by simply
  * appending new parts in the order events arrive. This is the only way to
  * render tool calls and text in the same order the model produced them.
+ *
+ * Mode A also emits subagent banner parts that mark "the Specialist took
+ * over here" inline with text and tool cards.
  */
 export type AgentPart =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; author?: AgentAuthor }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; tool: ToolEntry }
+  | {
+      kind: "subagent"
+      name: AgentAuthor
+      status: "running" | "done"
+      /**
+       * Everything streamed between this subagent's `data-subagent` and the
+       * matching `data-subagent-end` nests here. Nesting is one level deep:
+       * the platform never opens a sub-subagent inside an open block.
+       */
+      children: AgentPart[]
+    }
 
 export interface AgentTurn {
   uid: number

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Timeline } from "@/components/panels/agent"
-import type { StreamedToolEvent } from "@/lib/claude-sdk/agent-query"
+import { runModeA } from "@/lib/mode-a/run"
+import { runModeB } from "@/lib/mode-b/run"
 import type {
   AttributionRow,
   Counters,
@@ -10,7 +11,6 @@ import type {
   TapeRow,
 } from "@/lib/observability-types"
 import { extractResultMeta, snippetForDisplay } from "@/lib/result-meta"
-import { readUiMessageChunks } from "@/lib/ui-stream"
 import { resolveToolSource, type UseConfigResult, useConfig } from "./use-config"
 import { useDemoEventListener, useDemoEvents } from "./use-demo-events"
 import { type Mode, useMode } from "./use-mode"
@@ -35,14 +35,27 @@ export interface AgentTool {
 }
 
 /**
+ * Sub-roles emitted by the platform inside one Mode A turn. The orchestrator
+ * (MAIN) dispatches three named subagents in sequence. Mode B has no
+ * subagents — its text is always authored by "main".
+ */
+export type AgentAuthor = "main" | "planner" | "specialist" | "critic"
+
+/**
  * Ordered slices of an agent's turn. Rendered in the order they were
  * appended so tool calls and prose interleave faithfully (text, tool, text,
  * tool, tool, text, …) rather than being grouped by kind.
  */
 export type AgentPart =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; author?: AgentAuthor }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; tool: AgentTool }
+  | {
+      kind: "subagent"
+      name: AgentAuthor
+      status: "running" | "done"
+      children: AgentPart[]
+    }
 
 export type ChatMessage =
   | { uid: number; role: "user"; text: string }
@@ -117,17 +130,10 @@ function upsertAttribution(
  * consecutive deltas accumulate inside one part, but a different content
  * block in between forces a fresh part.
  */
-function appendDelta(
-  parts: AgentPart[],
-  kind: "text" | "thinking",
-  delta: string,
-): AgentPart[] {
+function appendDelta(parts: AgentPart[], kind: "text" | "thinking", delta: string): AgentPart[] {
   const last = parts[parts.length - 1]
   if (last && last.kind === kind) {
-    return [
-      ...parts.slice(0, -1),
-      { kind, text: last.text + delta },
-    ]
+    return [...parts.slice(0, -1), { kind, text: last.text + delta }]
   }
   return [...parts, { kind, text: delta }]
 }
@@ -135,6 +141,126 @@ function appendDelta(
 /** Back-compat alias — callers that only deal with text deltas. */
 const appendTextDelta = (parts: AgentPart[], delta: string): AgentPart[] =>
   appendDelta(parts, "text", delta)
+
+/**
+ * Append-or-coalesce a text delta inside a `parts` array (without descending
+ * into nested subagent blocks). If the last sibling is a text part by the
+ * same author, append to it; otherwise open a fresh author-labeled text part.
+ */
+function appendTextDeltaSiblings(
+  parts: AgentPart[],
+  author: AgentAuthor,
+  delta: string,
+): AgentPart[] {
+  const last = parts[parts.length - 1]
+  if (last && last.kind === "text" && (last.author ?? "main") === author) {
+    return [...parts.slice(0, -1), { kind: "text", text: last.text + delta, author }]
+  }
+  return [...parts, { kind: "text", text: delta, author }]
+}
+
+/**
+ * Find the existing block for `role` and apply `mutator` to its children;
+ * if no block exists, create one at the end of `parts` with the mutator's
+ * output as its only contents. Used to enforce "one block per role" —
+ * Mode A's orchestrator activates the same subagent many times per turn,
+ * but visually we collapse them into a single Planner / Specialist / Critic
+ * container that accumulates everything that role produces.
+ */
+function routeIntoRoleBlock(
+  parts: AgentPart[],
+  role: AgentAuthor,
+  mutator: (siblings: AgentPart[]) => AgentPart[],
+): AgentPart[] {
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]
+    if (p.kind === "subagent" && p.name === role) {
+      const next = parts.slice()
+      next[i] = { ...p, children: mutator(p.children) }
+      return next
+    }
+  }
+  return [
+    ...parts,
+    { kind: "subagent", name: role, status: "running", children: mutator([]) },
+  ]
+}
+
+/**
+ * Append a text delta authored by `author`.
+ *
+ * - `main` text is the orchestrator's prose (inter-subagent commentary, final
+ *   synthesis). Lands at the root.
+ * - Any other author routes to that role's block (find-or-create).
+ *
+ * Same-author consecutive text-deltas coalesce into one text part inside the
+ * target container — the platform streams text one word at a time and a
+ * naïve append would produce hundreds of single-word `<div>`s.
+ */
+function appendAuthorTextDelta(
+  parts: AgentPart[],
+  author: AgentAuthor,
+  delta: string,
+): AgentPart[] {
+  if (author === "main") {
+    // MAIN speaking implies all subagents are done (the orchestrator only
+    // narrates between or after subagent runs).
+    const settled = closeAllOpenSubagentBanners(parts)
+    return appendTextDeltaSiblings(settled, author, delta)
+  }
+  // Route into the role's block. Also flip status so THIS role is "running"
+  // and the others are "done" — text-deltas are the most reliable signal of
+  // who's currently speaking, since the platform's data-subagent events are
+  // noisy and sometimes arrive out of order relative to text-start.
+  const routed = routeIntoRoleBlock(parts, author, (siblings) =>
+    appendTextDeltaSiblings(siblings, author, delta),
+  )
+  return markRoleActive(routed, author)
+}
+
+/**
+ * Append a non-text part (tool card) to a specific role's block. The author
+ * is derived server-side from the platform's function_call item id (see
+ * `_toolCallAuthor` in responses_stream.ts). Falls back to the most recently
+ * active subagent role if author is unknown — that handles Mode B where tool
+ * cards land at root because no subagent blocks exist.
+ */
+function appendIntoRoleBlock(
+  parts: AgentPart[],
+  role: AgentAuthor,
+  addition: AgentPart,
+): AgentPart[] {
+  return routeIntoRoleBlock(parts, role, (siblings) => [...siblings, addition])
+}
+
+/** Mark the matching role block as `running`, all others as `done`. Called
+ * each time the platform announces a new active subagent. */
+function markRoleActive(parts: AgentPart[], activeRole: AgentAuthor): AgentPart[] {
+  let mutated = false
+  const next = parts.map((p) => {
+    if (p.kind !== "subagent") return p
+    const desired: "running" | "done" = p.name === activeRole ? "running" : "done"
+    if (p.status !== desired) {
+      mutated = true
+      return { ...p, status: desired }
+    }
+    return p
+  })
+  return mutated ? next : parts
+}
+
+/** Settle every still-running subagent block. Final cleanup at stream end. */
+function closeAllOpenSubagentBanners(parts: AgentPart[]): AgentPart[] {
+  let mutated = false
+  const next = parts.map((p) => {
+    if (p.kind === "subagent" && p.status === "running") {
+      mutated = true
+      return { ...p, status: "done" as const }
+    }
+    return p
+  })
+  return mutated ? next : parts
+}
 
 /** Concatenate every text part of an assistant turn into one string. */
 function joinAgentText(parts: AgentPart[]): string {
@@ -144,17 +270,26 @@ function joinAgentText(parts: AgentPart[]): string {
     .join("\n\n")
 }
 
-/** Apply an updater to the tool entry whose toolUseId matches. */
+/**
+ * Apply an updater to the tool entry whose toolUseId matches. Recurses into
+ * subagent blocks: when a tool is dispatched inside an open subagent block,
+ * the settle event arrives later (sometimes after the block closed in Mode A)
+ * and must still find the card by id.
+ */
 function updateToolPart(
   parts: AgentPart[],
   toolUseId: string,
   updater: (t: AgentTool) => AgentTool,
 ): AgentPart[] {
-  return parts.map((p) =>
-    p.kind === "tool" && p.tool.toolUseId === toolUseId
-      ? { kind: "tool", tool: updater(p.tool) }
-      : p,
-  )
+  return parts.map((p) => {
+    if (p.kind === "tool" && p.tool.toolUseId === toolUseId) {
+      return { kind: "tool", tool: updater(p.tool) }
+    }
+    if (p.kind === "subagent") {
+      return { ...p, children: updateToolPart(p.children, toolUseId, updater) }
+    }
+    return p
+  })
 }
 
 export interface OrchestratorState {
@@ -381,6 +516,10 @@ export function useOrchestratorState(): OrchestratorState {
       args: Record<string, unknown> | null,
       toolUseId: string | null,
       agentUid: number,
+      /** Mode A: subagent role that issued the call (decoded server-side from
+       * the function_call item id). Mode B passes `null` — tool cards land
+       * at the root, no subagent blocks exist there. */
+      author: AgentAuthor | null = null,
     ) => {
       const sources = sourcesRef.current
       const source = resolveToolSource(sources, toolName)
@@ -430,25 +569,29 @@ export function useOrchestratorState(): OrchestratorState {
       // catalog-resolved label is a guess at dispatch time. Show a placeholder
       // and patch it in the tool-result handler once we know the real cluster.
       const initialSummary = source?.kind === "api" ? attributionLabel : "…"
+      const toolPart: AgentPart = {
+        kind: "tool",
+        tool: {
+          toolUseId,
+          icon: kind === "dataset" ? "search" : "plug",
+          name: toolName,
+          summary: initialSummary,
+          args: JSON.stringify(args ?? {}, null, 2),
+          result: "",
+          running: true,
+          startedAt: ts,
+        },
+      }
       setAgentMessage(agentUid, (m) => ({
         ...m,
         fresh: true,
-        parts: [
-          ...m.parts,
-          {
-            kind: "tool",
-            tool: {
-              toolUseId,
-              icon: kind === "dataset" ? "search" : "plug",
-              name: toolName,
-              summary: initialSummary,
-              args: JSON.stringify(args ?? {}, null, 2),
-              result: "",
-              running: true,
-              startedAt: ts,
-            },
-          },
-        ],
+        // Mode A: nest the tool card inside the issuing subagent's role block
+        // (Specialist in practice — Planner doesn't dispatch tools). Mode B:
+        // author is null, tool card sits at the root.
+        parts:
+          author === null
+            ? [...m.parts, toolPart]
+            : appendIntoRoleBlock(m.parts, author, toolPart),
       }))
     },
     [events, setAgentMessage],
@@ -539,463 +682,262 @@ export function useOrchestratorState(): OrchestratorState {
     [],
   )
 
-  const runModeA = useCallback(
-    async (query: string, agentUid: number) => {
-      const res = await fetch("/api/demo/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "agentic",
-          messages: [{ role: "user", content: query }],
-        }),
-      })
-      if (!res.ok || !res.body) {
-        throw new Error(`Mode A failed: ${res.status} ${res.statusText}`)
+  // Shared tool-result settlement. Both Mode A and Mode B need to (a) flip the
+  // tool card to running:false, (b) compute royalty attribution rows from the
+  // dispatch ref + result content, (c) emit the bus `tool-result` for the
+  // observability cascade. Mode B passes real `content` (and may set isError);
+  // Mode A omits `content` because the platform never echoes a function_call
+  // output payload back through the responses stream.
+  const settleToolCall = useCallback(
+    (
+      agentUid: number,
+      toolUseId: string,
+      opts: {
+        content?: unknown
+        isError?: boolean
+        fallbackToolName?: string | null
+      } = {},
+    ) => {
+      const { content, isError = false, fallbackToolName = null } = opts
+      const dispatch = toolDispatchRef.current.get(toolUseId)
+      toolDispatchRef.current.delete(toolUseId)
+
+      let rows: ReturnType<typeof buildAttributionRows>
+      let hits: number
+      if (isError) {
+        rows = []
+        hits = 0
+      } else if (dispatch?.kind === "api" && dispatch.connectorId !== null) {
+        const { royaltyEur } = computeRoyaltyRef.current(dispatch.toolName, null, "api")
+        rows = [
+          {
+            attributionKey: `connector:${dispatch.connectorId}`,
+            attributionLabel: dispatch.connectorName ?? dispatch.toolName,
+            clusterId: null,
+            royaltyEur,
+            datasetIds: [],
+          },
+        ]
+        hits = 1
+      } else if (content !== undefined) {
+        const meta = extractResultMeta(content)
+        rows = buildAttributionRows(meta, dispatch?.toolName ?? "tool")
+        hits = meta.hits
+      } else {
+        rows = []
+        hits = 0
       }
-      let accText = ""
-      let sawFirstTool = false
-      for await (const chunk of readUiMessageChunks(res.body)) {
-        if (cancelRef.current) break
-        const type = chunk.type as string | undefined
-        switch (type) {
-          case "text-delta": {
-            const delta = String(chunk.delta ?? "")
-            if (!delta) break
-            accText += delta
+
+      const snippet = content !== undefined ? snippetForDisplay(content) : ""
+      const newSummary =
+        rows.length > 0
+          ? rows.length === 1
+            ? (rows[0]?.attributionLabel ?? "✓")
+            : `${rows[0]?.attributionLabel} +${rows.length - 1}`
+          : isError
+            ? "error"
+            : "✓"
+
+      setAgentMessage(agentUid, (m) => ({
+        ...m,
+        parts: updateToolPart(m.parts, toolUseId, (t) => ({
+          ...t,
+          result: snippet,
+          summary: newSummary,
+          running: false,
+        })),
+      }))
+
+      if (!isError) {
+        const totalRoyalty = rows.reduce((sum, r) => round4(sum + r.royaltyEur), 0)
+        events.emit({
+          type: "tool-result",
+          toolUseId,
+          toolName: dispatch?.toolName ?? fallbackToolName ?? "",
+          callTimestamp: Date.now(),
+          attributionRows: rows,
+          royaltyEur: totalRoyalty,
+          hits,
+          resultSnippet: snippet,
+        })
+      }
+    },
+    [buildAttributionRows, events, setAgentMessage],
+  )
+
+  const runModeATurn = useCallback(
+    async (query: string, agentUid: number) => {
+      await runModeA({
+        query,
+        cancelRef,
+        callbacks: {
+          onAuthorText: (author, delta) => {
+            // Append to the latest text part if it's by the same author,
+            // otherwise open a new author-labeled text part. This keeps text
+            // and tool cards chronologically interleaved AND labelled, so the
+            // user sees "Planner [...] / Specialist [...] / tool call / [...]
+            // / Critic [verdict] / Synthesis".
             setAgentMessage(agentUid, (m) => ({
               ...m,
-              text: accText,
+              parts: appendAuthorTextDelta(m.parts, author, delta),
               streaming: true,
               faded: false,
             }))
-            break
-          }
-          case "data-toolCall": {
-            const data = chunk.data as { id?: string; name?: string; args?: unknown } | undefined
-            if (!data?.name) break
-            const argsObj =
-              data.args && typeof data.args === "object"
-                ? (data.args as Record<string, unknown>)
-                : null
-            dispatchToolCall(data.name, argsObj, data.id ?? null, agentUid)
-            if (!sawFirstTool) {
-              sawFirstTool = true
-              setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
-            }
-            break
-          }
-          case "data-subagent":
-            if (!sawFirstTool) {
-              setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
-            }
-            break
-          case "data-subagent-end":
-            break
-          case "finish":
-            setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
-            setTimeline({ ...DONE3 })
-            break
-          case "error":
-            throw new Error(String(chunk.errorText ?? "stream error"))
-          default:
-            break
-        }
-      }
-      setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
-    },
-    [dispatchToolCall, setAgentMessage],
-  )
-
-  const runModeB = useCallback(
-    async (query: string, agentUid: number) => {
-      const controller = new AbortController()
-      // Wire the orchestrator's cancel ref through to the fetch abort signal
-      // so confirmSwitch / reset stop the stream mid-flight.
-      const watchCancel = () => {
-        if (cancelRef.current) controller.abort()
-      }
-      const cancelTimer = window.setInterval(watchCancel, 250)
-
-      // Per-tool accumulators for input_json_delta streams.
-      const pendingInputs = new Map<string, string>()
-
-      // Word-rate smoothing buffer. LLM output arrives in jagged chunks
-      // (sometimes a few characters, sometimes a sentence at once). To get
-      // an even typewriter feel we buffer text/thinking deltas here and
-      // release them one word at a time on a 25ms tick. Non-text events
-      // flush synchronously so ordering with tool calls is preserved.
-      const smoother = {
-        textBuf: "",
-        thinkingBuf: "",
-        timer: null as number | null,
-      }
-      const drainOne = (key: "textBuf" | "thinkingBuf"): string | null => {
-        const buf = smoother[key]
-        if (!buf) return null
-        // Take one word (run of non-space optionally preceded by space).
-        // Fallback to 8 chars so trailing punctuation/long tokens still flow.
-        const m = /^\s*\S+\s?/.exec(buf)
-        const chunk = m ? m[0] : buf.slice(0, 8)
-        smoother[key] = buf.slice(chunk.length)
-        return chunk
-      }
-      const startDrainer = () => {
-        if (smoother.timer) return
-        smoother.timer = window.setInterval(() => {
-          if (!smoother.textBuf && !smoother.thinkingBuf) {
-            if (smoother.timer) window.clearInterval(smoother.timer)
-            smoother.timer = null
-            return
-          }
-          const thinkingChunk = drainOne("thinkingBuf")
-          if (thinkingChunk) {
-            handleStreamEventRef.current(
-              { type: "thinking-delta", text: thinkingChunk },
-              agentUid,
-              pendingInputs,
-            )
-          }
-          const textChunk = drainOne("textBuf")
-          if (textChunk) {
-            handleStreamEventRef.current(
-              { type: "text-delta", text: textChunk },
-              agentUid,
-              pendingInputs,
-            )
-          }
-        }, 25)
-      }
-      const flushBuffers = () => {
-        if (smoother.textBuf) {
-          handleStreamEventRef.current(
-            { type: "text-delta", text: smoother.textBuf },
-            agentUid,
-            pendingInputs,
-          )
-          smoother.textBuf = ""
-        }
-        if (smoother.thinkingBuf) {
-          handleStreamEventRef.current(
-            { type: "thinking-delta", text: smoother.thinkingBuf },
-            agentUid,
-            pendingInputs,
-          )
-          smoother.thinkingBuf = ""
-        }
-      }
-
-      let res: Response
-      try {
-        // Flatten the orchestrator chat into the API shape. Skip `scope`
-        // notices and the freshly-added empty agent placeholder for THIS turn.
-        // `messagesRef.current` reflects the last committed render — the new
-        // user message that `addUserMessage(query)` just queued hasn't landed
-        // yet, so we append `query` explicitly below.
-        const priorHistory = messagesRef.current
-          .map((m) => {
-            if (m.role === "user") {
-              return { role: "user" as const, content: m.text }
-            }
-            if (m.role === "agent") {
-              const text = joinAgentText(m.parts)
-              if (!text) return null
-              return { role: "assistant" as const, content: text }
-            }
-            return null
-          })
-          .filter((x): x is { role: "user" | "assistant"; content: string } => x !== null)
-        const history = [
-          ...priorHistory,
-          { role: "user" as const, content: query },
-        ]
-        res = await fetch("/api/demo/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: "data", messages: history }),
-          signal: controller.signal,
-        })
-      } catch (err) {
-        window.clearInterval(cancelTimer)
-        throw err
-      }
-      if (!res.ok || !res.body) {
-        window.clearInterval(cancelTimer)
-        throw new Error(`Mode B start failed: ${res.status} ${res.statusText}`)
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ""
-      try {
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          if (cancelRef.current) {
-            controller.abort()
-            break
-          }
-          buf += decoder.decode(value, { stream: true })
-          // SSE frames are separated by blank lines; each frame can have one or
-          // more `data: ...` lines.
-          const frames = buf.split("\n\n")
-          buf = frames.pop() ?? ""
-          for (const frame of frames) {
-            for (const line of frame.split("\n")) {
-              if (!line.startsWith("data: ")) continue
-              const payload = line.slice(6)
-              let event: StreamedToolEvent
-              try {
-                event = JSON.parse(payload) as StreamedToolEvent
-              } catch {
-                continue
-              }
-              // Loud client-side diagnostics. Logs every SSE event received,
-              // with a brief description. Keep until the demo is stable.
-              const desc =
-                event.type === "tool-use-start"
-                  ? `${event.toolName} id=${event.toolUseId}`
-                  : event.type === "tool-use-input-delta"
-                    ? `id=${event.toolUseId} +${event.partialJson.length}c`
-                    : event.type === "tool-use-stop"
-                      ? `id=${event.toolUseId}`
-                      : event.type === "tool-result"
-                        ? `id=${event.toolUseId} err=${event.isError} contentLen=${JSON.stringify(event.content).length}`
-                        : event.type === "text-delta"
-                          ? `+${event.text.length}c`
-                          : event.type === "thinking-delta"
-                            ? `+${event.text.length}c`
-                            : event.type === "message-stop"
-                              ? `stopReason=${event.stopReason} usage=${JSON.stringify(event.usage)}`
-                              : event.type === "error"
-                                ? event.message
-                                : ""
-              console.log(`[mode-b client] ${event.type}`, desc)
-              // Route text/thinking deltas through the word-rate smoother so
-              // the UI typewriters one word at a time. Other events flush the
-              // smoother first to preserve ordering with tool calls.
-              if (event.type === "text-delta") {
-                smoother.textBuf += event.text
-                startDrainer()
-              } else if (event.type === "thinking-delta") {
-                smoother.thinkingBuf += event.text
-                startDrainer()
-              } else {
-                flushBuffers()
-                handleStreamEventRef.current(event, agentUid, pendingInputs)
-              }
-            }
-          }
-        }
-      } finally {
-        window.clearInterval(cancelTimer)
-        flushBuffers()
-        if (smoother.timer) window.clearInterval(smoother.timer)
-        setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
-      }
-    },
-    [setAgentMessage],
-  )
-
-  // Single dispatch table for SSE events. Pulled out so the abort/cancel/poll
-  // loop above stays readable. Lives behind a ref because runModeB is memoised
-  // with stable deps (signal + setAgentMessage) and would otherwise capture a
-  // stale `handleStreamEvent` from the first render, swallowing tool-result
-  // events that landed under a refreshed `sources` / `pricing` closure.
-  const handleStreamEventRef = useRef<
-    (event: StreamedToolEvent, agentUid: number, pendingInputs: Map<string, string>) => void
-  >(() => {})
-  const handleStreamEvent = useCallback(
-    (
-      event: StreamedToolEvent,
-      agentUid: number,
-      pendingInputs: Map<string, string>,
-    ) => {
-      switch (event.type) {
-        case "thinking-start":
-        case "text-start":
-        case "thinking-stop":
-        case "text-stop":
-          // Block lifecycle markers — useful for animation later.
-          break
-
-        case "text-delta":
-          setAgentMessage(agentUid, (m) => {
-            const nextParts = appendTextDelta(m.parts, event.text)
-            return {
-              ...m,
-              parts: nextParts,
-              streaming: true,
-              faded: false,
-            }
-          })
-          break
-
-        case "thinking-delta":
-          setAgentMessage(agentUid, (m) => ({
-            ...m,
-            parts: appendDelta(m.parts, "thinking", event.text),
-            streaming: true,
-          }))
-          break
-
-        case "tool-use-start": {
-          pendingInputs.set(event.toolUseId, "")
-          dispatchToolCall(event.toolName, null, event.toolUseId, agentUid)
-          break
-        }
-
-        case "tool-use-input-delta": {
-          const prev = pendingInputs.get(event.toolUseId) ?? ""
-          pendingInputs.set(event.toolUseId, prev + event.partialJson)
-          break
-        }
-
-        case "tool-use-stop": {
-          // Finalize input: parse accumulated JSON and patch the tools[] entry
-          // so the user sees real args, not "{}".
-          const inputStr = pendingInputs.get(event.toolUseId) ?? ""
-          pendingInputs.delete(event.toolUseId)
-          if (!inputStr) break
-          let parsedInput: Record<string, unknown> | null = null
-          try {
-            parsedInput = JSON.parse(inputStr) as Record<string, unknown>
-          } catch {
-            // Leave the args empty rather than ship malformed JSON to the UI.
-          }
-          if (parsedInput) {
-            const argsStr = JSON.stringify(parsedInput, null, 2)
+          },
+          onSubagentStart: (name) => {
+            // "One block per role" layout: ensure a block exists for this
+            // role (no-op if it already does), and mark this role as the
+            // currently-active one (others flip to done). Same-author repeat
+            // activations during the same turn keep accumulating into the
+            // same block.
             setAgentMessage(agentUid, (m) => ({
               ...m,
-              parts: updateToolPart(m.parts, event.toolUseId, (t) => ({
+              parts: markRoleActive(
+                routeIntoRoleBlock(m.parts, name, (siblings) => siblings),
+                name,
+              ),
+              streaming: true,
+            }))
+          },
+          onSubagentEnd: () => {
+            // No-op. The platform fires data-subagent-end at the boundary of
+            // every internal orchestrator cycle (dozens of times per turn);
+            // we don't act on each one because we collapse repeats into a
+            // single role block. Final cleanup happens in onStreamEnd.
+          },
+          onToolCall: (toolUseId, toolName, args, author) => {
+            // Tool calls always come from Specialist in the agentic prompt,
+            // but we route by the server-decoded author regardless. If author
+            // is null we drop the call to the most recently active role —
+            // safer than silently landing at root.
+            dispatchToolCall(toolName, args, toolUseId, agentUid, author)
+          },
+          onToolResult: (toolUseId, fallbackName) => {
+            settleToolCall(agentUid, toolUseId, { fallbackToolName: fallbackName })
+          },
+          onSubagentSeen: (() => {
+            // Monotonic advance: once we've seen a downstream subagent, we
+            // don't "rewind" the rail even if the orchestrator loops back.
+            //   planner   → 0
+            //   specialist → 1
+            //   critic     → 2
+            const ranks: Record<string, number> = { planner: 0, specialist: 1, critic: 2 }
+            let stage = -1
+            return (name: string) => {
+              const next = ranks[name]
+              if (next === undefined) return
+              if (next <= stage) return
+              stage = next
+              if (name === "planner") {
+                setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
+              } else if (name === "specialist") {
+                setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
+              } else {
+                setTimeline({ planner: "done", specialist: "done", critic: "exec" })
+              }
+            }
+          })(),
+          onFinish: () => {
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              parts: closeAllOpenSubagentBanners(m.parts),
+              streaming: false,
+            }))
+            setTimeline({ ...DONE3 })
+          },
+          onStreamEnd: () => {
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              parts: closeAllOpenSubagentBanners(m.parts),
+              streaming: false,
+            }))
+          },
+        },
+      })
+    },
+    [dispatchToolCall, setAgentMessage, settleToolCall],
+  )
+
+  const runModeBTurn = useCallback(
+    async (query: string, agentUid: number) => {
+      // Build conversation history from previously-committed turns. The new
+      // user message hasn't landed in messagesRef yet (addUserMessage is
+      // async-scheduled), so it gets appended inside runModeB.
+      const history = messagesRef.current
+        .map((m) => {
+          if (m.role === "user") {
+            return { role: "user" as const, content: m.text }
+          }
+          if (m.role === "agent") {
+            const text = joinAgentText(m.parts)
+            if (!text) return null
+            return { role: "assistant" as const, content: text }
+          }
+          return null
+        })
+        .filter((x): x is { role: "user" | "assistant"; content: string } => x !== null)
+
+      await runModeB({
+        query,
+        history,
+        cancelRef,
+        callbacks: {
+          onAssistantText: (delta) => {
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              parts: appendTextDelta(m.parts, delta),
+              streaming: true,
+              faded: false,
+            }))
+          },
+          onThinkingText: (delta) => {
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              parts: appendDelta(m.parts, "thinking", delta),
+              streaming: true,
+            }))
+          },
+          onToolUseStart: (toolUseId, toolName) => {
+            dispatchToolCall(toolName, null, toolUseId, agentUid)
+          },
+          onToolUseInputResolved: (toolUseId, args) => {
+            if (!args) return
+            const argsStr = JSON.stringify(args, null, 2)
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              parts: updateToolPart(m.parts, toolUseId, (t) => ({
                 ...t,
                 args: argsStr,
               })),
             }))
-          }
-          break
-        }
-
-        case "tool-result": {
-          const snippet = snippetForDisplay(event.content)
-          const dispatch = toolDispatchRef.current.get(event.toolUseId)
-          toolDispatchRef.current.delete(event.toolUseId)
-
-          // Branch on the dispatch source. API/proxied tools (BNF, OpenAIRE,
-          // etc.) carry no `dataset_id` fields in their result — running the
-          // dataset walker on them yields hits=0 and a "tool" fallback row.
-          // Instead, use the connector + tool-name pricing path.
-          let rows: ReturnType<typeof buildAttributionRows>
-          let hits: number
-          if (event.isError) {
-            rows = []
-            hits = 0
-          } else if (dispatch?.kind === "api" && dispatch.connectorId !== null) {
-            const { royaltyEur } = computeRoyaltyRef.current(
-              dispatch.toolName,
-              null,
-              "api",
-            )
-            rows = [
-              {
-                attributionKey: `connector:${dispatch.connectorId}`,
-                attributionLabel: dispatch.connectorName ?? dispatch.toolName,
-                clusterId: null,
-                royaltyEur,
-                datasetIds: [],
-              },
-            ]
-            hits = 1
-          } else {
-            const meta = extractResultMeta(event.content)
-            rows = buildAttributionRows(meta, dispatch?.toolName ?? "tool")
-            hits = meta.hits
-          }
-
-          const newSummary =
-            rows.length > 0
-              ? rows.length === 1
-                ? rows[0].attributionLabel
-                : `${rows[0].attributionLabel} +${rows.length - 1}`
-              : event.isError
-                ? "error"
-                : "—"
-
-          setAgentMessage(agentUid, (m) => {
-            const match = m.parts.find(
-              (p) => p.kind === "tool" && p.tool.toolUseId === event.toolUseId,
-            )
-            console.log(
-              `[mode-b dispatch] tool-result: id=${event.toolUseId} foundEntry=${!!match} kind=${dispatch?.kind ?? "?"} hits=${hits} label=${newSummary}`,
-            )
-            return {
-              ...m,
-              parts: updateToolPart(m.parts, event.toolUseId, (t) => ({
-                ...t,
-                result: snippet,
-                summary: newSummary,
-                running: false,
-              })),
-            }
-          })
-          if (!event.isError) {
-            const totalRoyalty = rows.reduce(
-              (sum, r) => round4(sum + r.royaltyEur),
-              0,
-            )
-            events.emit({
-              type: "tool-result",
-              toolUseId: event.toolUseId,
-              toolName: dispatch?.toolName ?? "",
-              callTimestamp: Date.now(),
-              attributionRows: rows,
-              royaltyEur: totalRoyalty,
-              hits,
-              resultSnippet: snippet,
-            })
-          }
-          break
-        }
-
-        case "continuation": {
-          // The client-side tool loop just looped another turn after executing
-          // the assistant's tool_use blocks. The next assistant blocks (text,
-          // thinking, more tools) will be appended naturally; no in-order
-          // marker needed — the visual order already makes the loop obvious.
-          console.log(`[mode-b dispatch] continuation: turn=${event.turnIndex}`)
-          break
-        }
-
-        case "message-stop": {
-          if (event.usage) {
+          },
+          onToolResult: (toolUseId, content, isError) => {
+            settleToolCall(agentUid, toolUseId, { content, isError })
+          },
+          onUsage: (usage) => {
             events.emit({
               type: "usage",
-              inputTokens: event.usage.input_tokens,
-              outputTokens: event.usage.output_tokens,
-              totalTokens: event.usage.input_tokens + event.usage.output_tokens,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.inputTokens + usage.outputTokens,
             })
-          }
-          break
-        }
-
-        case "error": {
-          console.error("[mode-b] stream error:", event.message)
-          setAgentMessage(agentUid, (m) => ({
-            ...m,
-            parts: appendTextDelta(m.parts, `\n\n_Turn failed: ${event.message}._`),
-            streaming: false,
-          }))
-          break
-        }
-
-        default:
-          break
-      }
+          },
+          onError: (message) => {
+            console.error("[mode-b] stream error:", message)
+            setAgentMessage(agentUid, (m) => ({
+              ...m,
+              parts: appendTextDelta(m.parts, `\n\n_Turn failed: ${message}._`),
+              streaming: false,
+            }))
+          },
+          onStreamEnd: () => {
+            setAgentMessage(agentUid, (m) => ({ ...m, streaming: false }))
+          },
+        },
+      })
     },
-    [buildAttributionRows, dispatchToolCall, events, setAgentMessage],
+    [dispatchToolCall, events, setAgentMessage, settleToolCall],
   )
-  // Keep the ref pointing at the latest callback so runModeB invokes the
-  // fresh closure (sources/pricing/etc.) on every event.
-  handleStreamEventRef.current = handleStreamEvent
 
   const runAgent = useCallback(
     async (query: string) => {
@@ -1011,25 +953,22 @@ export function useOrchestratorState(): OrchestratorState {
         setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
       }
       try {
-        if (agentic) await runModeA(query, agentUid)
-        else await runModeB(query, agentUid)
+        if (agentic) await runModeATurn(query, agentUid)
+        else await runModeBTurn(query, agentUid)
       } catch (err) {
         console.error("[demo] live turn failed:", err)
         const msg = err instanceof Error ? err.message : String(err)
         setAgentMessage(agentUid, (m) => ({
           ...m,
           streaming: false,
-          parts: appendTextDelta(
-            m.parts,
-            `\n\n_Turn failed: ${msg}._`,
-          ),
+          parts: appendTextDelta(m.parts, `\n\n_Turn failed: ${msg}._`),
         }))
       } finally {
         if (agentic) setTimeline({ ...DONE3 })
         runningRef.current = false
       }
     },
-    [addAgentMessage, addUserMessage, mode, runModeA, runModeB, setAgentMessage],
+    [addAgentMessage, addUserMessage, mode, runModeATurn, runModeBTurn, setAgentMessage],
   )
 
   const onToggleDataset = useCallback(
@@ -1113,8 +1052,7 @@ export function useOrchestratorState(): OrchestratorState {
   // (which is fixed regardless of the picker state and would never decrement
   // when the user unchecks things).
   const dsClusterCount =
-    config.view?.clusters.filter((c) => c.datasets.some((d) => d.checked))
-      .length ?? 0
+    config.view?.clusters.filter((c) => c.datasets.some((d) => d.checked)).length ?? 0
   const apiSelectedCount = config.view?.externalApis.filter((a) => a.checked).length ?? 0
 
   return {

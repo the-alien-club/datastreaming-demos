@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
-import type { AgentTurn, ChatMessage, ToolEntry } from "@/lib/chat-messages"
-import { Icon, type IconName } from "../icons"
 import type { Mode } from "@/hooks/use-mode"
+import type { AgentAuthor, AgentPart, AgentTurn, ChatMessage, ToolEntry } from "@/lib/chat-messages"
+import { Icon, type IconName } from "../icons"
 
 const NODES = [
   { k: "planner", ic: "cpu" as IconName, lab: "Planner" },
@@ -111,14 +111,131 @@ function ChainOfThought({ chain }: { chain: { who: string; text: string }[] }) {
 }
 
 /**
+ * Subagent banner — large in-message block marking which orchestrated agent
+ * (Planner / Specialist / Critic) took over for the next slice of work. The
+ * left rail also shows the same info, but the banner is the chronological
+ * marker: it sits inline with text and tool cards so the user can see
+ * "Specialist did the searches BETWEEN these two text blocks".
+ */
+const SUBAGENT_META: Record<
+  AgentAuthor,
+  { icon: IconName; label: string; description: string } | null
+> = {
+  main: null,
+  planner: {
+    icon: "cpu",
+    label: "Planner",
+    description: "Decomposing your question into focused research tasks",
+  },
+  specialist: {
+    icon: "search",
+    label: "Specialist",
+    description: "Searching the configured sources and synthesising findings",
+  },
+  critic: {
+    icon: "check",
+    label: "Critic",
+    description: "Reviewing the research for quality and completeness",
+  },
+}
+
+interface RenderCtx {
+  streaming: boolean
+  fresh: boolean
+  faded: boolean | undefined
+}
+
+function SubagentBlock({
+  name,
+  status,
+  parts,
+  ctx,
+}: {
+  name: AgentAuthor
+  status: "running" | "done"
+  parts: AgentPart[]
+  ctx: RenderCtx
+}) {
+  const meta = SUBAGENT_META[name]
+  if (!meta) return null
+  // Hide empty blocks once they've settled — the platform sometimes emits a
+  // data-subagent that never gets content (e.g. it ends immediately when the
+  // orchestrator changes its mind), and a banner with no body just looks
+  // like dead air. We keep empty *running* blocks visible so the user sees
+  // "Specialist is starting up" while we wait for the first delta.
+  if (status === "done" && parts.length === 0) return null
+  // While the block is still running and the parent message is still
+  // streaming, its children may grow. Once it's done the children are frozen
+  // and we render them with a non-streaming context so cursors stop blinking
+  // inside it even if the rest of the turn is still in flight.
+  const childCtx: RenderCtx = { ...ctx, streaming: ctx.streaming && status === "running" }
+  return (
+    <div className={`sub-block sub-block--${name} sub-block--${status}`}>
+      <div className="sub-block__head">
+        <span className="sub-block__ic">
+          {status === "running" ? (
+            <span className="tool-spinner" aria-hidden="true" />
+          ) : (
+            <Icon name={meta.icon} size={14} />
+          )}
+        </span>
+        <div className="sub-block__body">
+          <div className="sub-block__title">{meta.label}</div>
+          <div className="sub-block__desc">{meta.description}</div>
+        </div>
+        <span className={`sub-block__status sub-block__status--${status}`}>
+          {status === "running" ? "active" : "done"}
+        </span>
+      </div>
+      {parts.length > 0 && (
+        <div className="sub-block__children">{renderParts(parts, childCtx)}</div>
+      )}
+    </div>
+  )
+}
+
+function renderParts(parts: AgentPart[], ctx: RenderCtx): React.ReactNode {
+  return parts.map((p, i) => {
+    if (p.kind === "tool") {
+      return <ToolCard key={i} tool={p.tool} fresh={ctx.fresh} />
+    }
+    if (p.kind === "thinking") {
+      const isOpen = ctx.streaming && i === parts.length - 1
+      return <ThinkingBlock key={i} text={p.text} streaming={isOpen} />
+    }
+    if (p.kind === "subagent") {
+      return <SubagentBlock key={i} name={p.name} status={p.status} parts={p.children} ctx={ctx} />
+    }
+    const author = p.author ?? "main"
+    const isLast = i === parts.length - 1
+    return (
+      <div key={i} className={`agent-text agent-text--${author}${ctx.faded ? " faded" : ""}`}>
+        {author !== "main" && <span className="agent-text__author">{author}</span>}
+        <Streamdown
+          animated
+          // `animated` alone is a no-op — streamdown also needs
+          // `isAnimating` flipped true to actually wrap newly mounted word-spans.
+          isAnimating={ctx.streaming && isLast}
+          parseIncompleteMarkdown
+          linkSafety={{ enabled: false }}
+          className="agent-md"
+        >
+          {p.text}
+        </Streamdown>
+        {ctx.streaming && isLast && <span className="cursor" />}
+      </div>
+    )
+  })
+}
+
+/**
  * "Working..." pill shown between an agent's tool calls and its text, while
  * the model is silently reasoning (no current tool running, no text yet).
  * Surfaces the silent wait so the UI never looks frozen.
  */
 function WorkingPill({ anchor }: { anchor: number }) {
   const elapsed = useElapsed(anchor, true)
-  const label =
-    elapsed < 1000 ? "Thinking…" : `Thinking… ${(elapsed / 1000).toFixed(1)}s`
+  const label = elapsed < 1000 ? "Thinking…" : `Thinking… ${(elapsed / 1000).toFixed(1)}s`
   return (
     <div className="working-pill">
       <span className="working-dots" aria-hidden="true">
@@ -196,61 +313,20 @@ function AgentMessage({ m }: { m: ChatMessage }) {
       {m.chain && m.chain.length > 0 && <ChainOfThought chain={m.chain} />}
       {(() => {
         const parts = m.parts
-        // True when the stream has emitted nothing yet — text or tool. Shows
-        // the bouncing "Thinking…" pill in the dead-air gap.
         const lastPart = parts[parts.length - 1]
         // Show the bouncing "Thinking…" pill ONLY when nothing is currently
-        // animating on its own — i.e. no part yet, or the last one is a
-        // settled tool. A running tool has its own spinner; a streaming
-        // text/thinking part has its own cursor/live indicator.
+        // animating on its own — no part yet, or the last one is a settled
+        // tool / done subagent block. A running tool has its own spinner; a
+        // streaming text/thinking part has its own cursor.
         const inSilentGap =
           m.streaming &&
-          (!lastPart || (lastPart.kind === "tool" && !lastPart.tool.running))
+          (!lastPart ||
+            (lastPart.kind === "tool" && !lastPart.tool.running) ||
+            (lastPart.kind === "subagent" && lastPart.status === "done"))
+        const ctx: RenderCtx = { streaming: m.streaming, fresh: m.fresh, faded: m.faded }
         return (
           <>
-            {parts.map((p, i) => {
-              if (p.kind === "tool") {
-                return <ToolCard key={i} tool={p.tool} fresh={m.fresh} />
-              }
-              if (p.kind === "thinking") {
-                // A thinking block is open (still streaming) only if it's the
-                // last part AND the message is still streaming. Once another
-                // part lands after it, the thinking block has effectively
-                // closed.
-                const isOpen = m.streaming && i === parts.length - 1
-                return <ThinkingBlock key={i} text={p.text} streaming={isOpen} />
-              }
-              return (
-                <div
-                  key={i}
-                  className={`agent-text${m.faded ? " faded" : ""}`}
-                >
-                  <Streamdown
-                    animated
-                    // `animated` alone is a no-op — streamdown also needs
-                    // `isAnimating` flipped true to actually wrap newly
-                    // mounted word-spans with the `data-sd-animate` attr.
-                    // (See vercel/streamdown#371.) Only the currently-
-                    // streaming last text part should animate; older parts
-                    // are static.
-                    isAnimating={m.streaming && i === parts.length - 1}
-                    parseIncompleteMarkdown
-                    // Disable streamdown's link-safety confirmation modal — its
-                    // fixed-overlay Tailwind classes don't compile in this project
-                    // so it renders inline and breaks the layout. Citation/DOI
-                    // links open directly in a new tab via the default <a>.
-                    linkSafety={{ enabled: false }}
-                    className="agent-md"
-                  >
-                    {p.text}
-                  </Streamdown>
-                  {/* Cursor on the most recent text part while streaming. */}
-                  {m.streaming && i === parts.length - 1 && (
-                    <span className="cursor" />
-                  )}
-                </div>
-              )
-            })}
+            {renderParts(parts, ctx)}
             {inSilentGap && <WorkingPill anchor={lastTimerAnchor(parts)} />}
           </>
         )
@@ -268,6 +344,14 @@ function lastTimerAnchor(parts: AgentTurn["parts"]): number {
   for (let i = parts.length - 1; i >= 0; i -= 1) {
     const p = parts[i]
     if (p.kind === "tool") return p.tool.startedAt
+    if (p.kind === "subagent") {
+      const nested = lastTimerAnchor(p.children)
+      // children may be empty — only return if the recursive walk found a tool
+      // (otherwise it returned Date.now() which would shadow earlier siblings).
+      if (p.children.some((c) => c.kind === "tool" || c.kind === "subagent")) {
+        return nested
+      }
+    }
   }
   return Date.now()
 }
