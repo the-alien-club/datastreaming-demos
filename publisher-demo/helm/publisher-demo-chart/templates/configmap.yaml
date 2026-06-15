@@ -13,4 +13,6 @@ data:
   DEMO_CONFIG_SLUG: {{ .Values.config.demoConfigSlug | quote }}
   DEMO_WORKFLOW_ID: {{ .Values.config.demoWorkflowId | quote }}
   ORG_ID: {{ .Values.config.orgId | quote }}
+  CLUSTER_WHITELIST: {{ .Values.config.clusterWhitelist | quote }}
+  CONNECTOR_WHITELIST: {{ .Values.config.connectorWhitelist | quote }}
   OTEL_SERVICE_NAME: {{ .Values.config.otelServiceName | quote }}

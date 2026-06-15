@@ -63,6 +63,13 @@ config:
   demoConfigSlug: cfg_El_iPlRr8wHQ
   demoWorkflowId: "238"
   orgId: "3"
+  # Optional whitelists. Comma-separated platform IDs that the demo is allowed
+  # to surface in the Datasources / External APIs panels. Empty string = no
+  # filter (every cluster + connector visible to `orgId` appears). Items
+  # hidden by the whitelist remain in the saved MCP configuration untouched
+  # — the picker just stops showing them.
+  clusterWhitelist: ""
+  connectorWhitelist: ""
   # Service name reported to SigNoz. Keep stable across deploys so dashboards
   # and alerts don't need to be updated on every rename.
   otelServiceName: "publisher-demo-alpha"

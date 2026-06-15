@@ -7,6 +7,12 @@ import type {
   McpConfigurationPickerPayload,
   McpConfigurationSummary,
 } from "@/lib/platform/types"
+import {
+  clusterWhitelist,
+  connectorWhitelist,
+  filterConfig,
+  filterSources,
+} from "@/lib/platform/whitelist"
 
 export const dynamic = "force-dynamic"
 
@@ -47,12 +53,19 @@ export async function GET() {
         { status: sourcesRes.status },
       )
     }
-    const sources = await unwrap<AvailableSourcesResponse>(sourcesRes)
-
-    const response: DemoConfigResponse = {
-      configuration: resolved.configuration,
-      sources,
+    const rawSources = await unwrap<AvailableSourcesResponse>(sourcesRes)
+    // Apply CLUSTER_WHITELIST / CONNECTOR_WHITELIST. Filtering BOTH the
+    // available-sources catalog AND the saved configuration keeps the panels
+    // and the local draft state in lockstep — items hidden from the UI never
+    // appear in the picker and never travel back on save.
+    const sources = filterSources(rawSources)
+    const trimmedConfig = filterConfig(resolved.configuration.config)
+    const configuration: McpConfigurationSummary = {
+      ...resolved.configuration,
+      config: trimmedConfig,
     }
+
+    const response: DemoConfigResponse = { configuration, sources }
     return NextResponse.json({ ...response, resolved_via: resolved.resolvedVia })
   } catch (err) {
     return NextResponse.json(
@@ -86,9 +99,31 @@ export async function PUT(request: Request) {
     if (!resolved) {
       return NextResponse.json({ error: "no-mcp-configuration" }, { status: 404 })
     }
+
+    // The UI only saw whitelisted entries, so its payload only references
+    // them. Re-attach any saved entries that the whitelist hides — otherwise
+    // a save would silently delete them from the platform configuration.
+    const clusters = clusterWhitelist()
+    const connectors = connectorWhitelist()
+    const saved = resolved.configuration.config
+    const mergedConfig: McpConfigurationPickerPayload = {
+      clusters: [
+        ...body.clusters,
+        ...(clusters
+          ? (saved.clusters ?? []).filter((c) => !clusters.has(c.cluster_id))
+          : []),
+      ],
+      external_apis: [
+        ...body.external_apis,
+        ...(connectors
+          ? (saved.external_apis ?? []).filter((a) => !connectors.has(a.connector_id))
+          : []),
+      ],
+    }
+
     const res = await adminFetch(`/mcp-configurations/${resolved.slug}`, {
       method: "PUT",
-      body: JSON.stringify({ config: body }),
+      body: JSON.stringify({ config: mergedConfig }),
     })
     if (!res.ok) {
       const detail = await res.text().catch(() => "")
