@@ -47,6 +47,9 @@ interface ResponseCreatedPayload {
 interface OutputItem {
   id?: string
   type?: string
+  call_id?: string
+  name?: string
+  status?: string
 }
 
 export interface PlatformResponseResult {
@@ -173,6 +176,7 @@ export async function runPlatformResponse(
         }
 
         case "finish":
+          console.error("[mode-a:srv] finish reason=", part.finishReason)
           writer.write({
             type: "finish",
             finishReason: part.finishReason,
@@ -220,6 +224,19 @@ class SidecarState {
   private _rootAgentId: string | null = null
   private _activeSubagentId: string | null = null
   private readonly _registry = new Map<string, AgentRegistryEntry>()
+  // Platform emits response.output_item.done for function_call items BEFORE
+  // the AI SDK's fullStream surfaces the synthetic `tool-call` part for the
+  // same call_id. If we wrote tool-output-available immediately, the client
+  // would see the result event before the call, and the tool card would never
+  // settle. We hold completions here and flush them when handleToolCall fires.
+  private readonly _emittedCallIds = new Set<string>()
+  private readonly _pendingOutputs = new Map<string, OutputItem>()
+  // Platform-side function_call items carry the dispatching subagent in
+  // their item.id (e.g. `agent:subagent-specialist::fc_7`). The AI SDK
+  // `tool-call` fullStream part doesn't expose that — it only carries the
+  // call_id. We snapshot the author at output_item.added time so handleToolCall
+  // can tag the outbound `data-toolCall` with the right subagent.
+  private readonly _toolCallAuthor = new Map<string, string>()
 
   constructor(writer: StreamWriter) {
     this._writer = writer
@@ -245,6 +262,31 @@ class SidecarState {
       case "response.output_item.added": {
         const item = payload.item as OutputItem | undefined
         this._maybeAnnounceSubagent(item?.id, item?.type)
+        // Snapshot author for function_call items so handleToolCall can tag
+        // the outbound data-toolCall with the right subagent.
+        if (item?.type === "function_call" && typeof item.call_id === "string") {
+          const author = this._decodeAuthorFromItemId(item.id)
+          if (author) this._toolCallAuthor.set(item.call_id, author)
+        }
+        break
+      }
+      case "response.output_item.done": {
+        // Tool calls complete server-side; the platform stream signals
+        // completion via item.status on the function_call output_item, but
+        // never echoes back a function_call_output. The platform also emits
+        // response.output_item.done BEFORE AI SDK's fullStream surfaces its
+        // synthetic tool-call part — so we buffer the completion and flush
+        // it from handleToolCall (which runs right after data-toolCall is
+        // written). Without this, data-toolResult races ahead of
+        // data-toolCall and the client's tool card never settles.
+        const item = payload.item as OutputItem | undefined
+        if (item?.type === "function_call" && typeof item.call_id === "string") {
+          if (this._emittedCallIds.has(item.call_id)) {
+            this._emitToolOutput(item)
+          } else {
+            this._pendingOutputs.set(item.call_id, item)
+          }
+        }
         break
       }
       case "response.completed": {
@@ -257,6 +299,7 @@ class SidecarState {
         break
       }
       case "response.failed":
+        console.error("[mode-a:srv] response.failed payload=", JSON.stringify(payload).slice(0, 500))
         this._ok = false
         break
       default:
@@ -265,10 +308,45 @@ class SidecarState {
   }
 
   handleToolCall(toolCallId: string, toolName: string, args: unknown): void {
+    const author = this._toolCallAuthor.get(toolCallId) ?? null
     this._writer.write({
       type: "data-toolCall",
-      data: { id: toolCallId, name: toolName, args },
+      data: { id: toolCallId, name: toolName, args, author },
     } as WriterEvent)
+    this._emittedCallIds.add(toolCallId)
+    const pending = this._pendingOutputs.get(toolCallId)
+    if (pending) {
+      this._pendingOutputs.delete(toolCallId)
+      this._emitToolOutput(pending)
+    }
+  }
+
+  private _emitToolOutput(item: OutputItem): void {
+    if (typeof item.call_id !== "string") return
+    const author = this._toolCallAuthor.get(item.call_id) ?? null
+    this._writer.write({
+      type: "tool-output-available",
+      toolCallId: item.call_id,
+      output: { status: item.status ?? "completed" },
+    } as WriterEvent)
+    this._writer.write({
+      type: "data-toolResult",
+      data: {
+        id: item.call_id,
+        name: item.name ?? null,
+        status: item.status ?? "completed",
+        author,
+      },
+    } as WriterEvent)
+  }
+
+  private _decodeAuthorFromItemId(itemId: string | undefined): string | null {
+    if (!itemId) return null
+    const m = itemId.match(/^agent:([^:]+)::/)
+    if (!m) return null
+    const raw = m[1] ?? ""
+    if (raw === "MAIN") return "main"
+    return raw.replace(/^subagent-/, "")
   }
 
   private _loadRegistry(response: ResponseCreatedPayload | undefined): void {
@@ -339,6 +417,14 @@ class SidecarState {
   }
 
   result(): PlatformResponseResult {
+    console.error(
+      "[mode-a:srv] result ok=",
+      this._ok,
+      "textLen=",
+      this._fullText.length,
+      "preview=",
+      this._fullText.slice(0, 300).replace(/\n/g, " "),
+    )
     return {
       text: this._fullText,
       responseId: this._responseId,

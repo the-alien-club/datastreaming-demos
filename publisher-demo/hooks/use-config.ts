@@ -403,10 +403,16 @@ export function resolveToolSource(
 }
 
 export function stripMcpPrefix(toolName: string): string {
-  // MCP convention: mcp__<server>__<tool>. Both segments can contain single
-  // underscores; the delimiter is exactly `__`. Split on the double underscore
-  // and take everything after the second one.
+  // Claude SDK convention (Mode B): mcp__<server>__<tool>. Both segments can
+  // contain single underscores; the delimiter is exactly `__`. Split on the
+  // double underscore and take everything after the second one.
+  // Example: mcp__alien__datacluster_keyword_search → datacluster_keyword_search.
   const parts = toolName.split("__")
   if (parts.length >= 3 && parts[0] === "mcp") return parts.slice(2).join("__")
+  // Platform Responses-API convention (Mode A): mcp_<connector-slug>_<tool>
+  // where slug keeps its hyphens. The catalog stores `<slug>_<tool>` directly
+  // as the tool name, so just strip the leading `mcp_`.
+  // Example: mcp_openaire-knowledge-graph-api_search → openaire-knowledge-graph-api_search.
+  if (toolName.startsWith("mcp_")) return toolName.slice("mcp_".length)
   return toolName
 }

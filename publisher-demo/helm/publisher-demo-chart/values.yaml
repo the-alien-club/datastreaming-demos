@@ -58,8 +58,8 @@ istio:
 # Non-sensitive runtime config. Override these in the ArgoCD Application
 # `helm.parameters` to switch the demo between alpha / staging / prod.
 config:
-  platformApiUrl: https://api.alpha.alien.club
-  mcpAlienUrl: https://mcp.alpha.alien.club
+  platformApiUrl: https://api.alien.club
+  mcpAlienUrl: https://mcp.alien.club
   demoConfigSlug: cfg_El_iPlRr8wHQ
   demoWorkflowId: "238"
   orgId: "3"

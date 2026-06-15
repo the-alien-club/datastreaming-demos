@@ -929,6 +929,128 @@ body {
   animation: blink 1s step-end infinite;
 }
 
+/* Author-labeled text — Planner / Specialist / Critic emit their internal
+   scratch (plan JSON, research notes, verdict JSON) inline with the demo
+   story. We render those in a muted, slightly indented frame with a small
+   tag, so the "main" synthesis text stays the dominant readable block. */
+.agent-text--planner,
+.agent-text--specialist,
+.agent-text--critic {
+  position: relative;
+  padding: 8px 10px 8px 12px;
+  margin-left: 8px;
+  border-left: 2px solid var(--border);
+  background: color-mix(in srgb, var(--input) 6%, transparent);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--neutral-300);
+}
+.agent-text--planner    { border-left-color: color-mix(in srgb, var(--teal-300) 60%, var(--border)); }
+.agent-text--specialist { border-left-color: color-mix(in srgb, #7dd3fc 60%, var(--border)); }
+.agent-text--critic     { border-left-color: color-mix(in srgb, #fbbf24 60%, var(--border)); }
+.agent-text__author {
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--neutral-400);
+  margin-bottom: 4px;
+}
+.agent-text--planner    .agent-text__author { color: var(--teal-300); }
+.agent-text--specialist .agent-text__author { color: #7dd3fc; }
+.agent-text--critic     .agent-text__author { color: #fbbf24; }
+
+/* Subagent BLOCK — a chronological container. The banner header marks "the
+   Planner / Specialist / Critic took over"; everything streamed between the
+   matching data-subagent and data-subagent-end (text deltas, tool calls)
+   lives in `.sub-block__children` as nested parts. The left rail mirrors
+   the same state at the timeline level. */
+.sub-block {
+  margin: 8px 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--input) 6%, transparent);
+  overflow: hidden;
+}
+.sub-block--running { animation: toolIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1); }
+.sub-block--planner    { border-left: 3px solid color-mix(in srgb, var(--teal-300) 60%, var(--border)); }
+.sub-block--specialist { border-left: 3px solid color-mix(in srgb, #7dd3fc 60%, var(--border)); }
+.sub-block--critic     { border-left: 3px solid color-mix(in srgb, #fbbf24 60%, var(--border)); }
+.sub-block__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--input) 10%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.sub-block--running .sub-block__head {
+  background: color-mix(in srgb, var(--input) 14%, transparent);
+}
+.sub-block__ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--input) 20%, transparent);
+  color: var(--neutral-200);
+  flex-shrink: 0;
+}
+.sub-block--planner    .sub-block__ic { color: var(--teal-300); }
+.sub-block--specialist .sub-block__ic { color: #7dd3fc; }
+.sub-block--critic     .sub-block__ic { color: #fbbf24; }
+.sub-block__body { flex: 1; min-width: 0; }
+.sub-block__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neutral-100);
+  line-height: 1.2;
+}
+.sub-block__desc {
+  font-size: 11px;
+  color: var(--neutral-400);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+.sub-block__status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.sub-block__status--running {
+  color: var(--teal-300);
+  border-color: color-mix(in srgb, var(--teal-300) 40%, var(--border));
+}
+.sub-block__status--done {
+  color: var(--neutral-400);
+}
+.sub-block__children {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Reset author-text framing INSIDE a subagent block — the block itself
+   already supplies the bordered container, so the inner text shouldn't
+   add a second frame. The small uppercase author tag is also redundant
+   inside a labeled block, so hide it. */
+.sub-block__children .agent-text--planner,
+.sub-block__children .agent-text--specialist,
+.sub-block__children .agent-text--critic {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+}
+.sub-block__children .agent-text__author { display: none; }
+
 /* tool card */
 .tool-card {
   border: 1px solid var(--border);
