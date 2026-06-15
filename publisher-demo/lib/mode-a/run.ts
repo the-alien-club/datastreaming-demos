@@ -41,6 +41,27 @@ function decodeAuthor(itemId: string | undefined): AgentAuthor {
   return (KNOWN_AUTHORS.has(bare as AgentAuthor) ? bare : "main") as AgentAuthor
 }
 
+/** One row of the platform's per-job cost breakdown. Mirrors the backend's
+ * `CostBrick` (web-app/packages/backend/lib/cost_breakdown_types.ts). Fields
+ * left untyped (`units: Record<string, unknown>`) so future categories can
+ * extend the shape without a client schema bump. */
+export interface CostBrick {
+  id: string
+  category: "llm" | "compute" | "connector" | "dataset" | "platform"
+  node_id: string
+  parent_brick_id: string | null
+  cost_eur: number
+  units?: Record<string, unknown>
+}
+
+/** Per-job cost breakdown payload arriving on `data-costBreakdown`. */
+export interface CostBreakdownPayload {
+  status: "complete" | "partial" | "pending" | "unavailable"
+  schema_version: number
+  reconciliation_delta_eur: number
+  bricks: CostBrick[]
+}
+
 export interface ModeACallbacks {
   /** A run of text-delta arrived for `author`. The hook appends to the most
    * recent text part of that author, or opens a new one. */
@@ -67,6 +88,14 @@ export interface ModeACallbacks {
   /** Platform `data-subagent` event with bare role name. The hook advances the
    * left rail timeline monotonically. */
   onSubagentSeen: (name: string) => void
+  /** Backend Job id correlation extracted from `Response.metadata.x_alien_job_id`.
+   * Fires once per turn, on `response.created`. Lets the hook reach back to
+   * `GET /jobs/:id` for retries / diagnostics. */
+  onJobId: (jobId: number) => void
+  /** Platform-assembled per-job cost breakdown, arrives immediately before
+   * the terminal frame. The hook walks the bricks to surface per-connector
+   * and per-dataset royalty attribution on the observability tape. */
+  onCostBreakdown: (jobId: number, breakdown: CostBreakdownPayload) => void
   /** Platform stream emitted `finish`. Clear streaming, settle the rail. */
   onFinish: () => void
   /** Defensive: stream ended (with or without `finish`). Clear streaming. */
@@ -158,6 +187,26 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
           const toolUseId = data?.id ?? null
           if (!toolUseId) break
           callbacks.onToolResult(toolUseId, data?.name ?? null)
+          break
+        }
+        case "data-jobId": {
+          const data = chunk.data as { jobId?: number } | undefined
+          if (typeof data?.jobId === "number" && Number.isFinite(data.jobId)) {
+            callbacks.onJobId(data.jobId)
+          }
+          break
+        }
+        case "data-costBreakdown": {
+          const data = chunk.data as
+            | { jobId?: number; costBreakdown?: CostBreakdownPayload }
+            | undefined
+          if (
+            typeof data?.jobId === "number" &&
+            data.costBreakdown &&
+            Array.isArray(data.costBreakdown.bricks)
+          ) {
+            callbacks.onCostBreakdown(data.jobId, data.costBreakdown)
+          }
           break
         }
         case "finish":

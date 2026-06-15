@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Timeline } from "@/components/panels/agent"
+import type { CostBreakdownPayload } from "@/lib/mode-a/run"
 import { runModeA } from "@/lib/mode-a/run"
 import { runModeB } from "@/lib/mode-b/run"
 import type {
@@ -180,10 +181,7 @@ function routeIntoRoleBlock(
       return next
     }
   }
-  return [
-    ...parts,
-    { kind: "subagent", name: role, status: "running", children: mutator([]) },
-  ]
+  return [...parts, { kind: "subagent", name: role, status: "running", children: mutator([]) }]
 }
 
 /**
@@ -589,9 +587,7 @@ export function useOrchestratorState(): OrchestratorState {
         // (Specialist in practice — Planner doesn't dispatch tools). Mode B:
         // author is null, tool card sits at the root.
         parts:
-          author === null
-            ? [...m.parts, toolPart]
-            : appendIntoRoleBlock(m.parts, author, toolPart),
+          author === null ? [...m.parts, toolPart] : appendIntoRoleBlock(m.parts, author, toolPart),
       }))
     },
     [events, setAgentMessage],
@@ -765,6 +761,98 @@ export function useOrchestratorState(): OrchestratorState {
     [buildAttributionRows, events, setAgentMessage],
   )
 
+  // Backend Job id correlation arriving on `data-jobId` (see
+  // responses_stream.ts). Kept in a ref so any post-turn lookup (e.g. retry,
+  // diagnostics) can reach back to `GET /jobs/:id` without prop drilling.
+  const modeAJobIdRef = useRef<number | null>(null)
+
+  // Replay the platform's per-job cost breakdown into the existing royalty
+  // cascade. One synthetic `tool-result` event is emitted per attributable
+  // brick — connectors and datasets only. LLM/compute/platform bricks are
+  // ignored: LLM cost lives in the Usage panel via tokens; compute/platform
+  // bricks are containers without a meaningful "source" attribution.
+  //
+  // The per-tool-call cascade (`settleToolCall` for API tools, line 711) has
+  // already emitted €0 rows for each API call because the local OpenAIRE
+  // pricing is set to 0. Emitting cost_breakdown rows with the same
+  // `connector:<id>` key merges them additively via `upsertAttribution` (line
+  // 102) — call counts inflate slightly but total € reflects the backend
+  // truth. Dataset rows are pure addition because Mode A's per-call settle
+  // emits nothing for datasets (no result body to walk for dataset_ids).
+  const emitCostBreakdownRows = useCallback(
+    (jobId: number, breakdown: CostBreakdownPayload) => {
+      if (breakdown.status !== "complete" && breakdown.status !== "partial") return
+      const datasetToCluster = datasetToClusterRef.current
+      for (const brick of breakdown.bricks) {
+        if (brick.cost_eur === 0) continue
+        if (brick.category === "connector") {
+          const u = brick.units ?? {}
+          const connectorId =
+            typeof u.connector_id === "number" || typeof u.connector_id === "string"
+              ? String(u.connector_id)
+              : brick.node_id
+          const label =
+            typeof u.tool_name === "string" && u.tool_name.length > 0
+              ? u.tool_name
+              : `connector ${connectorId}`
+          events.emit({
+            type: "tool-result",
+            toolUseId: `brick:${brick.id}`,
+            toolName: label,
+            callTimestamp: Date.now(),
+            attributionRows: [
+              {
+                attributionKey: `connector:${connectorId}`,
+                attributionLabel: label,
+                clusterId: null,
+                royaltyEur: brick.cost_eur,
+                datasetIds: [],
+              },
+            ],
+            royaltyEur: brick.cost_eur,
+            hits: typeof u.call_count === "number" ? u.call_count : 1,
+            resultSnippet: "",
+          })
+          continue
+        }
+        if (brick.category === "dataset") {
+          const u = brick.units ?? {}
+          const datasetId = typeof u.dataset_id === "number" ? u.dataset_id : null
+          if (datasetId === null) continue
+          const link = datasetToCluster.get(datasetId)
+          const clusterId = link?.clusterId ?? null
+          const label = link?.clusterName ?? `dataset ${datasetId}`
+          // Match Mode B's per-cluster bucket key so the Royalties Per Source
+          // panel rolls up identically across modes.
+          const attributionKey =
+            clusterId !== null ? `cluster:${clusterId}` : `dataset:${datasetId}`
+          events.emit({
+            type: "tool-result",
+            toolUseId: `brick:${brick.id}`,
+            toolName: label,
+            callTimestamp: Date.now(),
+            attributionRows: [
+              {
+                attributionKey,
+                attributionLabel: label,
+                clusterId,
+                royaltyEur: brick.cost_eur,
+                datasetIds: [datasetId],
+              },
+            ],
+            royaltyEur: brick.cost_eur,
+            hits: typeof u.access_count === "number" ? u.access_count : 1,
+            resultSnippet: "",
+          })
+        }
+      }
+      console.debug(
+        `[mode-a] cost breakdown for job ${jobId}: ${breakdown.bricks.length} bricks, status=${breakdown.status}`,
+      )
+    },
+    [events],
+  )
+
   const runModeATurn = useCallback(
     async (query: string, agentUid: number) => {
       await runModeA({
@@ -815,6 +903,12 @@ export function useOrchestratorState(): OrchestratorState {
           onToolResult: (toolUseId, fallbackName) => {
             settleToolCall(agentUid, toolUseId, { fallbackToolName: fallbackName })
           },
+          onJobId: (jobId) => {
+            modeAJobIdRef.current = jobId
+          },
+          onCostBreakdown: (jobId, breakdown) => {
+            emitCostBreakdownRows(jobId, breakdown)
+          },
           onSubagentSeen: (() => {
             // Monotonic advance: once we've seen a downstream subagent, we
             // don't "rewind" the rail even if the orchestrator loops back.
@@ -855,7 +949,7 @@ export function useOrchestratorState(): OrchestratorState {
         },
       })
     },
-    [dispatchToolCall, setAgentMessage, settleToolCall],
+    [dispatchToolCall, emitCostBreakdownRows, setAgentMessage, settleToolCall],
   )
 
   const runModeBTurn = useCallback(

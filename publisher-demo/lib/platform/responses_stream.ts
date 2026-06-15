@@ -257,6 +257,21 @@ class SidecarState {
         const response = payload.response as ResponseCreatedPayload | undefined
         if (response?.id) this._responseId = response.id
         this._loadRegistry(response)
+        this._maybeEmitJobId(response)
+        break
+      }
+      case "response.cost_breakdown": {
+        // Platform-specific event written by the backend immediately before
+        // `response.completed`. Forward the assembled CostBreakdown payload
+        // to the client so the orchestrator hook can replay it through the
+        // royalty cascade. Schema: lib/cost_breakdown_types.ts on the backend.
+        const jobId = typeof payload.job_id === "number" ? payload.job_id : null
+        const costBreakdown = payload.cost_breakdown
+        if (jobId === null || typeof costBreakdown !== "object" || costBreakdown === null) break
+        this._writer.write({
+          type: "data-costBreakdown",
+          data: { jobId, costBreakdown },
+        } as WriterEvent)
         break
       }
       case "response.output_item.added": {
@@ -299,7 +314,10 @@ class SidecarState {
         break
       }
       case "response.failed":
-        console.error("[mode-a:srv] response.failed payload=", JSON.stringify(payload).slice(0, 500))
+        console.error(
+          "[mode-a:srv] response.failed payload=",
+          JSON.stringify(payload).slice(0, 500),
+        )
         this._ok = false
         break
       default:
@@ -347,6 +365,21 @@ class SidecarState {
     const raw = m[1] ?? ""
     if (raw === "MAIN") return "main"
     return raw.replace(/^subagent-/, "")
+  }
+
+  private _emittedJobId: boolean = false
+
+  private _maybeEmitJobId(response: ResponseCreatedPayload | undefined): void {
+    if (this._emittedJobId) return
+    const raw = response?.metadata?.x_alien_job_id
+    if (typeof raw !== "string" || raw.length === 0) return
+    const jobId = Number.parseInt(raw, 10)
+    if (!Number.isFinite(jobId)) return
+    this._writer.write({
+      type: "data-jobId",
+      data: { jobId },
+    } as WriterEvent)
+    this._emittedJobId = true
   }
 
   private _loadRegistry(response: ResponseCreatedPayload | undefined): void {
