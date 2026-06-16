@@ -1057,33 +1057,38 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
   const liveSettledToolUseIds = useRef<Set<string>>(new Set())
 
   // Replay the platform's per-job cost breakdown into the existing royalty
-  // cascade. Used as a fallback / parity-check path when the per-call live
-  // cascade did not settle a body — i.e. backend hasn't deployed the
-  // `response.tool_call.output` sideband frame yet, or the worker emitted
-  // events without `result`. When `settleToolCall(content)` already
-  // attributed connector/dataset bricks live (Phase 3 of the
-  // mode-a-live-tool-output plan), this synthesizer skips connector/dataset
-  // bricks to avoid double-counting against the same `connector:<id>` /
-  // `cluster:<id>` attribution keys.
+  // cascade. The two brick categories that surface here are asymmetric:
   //
-  // LLM/compute/platform bricks are ignored unconditionally: LLM cost lives
-  // in the Usage panel via tokens; compute/platform bricks are containers
-  // without a meaningful "source" attribution.
+  // - connector bricks: the breakdown is the source of truth, the live
+  //   `settleToolCall` for API tools emits €0 rows (local API pricing
+  //   intentionally defers to the platform's per-endpoint `unit_price_cents`
+  //   in external_api_endpoints). The connector live emit reserves the
+  //   `connector:<id>` attribution key on the panel, then the breakdown
+  //   merges the real € additively via upsertAttribution.
+  //
+  // - dataset bricks: the live cascade is the source of truth (per-entry
+  //   pricing computes from the structured result body, which Phase 3
+  //   wires up). Emitting dataset bricks on top would double-count, so
+  //   we suppress them when `liveSettledToolUseIds` is non-empty.
+  //
+  // LLM/compute/platform bricks are ignored unconditionally: LLM cost
+  // lives in the Usage panel via tokens, compute/platform bricks are
+  // containers without a meaningful "source" attribution.
   const emitCostBreakdownRows = useCallback(
     (jobId: number, breakdown: CostBreakdownPayload) => {
       if (breakdown.status !== "complete" && breakdown.status !== "partial") return
-      // Live settlement is authoritative when at least one tool-result
-      // arrived with a structured body during this turn. The set is
-      // populated by `onToolResult` and cleared at the start of each turn.
+      // Live settlement is authoritative for dataset bricks when at least
+      // one tool-result arrived with a structured body during this turn.
+      // Connector bricks stay unsuppressed: their live €0 row reserves the
+      // attribution key but doesn't carry the real price — the breakdown
+      // does. The set is populated by `onToolResult` and cleared at the
+      // start of each turn.
       const liveSettleHappened = liveSettledToolUseIds.current.size > 0
       const datasetToCluster = datasetToClusterRef.current
       let suppressed = 0
       for (const brick of breakdown.bricks) {
         if (brick.cost_eur === 0) continue
-        if (
-          liveSettleHappened &&
-          (brick.category === "connector" || brick.category === "dataset")
-        ) {
+        if (liveSettleHappened && brick.category === "dataset") {
           suppressed += 1
           continue
         }
