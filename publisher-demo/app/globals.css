@@ -978,10 +978,120 @@ body {
   background: color-mix(in srgb, var(--input) 6%, transparent);
   overflow: hidden;
 }
+/* Planner task cards — replaces the raw JSON array dump with a numbered
+   grid of "question + tool" cards. Only mounted when the JSON has fully
+   arrived (see `parsePlannerTasks` in agent.tsx); during streaming the raw
+   markdown still shows, so the user keeps watching tokens land. */
+.planner-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.planner-card {
+  display: flex;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--input) 14%, transparent);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.planner-card:hover {
+  border-color: color-mix(in srgb, var(--teal-300) 40%, var(--border));
+  background: color-mix(in srgb, var(--input) 22%, transparent);
+}
+.planner-card__num {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--teal-300);
+  flex-shrink: 0;
+  padding-top: 1px;
+  letter-spacing: 0.04em;
+}
+.planner-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+.planner-card__q {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+.planner-card__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--neutral-400);
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--input) 30%, transparent);
+  border: 1px solid var(--border);
+}
+.planner-card__connector {
+  color: var(--teal-300);
+}
+.planner-card__sep {
+  color: var(--neutral-600);
+}
+.planner-card__action {
+  color: var(--neutral-300);
+}
 .sub-block--running { animation: toolIn 0.32s cubic-bezier(0.2, 0.7, 0.3, 1); }
 .sub-block--planner    { border-left: 3px solid color-mix(in srgb, var(--teal-300) 60%, var(--border)); }
 .sub-block--specialist { border-left: 3px solid color-mix(in srgb, #7dd3fc 60%, var(--border)); }
 .sub-block--critic     { border-left: 3px solid color-mix(in srgb, #fbbf24 60%, var(--border)); }
+.sub-block--other      { border-left: 3px solid color-mix(in srgb, var(--neutral-500) 60%, var(--border)); }
+
+/* Empty/just-opened per-dispatch card — the platform announced the instance
+   but no text or tool deltas have landed yet. Show a tiny pulse so the card
+   doesn't read as dead air. */
+.sub-block__placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-500);
+}
+.sub-block__placeholder-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--teal-300) 70%, transparent);
+  animation: nodePulse 1.2s ease-in-out infinite;
+}
+
+/* Per-stage dispatch count badge on the left rail (visible only when a stage
+   ran more than once — e.g. an iterative planner→critic loop). */
+.rail-count {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--teal-300);
+  color: var(--background);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  border: 1.5px solid var(--card);
+}
+.rail-node {
+  position: relative;
+}
 .sub-block__head {
   display: flex;
   align-items: center;

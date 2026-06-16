@@ -2,43 +2,83 @@
  * Mode A — Agentic flow stream consumer.
  *
  * Talks to `/api/demo/chat` with `mode: "agentic"`, reads the AI SDK
- * `UIMessageChunk` stream emitted by our `responses_stream.ts` translator,
- * and dispatches a narrow callback surface back into the orchestrator hook.
+ * `UIMessageChunk` stream emitted by `lib/platform/responses_stream.ts`, and
+ * forwards a narrow callback surface to the orchestrator hook.
  *
- * The platform's Responses-API stream interleaves four kinds of events that
- * need to be threaded into the message bubble *in chronological order*:
+ * The platform's Responses-API stream gives us per-dispatch agent identity
+ * via composite item-ids of the form:
  *
- *   - text-start / text-delta / text-end  ← scoped to one *item-id* like
- *       `agent:MAIN::msg_25` or `agent:subagent-planner::msg_2`. We decode
- *       the role from the item-id and tell the hook which subagent authored
- *       each piece of text. The hook decides how to render each author.
- *   - data-subagent / data-subagent-end    ← MAIN dispatched a sub-role.
- *       Surfaced as a chronological banner in the message bubble (a Specialist
- *       chip lives BETWEEN the planner's notes and the resulting tool calls).
- *   - data-toolCall / data-toolResult     ← unchanged; the hook owns the
- *       dispatch ref and royalty cascade.
- *   - finish                              ← end of turn.
+ *     agent:<agentType>::<kind>_<ordinal>                       # MAIN
+ *     agent:<agentType>#<dispatchId>::<kind>_<ordinal>          # subagents
  *
- * All shared hook state (message tree, dispatch ref, royalty pipeline,
- * event bus) is reached only via the callbacks. Editing Mode A here cannot
- * break Mode B.
+ * `dispatchId` is a per-`task()` UUID — two parallel `specialist` dispatches
+ * carry different dispatchIds and therefore different `instanceKey`s. The
+ * client uses `instanceKey` as the grouping key so each dispatch gets its own
+ * card in the UI and stream events for distinct instances never collide.
+ *
+ * The server-side translator (`responses_stream.ts`) tags every
+ * `data-toolCall` / `data-toolResult` with the dispatching instance, emits
+ * `data-instance` the first time a new instanceKey is seen, and forwards
+ * `data-agentRegistry` once at the top of the stream so the client knows the
+ * human display names for each registered agent. Text events come through
+ * with the raw item-id; we parse it locally with `parseAgentItemId` to derive
+ * the instance.
+ *
+ * Mode A here cannot break Mode B — they share no client state; their two
+ * `run.ts` files write into the same orchestrator hook via separate callback
+ * surfaces.
  */
-import type { AgentAuthor } from "@/lib/chat-messages"
+import type { AgentInstanceInfo, AgentType } from "@/lib/chat-messages"
 import { readUiMessageChunks } from "@/lib/ui-stream"
 
-const KNOWN_AUTHORS: ReadonlySet<AgentAuthor> = new Set(["main", "planner", "specialist", "critic"])
+/** Parsed composite agent item-id. */
+export interface ParsedAgentItemId {
+  agentType: string
+  dispatchId: string | null
+  instanceKey: string
+  kind: string
+  ordinal: number
+}
 
-/** Decode the agent role from a platform item id like
- * `agent:MAIN::msg_4` or `agent:subagent-specialist::fc_7`. Falls back to
- * `"main"` so the renderer always has a usable author. */
-function decodeAuthor(itemId: string | undefined): AgentAuthor {
-  if (!itemId) return "main"
-  const m = itemId.match(/^agent:([^:]+)::/)
-  if (!m) return "main"
-  const raw = m[1] ?? ""
-  if (raw === "MAIN") return "main"
-  const bare = raw.replace(/^subagent-/, "")
-  return (KNOWN_AUTHORS.has(bare as AgentAuthor) ? bare : "main") as AgentAuthor
+/**
+ * Parse `agent:<type>[#<dispatchId>]::<kind>_<n>`. `#` is reserved — no
+ * configured subagent name contains it, so the split is unambiguous. Returns
+ * `null` for ids that don't conform (the renderer drops those at the root).
+ */
+export function parseAgentItemId(itemId: string | null | undefined): ParsedAgentItemId | null {
+  if (!itemId) return null
+  const m = itemId.match(/^agent:([^#:]+)(?:#([^:]+))?::([^_]+)_(\d+)$/)
+  if (!m) return null
+  const [, agentType, dispatchId, kind, ordinalStr] = m
+  const instanceKey = dispatchId ? `${agentType}#${dispatchId}` : agentType
+  return {
+    agentType,
+    dispatchId: dispatchId ?? null,
+    instanceKey,
+    kind,
+    ordinal: Number(ordinalStr),
+  }
+}
+
+/**
+ * Reduce a raw registry id to the canonical class the renderer styles. Any
+ * subagent the workflow author named outside the known triple lands in
+ * `"other"` and renders with the generic card.
+ */
+export function canonicalAgentType(rawType: string): AgentType {
+  if (rawType === "MAIN") return "main"
+  const bare = rawType.replace(/^subagent-/, "")
+  if (bare === "planner" || bare === "specialist" || bare === "critic") return bare
+  return "other"
+}
+
+/** One entry in `metadata.x_alien_agent_registry`. Forwarded verbatim from
+ *  the server-side translator. */
+export interface AgentRegistryEntry {
+  id: string
+  kind: "main" | "subagent" | "tool"
+  name: string
+  parent_id: string | null
 }
 
 /** One row of the platform's per-job cost breakdown. Mirrors the backend's
@@ -63,56 +103,49 @@ export interface CostBreakdownPayload {
 }
 
 export interface ModeACallbacks {
-  /** A run of text-delta arrived for `author`. The hook appends to the most
-   * recent text part of that author, or opens a new one. */
-  onAuthorText: (author: AgentAuthor, delta: string) => void
-  /** Platform announced a new active subagent. The hook appends a chronological
-   * banner part with `status: "running"`. */
-  onSubagentStart: (name: AgentAuthor) => void
-  /** Platform closed the active subagent. The hook flips the last open
-   * banner to `status: "done"`. */
-  onSubagentEnd: () => void
-  /** A new tool call was dispatched. `author` is the subagent that issued
-   * the call (decoded from the platform-side function_call item id) so the
-   * UI can nest the card under the right role's block. `args` may be null
-   * when args weren't streamed. */
+  /** Platform's registered agents. Fires once on `response.created` so the
+   *  hook can resolve display names without parsing items each time. May be
+   *  truncated (see `x_alien_registry_truncated`); the per-item composite id
+   *  remains authoritative for type + dispatchId. */
+  onAgentRegistry: (entries: AgentRegistryEntry[]) => void
+  /** First sighting of a new per-dispatch instance. The hook opens a fresh
+   *  per-dispatch card; subsequent text/tool events for the same
+   *  `instanceKey` route into that card. Idempotent — only fires once per
+   *  unique `instanceKey`. */
+  onInstance: (info: AgentInstanceInfo) => void
+  /** A text-delta arrived. `instance` is null when the item-id couldn't be
+   *  parsed OR resolves to MAIN — in both cases the text lands at the root. */
+  onAuthorText: (delta: string, instance: AgentInstanceInfo | null) => void
+  /** A tool dispatch landed. `instance` is null when the tool was issued by
+   *  MAIN (rare in this workflow). `args` may be null when args weren't
+   *  resolved on the AI SDK fullStream side. */
   onToolCall: (
     toolUseId: string | null,
     toolName: string,
     args: Record<string, unknown> | null,
-    author: AgentAuthor | null,
+    instance: AgentInstanceInfo | null,
   ) => void
-  /** A previously-dispatched tool finished. Mode A has no result body — the
-   * hook resolves attribution from the dispatch ref alone. */
+  /** Pair-event for a previously-dispatched tool. Mode A has no result body
+   *  — the hook resolves attribution from its own dispatch ref. */
   onToolResult: (toolUseId: string, fallbackName?: string | null) => void
-  /** Platform `data-subagent` event with bare role name. The hook advances the
-   * left rail timeline monotonically. */
-  onSubagentSeen: (name: string) => void
-  /** Backend Job id correlation extracted from `Response.metadata.x_alien_job_id`.
-   * Fires once per turn, on `response.created`. Lets the hook reach back to
-   * `GET /jobs/:id` for retries / diagnostics. */
+  /** Job-id correlation from `Response.metadata.x_alien_job_id`. Fires once
+   *  per turn, on `response.created`. */
   onJobId: (jobId: number) => void
-  /** Platform-assigned `response_id` for this turn. Fires once on
-   * `response.created`. The hook stashes it as `previousResponseId` for the
-   * NEXT turn so the orchestrator threads multi-turn memory. */
+  /** Platform `response_id` for this turn. The hook stashes it as
+   *  `previousResponseId` for the NEXT turn so multi-turn memory threads. */
   onResponseId: (responseId: string) => void
-  /** Platform-assembled per-job cost breakdown, arrives immediately before
-   * the terminal frame. The hook walks the bricks to surface per-connector
-   * and per-dataset royalty attribution on the observability tape. */
+  /** Platform-assembled per-job cost breakdown. Arrives just before the
+   *  terminal frame. */
   onCostBreakdown: (jobId: number, breakdown: CostBreakdownPayload) => void
-  /** Platform stream emitted `finish`. Clear streaming, settle the rail. */
+  /** Platform emitted `finish`. Clean settle. */
   onFinish: () => void
-  /** Defensive: stream ended (with or without `finish`). Clear streaming. */
+  /** Stream ended (clean or otherwise). Defensive settle. */
   onStreamEnd: () => void
 }
 
 export interface ModeARunOptions {
   query: string
-  /** Ref the orchestrator polls externally (Reset / mode switch). */
   cancelRef: { readonly current: boolean }
-  /** Platform `response_id` from the previous turn in this chat session.
-   * `null`/`undefined` on the first turn or after a reset. Forwarded
-   * server-side as `providerOptions.openai.previousResponseId`. */
   previousResponseId?: string | null
   callbacks: ModeACallbacks
 }
@@ -122,8 +155,6 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
 
   const tStart = Date.now()
   const ms = () => `${Date.now() - tStart}ms`
-  // Per-chunk-type counters dumped at end-of-turn so it's easy to confirm "I
-  // got 13 tool calls, 13 results, 1 cost breakdown, 1 finish".
   const counts: Record<string, number> = {}
   const bump = (k: string) => {
     counts[k] = (counts[k] ?? 0) + 1
@@ -156,10 +187,56 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
     throw new Error(`Mode A failed: ${res.status} ${res.statusText}`)
   }
 
-  // Item-id of the currently-open text scope, and the author decoded from it.
-  // We need the author at text-delta time, and text-delta only carries the
-  // item id back-reference — so we resolve and cache it on text-start.
-  const authorByItemId = new Map<string, AgentAuthor>()
+  // Registry of agent display names from the platform. Server forwards this
+  // via `data-agentRegistry` on response.created. We also build instance
+  // metadata on demand from item-id parses when the registry is silent (e.g.
+  // truncated past 512 bytes — the spec calls this out).
+  const registry = new Map<string, AgentRegistryEntry>()
+  /** Cached `instanceKey → AgentInstanceInfo` so we don't repeatedly resolve. */
+  const instanceCache = new Map<string, AgentInstanceInfo>()
+  /** Per-canonicalType ordinal counter for `Specialist #1`, `#2`, … labels. */
+  const ordinalByCanonical = new Map<AgentType, number>()
+  /** Tool-id → instance, so the result-side handler doesn't need to re-parse.
+   *  Server now passes `instanceKey` on both call + result events, but we
+   *  cache here too for the no-op fallback path. */
+  const instanceByToolId = new Map<string, AgentInstanceInfo>()
+
+  function resolveInstance(itemId: string | null | undefined): AgentInstanceInfo | null {
+    const parsed = parseAgentItemId(itemId)
+    if (!parsed) return null
+    if (parsed.agentType === "MAIN") return null
+    const cached = instanceCache.get(parsed.instanceKey)
+    if (cached) return cached
+    const entry = registry.get(parsed.agentType)
+    const canonical = canonicalAgentType(parsed.agentType)
+    const info: AgentInstanceInfo = {
+      instanceKey: parsed.instanceKey,
+      agentType: parsed.agentType,
+      canonicalType: canonical,
+      displayName: entry?.name ?? parsed.agentType,
+      kind: entry?.kind ?? "subagent",
+    }
+    instanceCache.set(parsed.instanceKey, info)
+    return info
+  }
+
+  /** Idempotent: announces a new instance the first time we route through it. */
+  function ensureInstance(info: AgentInstanceInfo | null): AgentInstanceInfo | null {
+    if (!info) return null
+    if (!instanceCache.has(info.instanceKey)) {
+      instanceCache.set(info.instanceKey, info)
+    }
+    // Track ordinal so the renderer can label `Specialist #2` when a second
+    // dispatch of the same canonical type lands.
+    const seen = ordinalByCanonical.get(info.canonicalType) ?? 0
+    if (!instanceWasAnnounced.has(info.instanceKey)) {
+      ordinalByCanonical.set(info.canonicalType, seen + 1)
+      instanceWasAnnounced.add(info.instanceKey)
+      callbacks.onInstance(info)
+    }
+    return info
+  }
+  const instanceWasAnnounced = new Set<string>()
 
   try {
     for await (const chunk of readUiMessageChunks(res.body)) {
@@ -175,33 +252,73 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
           break
         case "text-start": {
           const id = typeof chunk.id === "string" ? chunk.id : null
-          if (id) {
-            const author = decodeAuthor(id)
-            authorByItemId.set(id, author)
-            console.log(`[mode-a client] text-start id=${id} → author=${author}`)
-          }
+          const info = resolveInstance(id)
+          // Announce the instance up front so the card appears even before
+          // its first text-delta. Lets the UI render a placeholder
+          // ("Specialist starting up…") rather than dead air.
+          if (info) ensureInstance(info)
+          console.log(
+            `[mode-a client] text-start id=${id} → instance=${info?.instanceKey ?? "MAIN"}`,
+          )
           break
         }
         case "text-delta": {
           const id = typeof chunk.id === "string" ? chunk.id : null
           const delta = typeof chunk.delta === "string" ? chunk.delta : ""
           if (!delta) break
-          const author = id ? (authorByItemId.get(id) ?? decodeAuthor(id)) : "main"
-          callbacks.onAuthorText(author, delta)
+          const info = resolveInstance(id)
+          if (info) ensureInstance(info)
+          callbacks.onAuthorText(delta, info)
           break
         }
         case "text-end": {
           const id = typeof chunk.id === "string" ? chunk.id : null
-          if (id) {
-            const author = authorByItemId.get(id) ?? "?"
-            console.log(`[mode-a client] text-end id=${id} (author=${author})`)
-            authorByItemId.delete(id)
+          if (id) console.log(`[mode-a client] text-end id=${id}`)
+          break
+        }
+        case "data-agentRegistry": {
+          const data = chunk.data as { entries?: AgentRegistryEntry[] } | undefined
+          if (Array.isArray(data?.entries)) {
+            for (const e of data.entries) registry.set(e.id, e)
+            console.log(`[mode-a client] data-agentRegistry entries=${data.entries.length}`)
+            callbacks.onAgentRegistry(data.entries)
           }
+          break
+        }
+        case "data-instance": {
+          const data = chunk.data as
+            | {
+                instanceKey?: string
+                agentType?: string
+                canonicalType?: AgentType
+                displayName?: string
+                kind?: "main" | "subagent" | "tool"
+              }
+            | undefined
+          if (!data?.instanceKey || !data.agentType) {
+            console.warn(`[mode-a client] ⚠ data-instance missing fields, skipped:`, data)
+            break
+          }
+          const info: AgentInstanceInfo = {
+            instanceKey: data.instanceKey,
+            agentType: data.agentType,
+            canonicalType: data.canonicalType ?? canonicalAgentType(data.agentType),
+            displayName: data.displayName ?? data.agentType,
+            kind: data.kind ?? "subagent",
+          }
+          ensureInstance(info)
           break
         }
         case "data-toolCall": {
           const data = chunk.data as
-            | { id?: string; name?: string; args?: unknown; author?: string }
+            | {
+                id?: string
+                name?: string
+                args?: unknown
+                instanceKey?: string
+                agentType?: string
+                displayName?: string
+              }
             | undefined
           if (!data?.name) {
             console.warn(`[mode-a client] ⚠ data-toolCall with no name, skipped:`, data)
@@ -211,38 +328,29 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
             data.args && typeof data.args === "object"
               ? (data.args as Record<string, unknown>)
               : null
-          const author =
-            data.author && KNOWN_AUTHORS.has(data.author as AgentAuthor)
-              ? (data.author as AgentAuthor)
-              : null
+          let info: AgentInstanceInfo | null = null
+          if (data.instanceKey) {
+            info = {
+              instanceKey: data.instanceKey,
+              agentType: data.agentType ?? data.instanceKey.split("#")[0] ?? "unknown",
+              canonicalType: canonicalAgentType(
+                data.agentType ?? data.instanceKey.split("#")[0] ?? "",
+              ),
+              displayName: data.displayName ?? data.agentType ?? data.instanceKey,
+              kind: "subagent",
+            }
+            info = ensureInstance(info)
+          }
+          if (data.id && info) instanceByToolId.set(data.id, info)
           console.log(
-            `[mode-a client] data-toolCall id=${data.id} tool=${data.name} author=${author ?? "—"} args=${argsObj ? JSON.stringify(argsObj).slice(0, 120) : "null"}`,
+            `[mode-a client] data-toolCall id=${data.id} tool=${data.name} instance=${info?.instanceKey ?? "—"} args=${argsObj ? JSON.stringify(argsObj).slice(0, 120) : "null"}`,
           )
-          callbacks.onToolCall(data.id ?? null, data.name, argsObj, author)
+          callbacks.onToolCall(data.id ?? null, data.name, argsObj, info)
           break
         }
-        case "data-subagent": {
-          const data = chunk.data as { agentId?: string; name?: string } | undefined
-          const raw = data?.name ?? data?.agentId ?? ""
-          const bare = raw.replace(/^subagent-/, "")
-          if (!bare) {
-            console.warn(`[mode-a client] ⚠ data-subagent with no name, skipped:`, data)
-            break
-          }
-          console.log(`[mode-a client] data-subagent ${raw} → bare=${bare}`)
-          callbacks.onSubagentSeen(bare)
-          if (KNOWN_AUTHORS.has(bare as AgentAuthor) && bare !== "main") {
-            callbacks.onSubagentStart(bare as AgentAuthor)
-          }
-          break
-        }
-        case "data-subagent-end":
-          console.log(`[mode-a client] data-subagent-end`)
-          callbacks.onSubagentEnd()
-          break
         case "data-toolResult": {
           const data = chunk.data as
-            | { id?: string; name?: string; status?: string; author?: string }
+            | { id?: string; name?: string; status?: string; instanceKey?: string }
             | undefined
           const toolUseId = data?.id ?? null
           if (!toolUseId) {
@@ -250,7 +358,7 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
             break
           }
           console.log(
-            `[mode-a client] data-toolResult id=${toolUseId} tool=${data?.name ?? "—"} status=${data?.status ?? "—"} author=${data?.author ?? "—"}`,
+            `[mode-a client] data-toolResult id=${toolUseId} tool=${data?.name ?? "—"} instance=${data?.instanceKey ?? "—"} status=${data?.status ?? "—"}`,
           )
           callbacks.onToolResult(toolUseId, data?.name ?? null)
           break
@@ -285,11 +393,6 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
             console.log(
               `[mode-a client] data-costBreakdown jobId=${data.jobId} status=${cb.status} bricks=${cb.bricks.length} totalEur=${totalEur.toFixed(4)}`,
             )
-            for (const b of cb.bricks) {
-              console.log(
-                `[mode-a client]   brick ${b.id} category=${b.category} node=${b.node_id} parent=${b.parent_brick_id ?? "—"} eur=${b.cost_eur} units=${b.units ? JSON.stringify(b.units) : "—"}`,
-              )
-            }
             callbacks.onCostBreakdown(data.jobId, cb)
           } else {
             console.warn(`[mode-a client] ⚠ data-costBreakdown malformed:`, data)
@@ -303,7 +406,6 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
           callbacks.onFinish()
           break
         case "finish-step":
-          console.log(`[mode-a client] finish-step`)
           break
         case "error":
           console.error(`[mode-a client] ✗ error chunk:`, chunk)

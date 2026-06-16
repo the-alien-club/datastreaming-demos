@@ -21,6 +21,12 @@ export interface TapeRow {
   meta: string
   /** Used to drive the `.tape-row.enter` animation on the most recent row. */
   fresh: boolean
+  /** `cluster:<id>` / `connector:<id>` / `tool:<name>`. Carried so Mode A's
+   * end-of-turn cost_breakdown can backfill the per-call price across all
+   * rows that share the same attribution — local connector pricing is 0 in
+   * Mode A, so the per-call settle leaves these at "no price" until the
+   * brick total arrives. */
+  attributionKey?: string
 }
 
 export interface AttributionRow {

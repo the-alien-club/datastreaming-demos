@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState } from "react"
 import { Streamdown } from "streamdown"
 import type { Mode } from "@/hooks/use-mode"
-import type { AgentAuthor, AgentPart, AgentTurn, ChatMessage, ToolEntry } from "@/lib/chat-messages"
+import type {
+  AgentAuthor,
+  AgentPart,
+  AgentTurn,
+  AgentType,
+  ChatMessage,
+  ToolEntry,
+} from "@/lib/chat-messages"
 import { Icon, type IconName } from "../icons"
 
 const NODES = [
@@ -13,7 +20,20 @@ const NODES = [
 ] as const
 
 export type TimelineState = "pending" | "exec" | "done"
-export type Timeline = Record<"planner" | "specialist" | "critic", TimelineState>
+/**
+ * Per-stage rail node state.
+ *
+ * - `status` — `pending` (not yet visited), `exec` (currently running), `done`
+ * - `count`  — how many dispatches of this canonical type we've seen this
+ *              turn. Surfaced as a small badge next to the rail node so an
+ *              iterative workflow ("planner ran twice, 4 specialists per
+ *              planner pass") is legible at a glance.
+ */
+export interface TimelineNode {
+  status: TimelineState
+  count: number
+}
+export type Timeline = Record<"planner" | "specialist" | "critic", TimelineNode>
 
 /**
  * Live elapsed-time counter (e.g. "3.2s"), ticks every 200ms while `running`.
@@ -118,14 +138,14 @@ function ChainOfThought({ chain }: { chain: { who: string; text: string }[] }) {
  * "Specialist did the searches BETWEEN these two text blocks".
  */
 const SUBAGENT_META: Record<
-  AgentAuthor,
+  AgentType,
   { icon: IconName; label: string; description: string } | null
 > = {
   main: null,
   planner: {
     icon: "cpu",
     label: "Planner",
-    description: "Decomposing your question into focused research tasks",
+    description: "Decomposing the question into focused research tasks",
   },
   specialist: {
     icon: "search",
@@ -137,6 +157,11 @@ const SUBAGENT_META: Record<
     label: "Critic",
     description: "Reviewing the research for quality and completeness",
   },
+  other: {
+    icon: "spark",
+    label: "Agent",
+    description: "Running a dispatched workflow step",
+  },
 }
 
 interface RenderCtx {
@@ -145,32 +170,40 @@ interface RenderCtx {
   faded: boolean | undefined
 }
 
-function SubagentBlock({
-  name,
+function InstanceCard({
+  instanceKey: _instanceKey,
+  canonicalType,
+  displayName,
+  ordinal,
   status,
   parts,
   ctx,
 }: {
-  name: AgentAuthor
+  instanceKey: string
+  canonicalType: AgentType
+  displayName: string
+  ordinal: number
   status: "running" | "done"
   parts: AgentPart[]
   ctx: RenderCtx
 }) {
-  const meta = SUBAGENT_META[name]
+  const meta = SUBAGENT_META[canonicalType] ?? SUBAGENT_META.other
   if (!meta) return null
-  // Hide empty blocks once they've settled — the platform sometimes emits a
-  // data-subagent that never gets content (e.g. it ends immediately when the
-  // orchestrator changes its mind), and a banner with no body just looks
-  // like dead air. We keep empty *running* blocks visible so the user sees
-  // "Specialist is starting up" while we wait for the first delta.
-  if (status === "done" && parts.length === 0) return null
-  // While the block is still running and the parent message is still
-  // streaming, its children may grow. Once it's done the children are frozen
-  // and we render them with a non-streaming context so cursors stop blinking
-  // inside it even if the rest of the turn is still in flight.
+  // While the parent message is streaming, this instance's children may
+  // still grow. Freeze the streaming flag inside settled instances so cursors
+  // don't blink after the dispatch closed.
   const childCtx: RenderCtx = { ...ctx, streaming: ctx.streaming && status === "running" }
+  // Title: "Specialist #2" when more than one of the same canonical type ran
+  // in this turn; just "Specialist" otherwise. `displayName` is shown as the
+  // subtitle so the platform's raw registry label remains visible.
+  const titleBase = meta.label
+  const title = ordinal > 1 ? `${titleBase} #${ordinal}` : titleBase
+  const subtitle = displayName && displayName !== meta.label ? displayName : meta.description
   return (
-    <div className={`sub-block sub-block--${name} sub-block--${status}`}>
+    <div
+      className={`sub-block sub-block--${canonicalType} sub-block--${status}`}
+      data-instance-key={_instanceKey}
+    >
       <div className="sub-block__head">
         <span className="sub-block__ic">
           {status === "running" ? (
@@ -180,16 +213,102 @@ function SubagentBlock({
           )}
         </span>
         <div className="sub-block__body">
-          <div className="sub-block__title">{meta.label}</div>
-          <div className="sub-block__desc">{meta.description}</div>
+          <div className="sub-block__title">{title}</div>
+          <div className="sub-block__desc">{subtitle}</div>
         </div>
         <span className={`sub-block__status sub-block__status--${status}`}>
           {status === "running" ? "active" : "done"}
         </span>
       </div>
-      {parts.length > 0 && (
+      {parts.length === 0 ? (
+        status === "running" ? (
+          <div className="sub-block__children sub-block__placeholder">
+            <span className="sub-block__placeholder-dot" />
+            <span>Starting up…</span>
+          </div>
+        ) : null
+      ) : (
         <div className="sub-block__children">{renderParts(parts, childCtx)}</div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The Planner emits its task list as a JSON array of `{q, tool}` objects.
+ * Surfacing that as a one-line code block is ugly; once the JSON has fully
+ * arrived we switch to a small card grid. While the JSON is still streaming
+ * we keep rendering raw markdown so the user sees progressive output instead
+ * of a stale "Decomposing…" placeholder — `parsePlannerTasks` returns `null`
+ * on any incomplete / unrecognised payload and the caller falls back to
+ * Streamdown.
+ */
+interface PlannerTask {
+  q: string
+  tool: string
+}
+function parsePlannerTasks(text: string): PlannerTask[] | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  // Strip a single ```json … ``` fence if present.
+  const fence = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
+  const candidate = fence ? fence[1] : trimmed
+  // Must look like an array — cheap check before paying JSON.parse cost.
+  if (!candidate.startsWith("[")) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(candidate)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return null
+  const out: PlannerTask[] = []
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") return null
+    const q = (item as { q?: unknown }).q
+    const tool = (item as { tool?: unknown }).tool
+    if (typeof q !== "string" || typeof tool !== "string") return null
+    if (!q.trim() || !tool.trim()) return null
+    out.push({ q: q.trim(), tool: tool.trim() })
+  }
+  return out
+}
+
+/** Strip the `mcp_<connector>_` prefix from the tool name for a friendlier
+ * chip label — `mcp_datacluster_list_datasets` → `datacluster · list datasets`. */
+function prettyToolName(raw: string): { connector: string; action: string } {
+  const stripped = raw.replace(/^mcp[-_]/, "")
+  const sep = stripped.indexOf("_")
+  if (sep === -1) return { connector: stripped, action: "" }
+  const connector = stripped.slice(0, sep)
+  const action = stripped.slice(sep + 1).replace(/_/g, " ")
+  return { connector, action }
+}
+
+function PlannerCards({ tasks }: { tasks: PlannerTask[] }) {
+  return (
+    <div className="planner-cards">
+      {tasks.map((t, i) => {
+        const { connector, action } = prettyToolName(t.tool)
+        return (
+          <div className="planner-card" key={i}>
+            <div className="planner-card__num">{String(i + 1).padStart(2, "0")}</div>
+            <div className="planner-card__body">
+              <div className="planner-card__q">{t.q}</div>
+              <div className="planner-card__tool">
+                <Icon name="search" size={11} />
+                <span className="planner-card__connector">{connector}</span>
+                {action && (
+                  <>
+                    <span className="planner-card__sep">·</span>
+                    <span className="planner-card__action">{action}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -203,11 +322,37 @@ function renderParts(parts: AgentPart[], ctx: RenderCtx): React.ReactNode {
       const isOpen = ctx.streaming && i === parts.length - 1
       return <ThinkingBlock key={i} text={p.text} streaming={isOpen} />
     }
-    if (p.kind === "subagent") {
-      return <SubagentBlock key={i} name={p.name} status={p.status} parts={p.children} ctx={ctx} />
+    if (p.kind === "instance") {
+      return (
+        <InstanceCard
+          key={`${p.instanceKey}-${i}`}
+          instanceKey={p.instanceKey}
+          canonicalType={p.canonicalType}
+          displayName={p.displayName}
+          ordinal={p.ordinal}
+          status={p.status}
+          parts={p.children}
+          ctx={ctx}
+        />
+      )
     }
     const author = p.author ?? "main"
     const isLast = i === parts.length - 1
+    // Planner task lists: when text is authored by the planner subagent AND
+    // parses cleanly as `[{q, tool}, …]`, swap the raw JSON for a card grid.
+    // Strictly gated on `author === "planner"` so other subagents (e.g.
+    // specialist) that may also emit structured payloads aren't hijacked.
+    if (author === "planner") {
+      const plannerTasks = parsePlannerTasks(p.text)
+      if (plannerTasks) {
+        return (
+          <div key={i} className={`agent-text agent-text--planner${ctx.faded ? " faded" : ""}`}>
+            <span className="agent-text__author">planner</span>
+            <PlannerCards tasks={plannerTasks} />
+          </div>
+        )
+      }
+    }
     return (
       <div key={i} className={`agent-text agent-text--${author}${ctx.faded ? " faded" : ""}`}>
         {author !== "main" && <span className="agent-text__author">{author}</span>}
@@ -340,7 +485,7 @@ function AgentMessage({ m }: { m: ChatMessage }) {
           m.streaming &&
           (!lastPart ||
             (lastPart.kind === "tool" && !lastPart.tool.running) ||
-            (lastPart.kind === "subagent" && lastPart.status === "done"))
+            (lastPart.kind === "instance" && lastPart.status === "done"))
         const ctx: RenderCtx = { streaming: m.streaming, fresh: m.fresh, faded: m.faded }
         return (
           <>
@@ -480,11 +625,11 @@ function lastTimerAnchor(parts: AgentTurn["parts"]): number {
   for (let i = parts.length - 1; i >= 0; i -= 1) {
     const p = parts[i]
     if (p.kind === "tool") return p.tool.startedAt
-    if (p.kind === "subagent") {
+    if (p.kind === "instance") {
       const nested = lastTimerAnchor(p.children)
       // children may be empty — only return if the recursive walk found a tool
       // (otherwise it returned Date.now() which would shadow earlier siblings).
-      if (p.children.some((c) => c.kind === "tool" || c.kind === "subagent")) {
+      if (p.children.some((c) => c.kind === "tool" || c.kind === "instance")) {
         return nested
       }
     }
@@ -575,7 +720,8 @@ export function Agent({
       <div className="agent-stage">
         <aside className={`rail${showRail ? "" : " hidden"}`}>
           {NODES.map((n, i) => {
-            const st = timeline[n.k]
+            const node = timeline[n.k]
+            const st = node.status
             return (
               <span key={n.k} style={{ display: "contents" }}>
                 <div
@@ -583,8 +729,16 @@ export function Agent({
                 >
                   <span className="rail-ic">
                     <Icon name={n.ic} size={14} />
-                    <span className="lab">{n.lab}</span>
+                    <span className="lab">
+                      {n.lab}
+                      {node.count > 1 ? ` ×${node.count}` : ""}
+                    </span>
                   </span>
+                  {node.count > 1 && (
+                    <span className="rail-count" title={`${node.count} dispatches`}>
+                      {node.count}
+                    </span>
+                  )}
                 </div>
                 {i < NODES.length - 1 && (
                   <span className={`rail-link${st === "done" ? " done" : ""}`} />

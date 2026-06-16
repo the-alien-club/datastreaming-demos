@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Timeline } from "@/components/panels/agent"
+import type { AgentInstanceInfo } from "@/lib/chat-messages"
 import type { CostBreakdownPayload } from "@/lib/mode-a/run"
 import { runModeA } from "@/lib/mode-a/run"
 import { runModeB } from "@/lib/mode-b/run"
@@ -20,7 +21,11 @@ import { usePricing } from "./use-pricing"
 
 const ROY_HIST_LEN = 32
 const MAX_TAPE_BUFFER = 12
-const DONE3 = { planner: "done", specialist: "done", critic: "done" } as const
+const DONE3: Timeline = {
+  planner: { status: "done", count: 0 },
+  specialist: { status: "done", count: 0 },
+  critic: { status: "done", count: 0 },
+}
 
 export interface AgentTool {
   /** SDK tool_use_id; lets us find this entry when the tool result lands. */
@@ -37,24 +42,35 @@ export interface AgentTool {
 }
 
 /**
- * Sub-roles emitted by the platform inside one Mode A turn. The orchestrator
- * (MAIN) dispatches three named subagents in sequence. Mode B has no
- * subagents — its text is always authored by "main".
+ * Canonical agent types the renderer styles natively. Anything else falls
+ * through to `"other"` and renders with the generic card style.
  */
-export type AgentAuthor = "main" | "planner" | "specialist" | "critic"
+export type AgentType = "main" | "planner" | "specialist" | "critic" | "other"
+/** Back-compat alias for callers that still think in role terms. */
+export type AgentAuthor = AgentType
 
 /**
  * Ordered slices of an agent's turn. Rendered in the order they were
  * appended so tool calls and prose interleave faithfully (text, tool, text,
  * tool, tool, text, …) rather than being grouped by kind.
+ *
+ * Each per-dispatch subagent is its own `instance` block — two parallel
+ * specialist dispatches give two cards, each accumulating only its own
+ * stream events. This is what keeps the cards visually clean when the
+ * workflow fans out 4 specialists in parallel and they all stream tool calls
+ * at the same time.
  */
 export type AgentPart =
   | { kind: "text"; text: string; author?: AgentAuthor }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; tool: AgentTool }
   | {
-      kind: "subagent"
-      name: AgentAuthor
+      kind: "instance"
+      instanceKey: string
+      agentType: string
+      canonicalType: AgentType
+      displayName: string
+      ordinal: number
       status: "running" | "done"
       children: AgentPart[]
     }
@@ -201,7 +217,7 @@ const appendTextDelta = (parts: AgentPart[], delta: string): AgentPart[] =>
 
 /**
  * Append-or-coalesce a text delta inside a `parts` array (without descending
- * into nested subagent blocks). If the last sibling is a text part by the
+ * into nested instance blocks). If the last sibling is a text part by the
  * same author, append to it; otherwise open a fresh author-labeled text part.
  */
 function appendTextDeltaSiblings(
@@ -217,97 +233,86 @@ function appendTextDeltaSiblings(
 }
 
 /**
- * Find the existing block for `role` and apply `mutator` to its children;
- * if no block exists, create one at the end of `parts` with the mutator's
- * output as its only contents. Used to enforce "one block per role" —
- * Mode A's orchestrator activates the same subagent many times per turn,
- * but visually we collapse them into a single Planner / Specialist / Critic
- * container that accumulates everything that role produces.
+ * Find the existing instance block by `instanceKey` and apply `mutator` to
+ * its children; if no block exists, create one at the end of `parts`. Per
+ * design, each per-dispatch instance gets its own card — two parallel
+ * specialist dispatches with different dispatch_ids produce two separate
+ * blocks so their streams never collide.
  */
-function routeIntoRoleBlock(
+function routeIntoInstanceBlock(
   parts: AgentPart[],
-  role: AgentAuthor,
+  info: AgentInstanceInfo,
+  ordinal: number,
   mutator: (siblings: AgentPart[]) => AgentPart[],
 ): AgentPart[] {
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]
-    if (p.kind === "subagent" && p.name === role) {
+    if (p.kind === "instance" && p.instanceKey === info.instanceKey) {
       const next = parts.slice()
       next[i] = { ...p, children: mutator(p.children) }
       return next
     }
   }
-  return [...parts, { kind: "subagent", name: role, status: "running", children: mutator([]) }]
+  return [
+    ...parts,
+    {
+      kind: "instance",
+      instanceKey: info.instanceKey,
+      agentType: info.agentType,
+      canonicalType: info.canonicalType,
+      displayName: info.displayName,
+      ordinal,
+      status: "running",
+      children: mutator([]),
+    },
+  ]
 }
 
 /**
- * Append a text delta authored by `author`.
+ * Append a text delta into the right container.
  *
- * - `main` text is the orchestrator's prose (inter-subagent commentary, final
- *   synthesis). Lands at the root.
- * - Any other author routes to that role's block (find-or-create).
+ * - `instance === null` → MAIN: lands at the root. MAIN text is the
+ *   orchestrator's narration (inter-dispatch commentary, final synthesis).
+ * - Otherwise: routes into the matching per-dispatch instance block,
+ *   creating it on first sight.
  *
- * Same-author consecutive text-deltas coalesce into one text part inside the
- * target container — the platform streams text one word at a time and a
- * naïve append would produce hundreds of single-word `<div>`s.
+ * Same-author consecutive deltas coalesce into one text part — the platform
+ * streams text one word at a time and a naïve append would produce hundreds
+ * of single-word `<div>`s.
  */
 function appendAuthorTextDelta(
   parts: AgentPart[],
-  author: AgentAuthor,
+  instance: AgentInstanceInfo | null,
+  ordinal: number,
   delta: string,
 ): AgentPart[] {
-  if (author === "main") {
-    // MAIN speaking implies all subagents are done (the orchestrator only
-    // narrates between or after subagent runs).
-    const settled = closeAllOpenSubagentBanners(parts)
-    return appendTextDeltaSiblings(settled, author, delta)
+  if (instance === null) {
+    return appendTextDeltaSiblings(parts, "main", delta)
   }
-  // Route into the role's block. Also flip status so THIS role is "running"
-  // and the others are "done" — text-deltas are the most reliable signal of
-  // who's currently speaking, since the platform's data-subagent events are
-  // noisy and sometimes arrive out of order relative to text-start.
-  const routed = routeIntoRoleBlock(parts, author, (siblings) =>
-    appendTextDeltaSiblings(siblings, author, delta),
+  return routeIntoInstanceBlock(parts, instance, ordinal, (siblings) =>
+    appendTextDeltaSiblings(siblings, instance.canonicalType, delta),
   )
-  return markRoleActive(routed, author)
 }
 
 /**
- * Append a non-text part (tool card) to a specific role's block. The author
- * is derived server-side from the platform's function_call item id (see
- * `_toolCallAuthor` in responses_stream.ts). Falls back to the most recently
- * active subagent role if author is unknown — that handles Mode B where tool
- * cards land at root because no subagent blocks exist.
+ * Append a non-text part (tool card) into a specific instance's block. When
+ * `instance` is null the card lands at root (MAIN-dispatched tool, or Mode B
+ * where instances don't exist at all).
  */
-function appendIntoRoleBlock(
+function appendIntoInstanceBlock(
   parts: AgentPart[],
-  role: AgentAuthor,
+  instance: AgentInstanceInfo,
+  ordinal: number,
   addition: AgentPart,
 ): AgentPart[] {
-  return routeIntoRoleBlock(parts, role, (siblings) => [...siblings, addition])
+  return routeIntoInstanceBlock(parts, instance, ordinal, (siblings) => [...siblings, addition])
 }
 
-/** Mark the matching role block as `running`, all others as `done`. Called
- * each time the platform announces a new active subagent. */
-function markRoleActive(parts: AgentPart[], activeRole: AgentAuthor): AgentPart[] {
+/** Settle every still-running instance block. Final cleanup at stream end. */
+function closeAllOpenInstances(parts: AgentPart[]): AgentPart[] {
   let mutated = false
   const next = parts.map((p) => {
-    if (p.kind !== "subagent") return p
-    const desired: "running" | "done" = p.name === activeRole ? "running" : "done"
-    if (p.status !== desired) {
-      mutated = true
-      return { ...p, status: desired }
-    }
-    return p
-  })
-  return mutated ? next : parts
-}
-
-/** Settle every still-running subagent block. Final cleanup at stream end. */
-function closeAllOpenSubagentBanners(parts: AgentPart[]): AgentPart[] {
-  let mutated = false
-  const next = parts.map((p) => {
-    if (p.kind === "subagent" && p.status === "running") {
+    if (p.kind === "instance" && p.status === "running") {
       mutated = true
       return { ...p, status: "done" as const }
     }
@@ -316,12 +321,19 @@ function closeAllOpenSubagentBanners(parts: AgentPart[]): AgentPart[] {
   return mutated ? next : parts
 }
 
-/** Concatenate every text part of an assistant turn into one string. */
+/** Concatenate every text part of an assistant turn into one string,
+ * descending into instance children so per-dispatch text isn't lost. Used
+ * for the conversation memo + Mode B history threading. */
 function joinAgentText(parts: AgentPart[]): string {
-  return parts
-    .filter((p): p is Extract<AgentPart, { kind: "text" }> => p.kind === "text")
-    .map((p) => p.text)
-    .join("\n\n")
+  const lines: string[] = []
+  const walk = (xs: AgentPart[]): void => {
+    for (const p of xs) {
+      if (p.kind === "text") lines.push(p.text)
+      else if (p.kind === "instance") walk(p.children)
+    }
+  }
+  walk(parts)
+  return lines.join("\n\n")
 }
 
 /**
@@ -377,7 +389,7 @@ function updateToolPart(
     if (p.kind === "tool" && p.tool.toolUseId === toolUseId) {
       return { kind: "tool", tool: updater(p.tool) }
     }
-    if (p.kind === "subagent") {
+    if (p.kind === "instance") {
       return { ...p, children: updateToolPart(p.children, toolUseId, updater) }
     }
     return p
@@ -507,6 +519,7 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
       tool: formatTapeTool(event.toolName, event.args),
       meta: formatTapeMeta(event.tokensEstimate, 0, event.attributionLabel),
       fresh: true,
+      attributionKey: event.attributionKey,
     }
     window.setTimeout(() => {
       setFeed((prev) =>
@@ -526,7 +539,32 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
     // still patch the row (so it stops showing the dispatch-time "no price ·
     // 0 hits" forever) but render "error" instead of fake hit counts, and
     // contribute nothing to counters / attribution.
+    //
+    // Mode A's emitCostBreakdownRows fires synthetic tool-results with
+    // `toolUseId="brick:<id>"` that never match any real tape row by uid —
+    // their job is to deliver the platform-truth royalty for an attribution
+    // bucket *after* per-call rows already settled at €0. Detect the brick:
+    // prefix and distribute the brick total evenly across every row sharing
+    // its attributionKey, so the live log shows €0.0100 per call instead of
+    // "no price" for connector calls that were actually billed.
     setFeed((prev) => {
+      if (event.toolUseId?.startsWith("brick:")) {
+        const key = event.attributionRows[0]?.attributionKey
+        if (!key || event.hits <= 0) return prev
+        // Per-call price = brick.cost_eur / brick.call_count (the platform's
+        // unit_price_cents / 100, in the integer-cent common case). Do NOT
+        // divide by the client-side row count — when several bricks share
+        // an attributionKey (e.g. multiple endpoints on one connector_id),
+        // each brick would re-divide against every matching row and produce
+        // fractional cents like €0.0025 instead of the actual €0.0100.
+        const perCall = event.royaltyEur / event.hits
+        const perCallLabel = perCall > 0 ? `€${perCall.toFixed(4)}` : "no price"
+        return prev.map((r) =>
+          r.attributionKey === key
+            ? { ...r, meta: r.meta.replace(/€\d+\.\d+|no price/, perCallLabel) }
+            : r,
+        )
+      }
       const meta = event.isError
         ? formatTapeMeta(0, 0, `${event.toolName} · error`)
         : (() => {
@@ -658,10 +696,14 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
       args: Record<string, unknown> | null,
       toolUseId: string | null,
       agentUid: number,
-      /** Mode A: subagent role that issued the call (decoded server-side from
-       * the function_call item id). Mode B passes `null` — tool cards land
-       * at the root, no subagent blocks exist there. */
-      author: AgentAuthor | null = null,
+      /** Mode A: the per-dispatch subagent that issued the call. The tool
+       * card nests inside this instance's block. Mode B passes `null` — no
+       * instances exist there, cards live at the root. */
+      instance: AgentInstanceInfo | null = null,
+      /** 1-based ordinal of this instance within its canonicalType (e.g.
+       * `2` for the second specialist dispatch). Forwarded to the renderer
+       * so it can show `Specialist #2` when more than one is open. */
+      instanceOrdinal: number = 1,
     ) => {
       const sources = sourcesRef.current
       const source = resolveToolSource(sources, toolName)
@@ -728,11 +770,13 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
       setAgentMessage(agentUid, (m) => ({
         ...m,
         fresh: true,
-        // Mode A: nest the tool card inside the issuing subagent's role block
+        // Mode A: nest the tool card inside the issuing per-dispatch instance
         // (Specialist in practice — Planner doesn't dispatch tools). Mode B:
-        // author is null, tool card sits at the root.
+        // instance is null, tool card sits at the root.
         parts:
-          author === null ? [...m.parts, toolPart] : appendIntoRoleBlock(m.parts, author, toolPart),
+          instance === null
+            ? [...m.parts, toolPart]
+            : appendIntoInstanceBlock(m.parts, instance, instanceOrdinal, toolPart),
       }))
     },
     [events, setAgentMessage],
@@ -1098,59 +1142,104 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
       console.log(
         `[mode-a hook] ▶ runModeATurn agentUid=${agentUid} previousResponseId=${previousResponseId ?? "—"}`,
       )
-      // Per-author text-delta byte counter so the end-of-turn summary shows
-      // who actually spoke how much.
-      const textBytesByAuthor: Record<string, number> = {}
+      // Per-canonicalType text byte counter for the end-of-turn summary.
+      const textBytesByType: Record<string, number> = {}
       let toolCallCount = 0
       let toolResultCount = 0
-      let subagentStarts = 0
-      let subagentEnds = 0
+      let instanceCount = 0
+
+      // Per-canonicalType counts for the rail badges + per-instance ordinals
+      // (e.g. "Specialist #2" when a second specialist dispatch lands).
+      const ordinalByInstance = new Map<string, number>()
+      const countByCanonical: Record<AgentType, number> = {
+        main: 0,
+        planner: 0,
+        specialist: 0,
+        critic: 0,
+        other: 0,
+      }
+
+      const ordinalFor = (info: AgentInstanceInfo): number => {
+        const existing = ordinalByInstance.get(info.instanceKey)
+        if (existing !== undefined) return existing
+        countByCanonical[info.canonicalType] = (countByCanonical[info.canonicalType] ?? 0) + 1
+        const ord = countByCanonical[info.canonicalType]
+        ordinalByInstance.set(info.instanceKey, ord)
+        return ord
+      }
+
+      const refreshTimeline = (): void => {
+        // Rail shows the highest canonicalType that has at least one
+        // dispatch, with a count badge. Workflows that loop (planner again
+        // after critic) cycle the active node back to Planner.
+        if (countByCanonical.critic > 0) {
+          setTimeline({
+            planner: { status: "done", count: countByCanonical.planner },
+            specialist: { status: "done", count: countByCanonical.specialist },
+            critic: { status: "exec", count: countByCanonical.critic },
+          })
+        } else if (countByCanonical.specialist > 0) {
+          setTimeline({
+            planner: { status: "done", count: countByCanonical.planner },
+            specialist: { status: "exec", count: countByCanonical.specialist },
+            critic: { status: "pending", count: 0 },
+          })
+        } else if (countByCanonical.planner > 0) {
+          setTimeline({
+            planner: { status: "exec", count: countByCanonical.planner },
+            specialist: { status: "pending", count: 0 },
+            critic: { status: "pending", count: 0 },
+          })
+        }
+      }
+
       try {
         await runModeA({
           query,
           cancelRef,
           previousResponseId: previousResponseId ?? undefined,
           callbacks: {
-            onAuthorText: (author, delta) => {
-              textBytesByAuthor[author] = (textBytesByAuthor[author] ?? 0) + delta.length
-              // Append to the latest text part if same author, else open a
-              // new author-labeled text part. Subagent text routes into the
-              // role block via appendAuthorTextDelta; MAIN text lands at
-              // root.
+            onAgentRegistry: (entries) => {
+              console.log(
+                `[mode-a hook] onAgentRegistry entries=${entries.length} (${entries.map((e) => e.name).join(", ")})`,
+              )
+            },
+            onInstance: (info) => {
+              instanceCount += 1
+              const ord = ordinalFor(info)
+              console.log(
+                `[mode-a hook] onInstance #${instanceCount} key=${info.instanceKey} canon=${info.canonicalType} ord=${ord}`,
+              )
+              // Pre-create the empty card so the user sees the box appear
+              // immediately, before its first text-delta. routeIntoInstanceBlock
+              // is a no-op when the instance already exists.
               setAgentMessage(agentUid, (m) => ({
                 ...m,
-                parts: appendAuthorTextDelta(m.parts, author, delta),
+                parts: routeIntoInstanceBlock(m.parts, info, ord, (s) => s),
+                streaming: true,
+              }))
+              refreshTimeline()
+            },
+            onAuthorText: (delta, instance) => {
+              const bucket = instance?.canonicalType ?? "main"
+              textBytesByType[bucket] = (textBytesByType[bucket] ?? 0) + delta.length
+              const ord = instance ? ordinalFor(instance) : 0
+              setAgentMessage(agentUid, (m) => ({
+                ...m,
+                parts: appendAuthorTextDelta(m.parts, instance, ord, delta),
                 streaming: true,
                 faded: false,
               }))
+              if (instance) refreshTimeline()
             },
-            onSubagentStart: (name) => {
-              subagentStarts += 1
-              console.log(`[mode-a hook] onSubagentStart name=${name}`)
-              setAgentMessage(agentUid, (m) => ({
-                ...m,
-                parts: markRoleActive(
-                  routeIntoRoleBlock(m.parts, name, (siblings) => siblings),
-                  name,
-                ),
-                streaming: true,
-              }))
-            },
-            onSubagentEnd: () => {
-              subagentEnds += 1
-              // No-op. The platform fires data-subagent-end at the boundary of
-              // every internal orchestrator cycle; we don't act on each one
-              // because we collapse repeats into a single role block. Final
-              // cleanup happens in onStreamEnd.
-            },
-            onToolCall: (toolUseId, toolName, args, author) => {
+            onToolCall: (toolUseId, toolName, args, instance) => {
               toolCallCount += 1
+              const ord = instance ? ordinalFor(instance) : 0
               console.log(
-                `[mode-a hook] onToolCall #${toolCallCount} tool=${toolName} id=${toolUseId} author=${author ?? "—"}`,
+                `[mode-a hook] onToolCall #${toolCallCount} tool=${toolName} id=${toolUseId} instance=${instance?.instanceKey ?? "—"}`,
               )
-              // Tool calls always come from Specialist in the agentic prompt,
-              // but we route by the server-decoded author regardless.
-              dispatchToolCall(toolName, args, toolUseId, agentUid, author)
+              dispatchToolCall(toolName, args, toolUseId, agentUid, instance, ord)
+              if (instance) refreshTimeline()
             },
             onToolResult: (toolUseId, fallbackName) => {
               toolResultCount += 1
@@ -1175,47 +1264,26 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
               )
               emitCostBreakdownRows(jobId, breakdown)
             },
-            onSubagentSeen: (() => {
-              const ranks: Record<string, number> = { planner: 0, specialist: 1, critic: 2 }
-              let stage = -1
-              return (name: string) => {
-                const next = ranks[name]
-                if (next === undefined) return
-                if (next <= stage) return
-                const prevStage = stage
-                stage = next
-                console.log(
-                  `[mode-a hook] onSubagentSeen rail advance ${prevStage}→${next} (${name})`,
-                )
-                if (name === "planner") {
-                  setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
-                } else if (name === "specialist") {
-                  setTimeline({ planner: "done", specialist: "exec", critic: "pending" })
-                } else {
-                  setTimeline({ planner: "done", specialist: "done", critic: "exec" })
-                }
-              }
-            })(),
             onFinish: () => {
               console.log(`[mode-a hook] onFinish (clean) — flipping streaming=false + DONE3 rail`)
               setAgentMessage(agentUid, (m) => ({
                 ...m,
-                parts: closeAllOpenSubagentBanners(m.parts),
+                parts: closeAllOpenInstances(m.parts),
                 streaming: false,
               }))
               setTimeline({ ...DONE3 })
             },
             onStreamEnd: () => {
-              const bytes = Object.entries(textBytesByAuthor)
+              const bytes = Object.entries(textBytesByType)
                 .sort(([, a], [, b]) => b - a)
                 .map(([k, v]) => `${k}=${v}b`)
                 .join(" ")
               console.log(
-                `[mode-a hook] ◀ onStreamEnd — text-by-author: ${bytes || "none"} | tools=${toolCallCount}/${toolResultCount} (call/result) | subagents=${subagentStarts}/${subagentEnds} (start/end)`,
+                `[mode-a hook] ◀ onStreamEnd — text-by-type: ${bytes || "none"} | tools=${toolCallCount}/${toolResultCount} (call/result) | instances=${instanceCount} | counts=p${countByCanonical.planner}/s${countByCanonical.specialist}/c${countByCanonical.critic}`,
               )
               setAgentMessage(agentUid, (m) => ({
                 ...m,
-                parts: closeAllOpenSubagentBanners(m.parts),
+                parts: closeAllOpenInstances(m.parts),
                 streaming: false,
               }))
             },
@@ -1334,7 +1402,11 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
       const agentUid = addAgentMessage(agentic ? "DeepAgent" : "Claude")
       if (agentic) {
         setRailActive(true)
-        setTimeline({ planner: "exec", specialist: "pending", critic: "pending" })
+        setTimeline({
+          planner: { status: "exec", count: 0 },
+          specialist: { status: "pending", count: 0 },
+          critic: { status: "pending", count: 0 },
+        })
       }
       try {
         if (agentic) await runModeATurn(query, agentUid)

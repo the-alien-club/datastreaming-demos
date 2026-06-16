@@ -10,12 +10,28 @@
 //     they just show the raw agent id as the name)
 //   - TTFT diagnostic logging
 //
-// The four platform-specific data parts that DO matter for the cross-panel
-// choreography:
-//   - data-toolCall      — fires the ripple (datasources / APIs / counters /
-//                          tape / attribution). Carries { id, name, args }.
-//   - data-subagent      — drives the rail node panel in Agentic flow.
-//   - data-subagent-end  — closes the panel back to MAIN.
+// The platform-specific data parts that drive the cross-panel choreography:
+//   - data-toolCall       — fires the ripple (datasources / APIs / counters /
+//                           tape / attribution). Carries the dispatching
+//                           subagent's *instanceKey* so the UI nests the card
+//                           under the right per-dispatch card.
+//   - data-toolResult     — settle event paired with data-toolCall.
+//   - data-agentRegistry  — emitted once on response.created with the parsed
+//                           x_alien_agent_registry list (display names + kinds).
+//                           Lets the client label each instance.
+//   - data-instance       — emitted the first time a new instanceKey is seen.
+//                           Carries { instanceKey, agentType, displayName,
+//                           kind, parentId } so the UI can render a dedicated
+//                           card for every subagent dispatch (per-dispatch
+//                           granularity, parallel-aware).
+//   - data-jobId / data-responseId / data-costBreakdown — unchanged, used by
+//                           observability and multi-turn threading.
+//
+// Item-id grammar (Responses-API §4 spec, agent_event_v1 §3.10):
+//   agent:<type>::<kind>_<n>                       # legacy / single-dispatch
+//   agent:<type>#<dispatchId>::<kind>_<n>          # per-dispatch (NEW)
+// `#` is reserved — no configured subagent name contains it. Reading just the
+// type and ignoring the middle segment is a strict subset of the new format.
 
 import { createOpenAI } from "@ai-sdk/openai"
 import { type createUIMessageStream, smoothStream, streamText } from "ai"
@@ -36,6 +52,53 @@ interface AgentRegistryEntry {
   kind: "main" | "subagent" | "tool"
   name: string
   parent_id: string | null
+}
+
+/**
+ * Parsed composite item-id. Returns `null` for ids that don't match the
+ * platform's `agent:<type>[#<dispatchId>]::<kind>_<n>` grammar — those land at
+ * the root of the message in the UI (defensive: don't crash on garbage).
+ *
+ * `instanceKey` is the canonical grouping key:
+ *   - `MAIN` for the orchestrator (no dispatch — there's only one)
+ *   - `<type>#<dispatchId>` for every subagent dispatch (parallel-aware)
+ *   - `<type>` as a fallback for legacy ids without a dispatch_id segment
+ */
+export interface ParsedAgentItemId {
+  agentType: string
+  dispatchId: string | null
+  instanceKey: string
+  kind: string
+  ordinal: number
+}
+
+function parseAgentItemId(itemId: string | undefined | null): ParsedAgentItemId | null {
+  if (!itemId) return null
+  const m = itemId.match(/^agent:([^#:]+)(?:#([^:]+))?::([^_]+)_(\d+)$/)
+  if (!m) return null
+  const [, agentType, dispatchId, kind, ordinalStr] = m
+  const instanceKey = dispatchId ? `${agentType}#${dispatchId}` : agentType
+  return {
+    agentType,
+    dispatchId: dispatchId ?? null,
+    instanceKey,
+    kind,
+    ordinal: Number(ordinalStr),
+  }
+}
+
+/**
+ * Reduce a registry-id (`subagent-planner`, `MAIN`, `subagent-specialist`) to
+ * the four agent types the UI knows how to render. Anything else is rendered
+ * as a generic "subagent" using its displayName.
+ */
+function canonicalAgentType(
+  rawType: string,
+): "main" | "planner" | "specialist" | "critic" | "other" {
+  if (rawType === "MAIN") return "main"
+  const bare = rawType.replace(/^subagent-/, "")
+  if (bare === "planner" || bare === "specialist" || bare === "critic") return bare
+  return "other"
 }
 
 interface ResponseCreatedPayload {
@@ -127,9 +190,7 @@ export async function runPlatformResponse(
     experimental_transform: smoothStream({ delayInMs: 20, chunking: "word" }),
     // Thread multi-turn memory on the platform side. When omitted the platform
     // starts a fresh agent runtime session.
-    ...(previousResponseId
-      ? { providerOptions: { openai: { previousResponseId } } }
-      : {}),
+    ...(previousResponseId ? { providerOptions: { openai: { previousResponseId } } } : {}),
   })
 
   const sidecar = new SidecarState(writer)
@@ -245,7 +306,7 @@ export async function runPlatformResponse(
         case "error":
           console.error(
             `[mode-a srv] error part:`,
-            part.error instanceof Error ? part.error.stack ?? part.error.message : part.error,
+            part.error instanceof Error ? (part.error.stack ?? part.error.message) : part.error,
           )
           writer.write({
             type: "error",
@@ -265,7 +326,7 @@ export async function runPlatformResponse(
   } catch (err) {
     console.error(
       `[mode-a srv] EXCEPTION in fullStream loop after ${ms(tStart)}:`,
-      err instanceof Error ? err.stack ?? err.message : err,
+      err instanceof Error ? (err.stack ?? err.message) : err,
     )
     writer.write({
       type: "error",
@@ -291,7 +352,6 @@ class SidecarState {
   private _ok = false
   private _fullText = ""
   private _rootAgentId: string | null = null
-  private _activeSubagentId: string | null = null
   private readonly _registry = new Map<string, AgentRegistryEntry>()
   // Platform emits response.output_item.done for function_call items BEFORE
   // the AI SDK's fullStream surfaces the synthetic `tool-call` part for the
@@ -300,17 +360,23 @@ class SidecarState {
   // settle. We hold completions here and flush them when handleToolCall fires.
   private readonly _emittedCallIds = new Set<string>()
   private readonly _pendingOutputs = new Map<string, OutputItem>()
-  // Platform-side function_call items carry the dispatching subagent in
-  // their item.id (e.g. `agent:subagent-specialist::fc_7`). The AI SDK
-  // `tool-call` fullStream part doesn't expose that — it only carries the
-  // call_id. We snapshot the author at output_item.added time so handleToolCall
-  // can tag the outbound `data-toolCall` with the right subagent.
-  private readonly _toolCallAuthor = new Map<string, string>()
+  // Function_call items' item.id carries the dispatching subagent's full
+  // composite (`agent:subagent-specialist#019ec...::fc_14`). The AI SDK
+  // `tool-call` fullStream part only carries the call_id, so we snapshot the
+  // parsed item-id at output_item.added time and tag the outbound
+  // data-toolCall / data-toolResult with the right *instanceKey*.
+  private readonly _toolCallInstance = new Map<
+    string,
+    { instanceKey: string; agentType: string; displayName: string }
+  >()
+  // Instances we've already announced via data-instance. Keyed by instanceKey
+  // so two parallel specialists with the same agentType but different
+  // dispatch_ids each get their own announcement.
+  private readonly _announcedInstances = new Set<string>()
   // Per-event-type counters across the whole turn. Dumped from `result()` so
   // the dev log has a final tally next to the AI SDK fullStream tally.
   private readonly _rawCounts = new Map<string, number>()
-  private _subagentEmits = 0
-  private _subagentEndEmits = 0
+  private _instanceEmits = 0
 
   constructor(writer: StreamWriter) {
     this._writer = writer
@@ -372,15 +438,18 @@ class SidecarState {
         console.log(
           `[mode-a raw] output_item.added id=${item?.id} type=${item?.type} call_id=${item?.call_id ?? "—"} name=${item?.name ?? "—"}`,
         )
-        this._maybeAnnounceSubagent(item?.id, item?.type)
-        // Snapshot author for function_call items so handleToolCall can tag
-        // the outbound data-toolCall with the right subagent.
+        // Announce a new instance the first time we see any output for a
+        // previously-unseen instanceKey. Works for both message and
+        // function_call items — whichever lands first wins.
+        this._maybeAnnounceInstance(item?.id)
+        // Snapshot instance info for function_call items so handleToolCall
+        // can tag the outbound data-toolCall with the right per-dispatch card.
         if (item?.type === "function_call" && typeof item.call_id === "string") {
-          const author = this._decodeAuthorFromItemId(item.id)
-          if (author) {
-            this._toolCallAuthor.set(item.call_id, author)
+          const info = this._resolveInstanceFromItemId(item.id)
+          if (info) {
+            this._toolCallInstance.set(item.call_id, info)
             console.log(
-              `[mode-a raw]   ↳ tracked toolCall ${item.call_id} author=${author}`,
+              `[mode-a raw]   ↳ tracked toolCall ${item.call_id} instance=${info.instanceKey} (${info.displayName})`,
             )
           }
         }
@@ -442,7 +511,9 @@ class SidecarState {
         break
       }
       case "response.incomplete":
-        console.warn(`[mode-a raw] response.incomplete payload=${JSON.stringify(payload).slice(0, 400)}`)
+        console.warn(
+          `[mode-a raw] response.incomplete payload=${JSON.stringify(payload).slice(0, 400)}`,
+        )
         break
       default:
         console.log(`[mode-a raw] (uncategorized) ${eventType}`)
@@ -451,13 +522,26 @@ class SidecarState {
   }
 
   handleToolCall(toolCallId: string, toolName: string, args: unknown): void {
-    const author = this._toolCallAuthor.get(toolCallId) ?? null
+    const inst = this._toolCallInstance.get(toolCallId) ?? null
     console.log(
-      `[mode-a srv] → data-toolCall id=${toolCallId} tool=${toolName} author=${author ?? "—"}`,
+      `[mode-a srv] → data-toolCall id=${toolCallId} tool=${toolName} instance=${inst?.instanceKey ?? "—"}`,
     )
     this._writer.write({
       type: "data-toolCall",
-      data: { id: toolCallId, name: toolName, args, author },
+      data: {
+        id: toolCallId,
+        name: toolName,
+        args,
+        // Per-dispatch attribution. `instanceKey` is the grouping key the
+        // client uses to nest the tool card under the right subagent card.
+        // `agentType` is the canonical class for styling (planner/specialist/
+        // critic/main/other). `displayName` is the human label from the
+        // platform registry (e.g. "subagent-specialist", or whatever the
+        // workflow author named it).
+        instanceKey: inst?.instanceKey ?? null,
+        agentType: inst?.agentType ?? null,
+        displayName: inst?.displayName ?? null,
+      },
     } as WriterEvent)
     this._emittedCallIds.add(toolCallId)
     const pending = this._pendingOutputs.get(toolCallId)
@@ -470,9 +554,9 @@ class SidecarState {
 
   private _emitToolOutput(item: OutputItem): void {
     if (typeof item.call_id !== "string") return
-    const author = this._toolCallAuthor.get(item.call_id) ?? null
+    const inst = this._toolCallInstance.get(item.call_id) ?? null
     console.log(
-      `[mode-a srv] → tool-output-available + data-toolResult id=${item.call_id} status=${item.status ?? "completed"} author=${author ?? "—"}`,
+      `[mode-a srv] → tool-output-available + data-toolResult id=${item.call_id} status=${item.status ?? "completed"} instance=${inst?.instanceKey ?? "—"}`,
     )
     this._writer.write({
       type: "tool-output-available",
@@ -485,18 +569,11 @@ class SidecarState {
         id: item.call_id,
         name: item.name ?? null,
         status: item.status ?? "completed",
-        author,
+        instanceKey: inst?.instanceKey ?? null,
+        agentType: inst?.agentType ?? null,
+        displayName: inst?.displayName ?? null,
       },
     } as WriterEvent)
-  }
-
-  private _decodeAuthorFromItemId(itemId: string | undefined): string | null {
-    if (!itemId) return null
-    const m = itemId.match(/^agent:([^:]+)::/)
-    if (!m) return null
-    const raw = m[1] ?? ""
-    if (raw === "MAIN") return "main"
-    return raw.replace(/^subagent-/, "")
   }
 
   private _emittedJobId: boolean = false
@@ -544,6 +621,7 @@ class SidecarState {
     }
     if (!Array.isArray(parsed)) return
 
+    const entries: AgentRegistryEntry[] = []
     for (const entry of parsed) {
       if (typeof entry !== "object" || entry === null) continue
       const e = entry as Record<string, unknown>
@@ -552,55 +630,75 @@ class SidecarState {
       const kind = e.kind
       if (typeof id !== "string" || typeof name !== "string") continue
       if (kind !== "main" && kind !== "subagent" && kind !== "tool") continue
-      this._registry.set(id, {
+      const item: AgentRegistryEntry = {
         id,
         name,
         kind,
         parent_id: typeof e.parent_id === "string" ? e.parent_id : null,
-      })
-    }
-  }
-
-  private _decodeAgentFromItemId(itemId: string | undefined): string | null {
-    if (!itemId) return null
-    const match = itemId.match(/^agent:([^:]+)::/)
-    return match ? (match[1] ?? null) : null
-  }
-
-  private _maybeAnnounceSubagent(itemId: string | undefined, itemType?: string): void {
-    const agentId = this._decodeAgentFromItemId(itemId)
-    if (!agentId) return
-    if (this._rootAgentId !== null && agentId === this._rootAgentId) {
-      // Tool calls are attributed to MAIN in item IDs even when logically
-      // dispatched by a subagent — only close the fold for message items.
-      if (itemType !== "function_call" && this._activeSubagentId !== null) {
-        console.log(
-          `[mode-a srv] → data-subagent-end (was active: ${this._activeSubagentId}, MAIN took over via ${itemType})`,
-        )
-        this._writer.write({ type: "data-subagent-end", data: {} } as WriterEvent)
-        this._subagentEndEmits += 1
-        this._activeSubagentId = null
       }
-      return
+      this._registry.set(id, item)
+      entries.push(item)
     }
-    if (this._activeSubagentId === agentId) return
+    // Forward the registry to the client once — it carries the human labels
+    // (e.g. "LangGraph", "subagent-specialist") that the per-instance cards
+    // use as titles. The platform truncates this past 512 bytes; when that
+    // happens the per-item composite id is the source of truth for type +
+    // dispatchId, and the client falls back to derived labels.
+    if (entries.length > 0) {
+      console.log(`[mode-a srv] → data-agentRegistry entries=${entries.length}`)
+      this._writer.write({
+        type: "data-agentRegistry",
+        data: { entries },
+      } as WriterEvent)
+    }
+  }
 
-    const entry = this._registry.get(agentId)
-    const displayName = entry?.name ?? agentId
+  /**
+   * Resolve `{instanceKey, agentType, displayName}` from a composite item id.
+   * Returns `null` for unparseable ids or for MAIN (which the UI renders at
+   * the root rather than as a per-instance card).
+   */
+  private _resolveInstanceFromItemId(
+    itemId: string | undefined,
+  ): { instanceKey: string; agentType: string; displayName: string } | null {
+    const parsed = parseAgentItemId(itemId)
+    if (!parsed) return null
+    // The registry id (`agentType`) doubles as a key. For MAIN there's no
+    // dispatch_id so instanceKey === "MAIN".
+    const entry = this._registry.get(parsed.agentType)
+    const displayName = entry?.name ?? parsed.agentType
+    return {
+      instanceKey: parsed.instanceKey,
+      agentType: parsed.agentType,
+      displayName,
+    }
+  }
+
+  private _maybeAnnounceInstance(itemId: string | undefined): void {
+    const info = this._resolveInstanceFromItemId(itemId)
+    if (!info) return
+    // MAIN doesn't get its own card — its text and tools sit at the root of
+    // the assistant turn. Subagents (and any future custom kinds) do.
+    if (info.agentType === "MAIN") return
+    if (this._announcedInstances.has(info.instanceKey)) return
+    this._announcedInstances.add(info.instanceKey)
+    const entry = this._registry.get(info.agentType)
+    const canonical = canonicalAgentType(info.agentType)
     console.log(
-      `[mode-a srv] → data-subagent agentId=${agentId} name=${displayName} kind=${entry?.kind ?? "subagent"} (prev active=${this._activeSubagentId ?? "none"})`,
+      `[mode-a srv] → data-instance key=${info.instanceKey} canon=${canonical} name=${info.displayName}`,
     )
     this._writer.write({
-      type: "data-subagent",
+      type: "data-instance",
       data: {
-        agentId,
-        name: displayName,
+        instanceKey: info.instanceKey,
+        agentType: info.agentType,
+        canonicalType: canonical,
+        displayName: info.displayName,
         kind: entry?.kind ?? "subagent",
         parentId: entry?.parent_id ?? null,
       },
     } as WriterEvent)
-    this._subagentEmits += 1
-    this._activeSubagentId = agentId
+    this._instanceEmits += 1
   }
 
   result(): PlatformResponseResult {
@@ -609,17 +707,15 @@ class SidecarState {
       .map(([k, v]) => `${k}=${v}`)
       .join(" ")
     const pendingCount = this._pendingOutputs.size
-    console.log(
-      `[mode-a srv] ─── SidecarState result ──────────────────────`,
-    )
+    console.log(`[mode-a srv] ─── SidecarState result ──────────────────────`)
     console.log(`[mode-a srv]   ok=${this._ok} textLen=${this._fullText.length}`)
     console.log(`[mode-a srv]   responseId=${this._responseId}`)
     console.log(`[mode-a srv]   usage=${this._usage ? JSON.stringify(this._usage) : "—"}`)
     console.log(
-      `[mode-a srv]   subagent emits=${this._subagentEmits} ends=${this._subagentEndEmits}`,
+      `[mode-a srv]   instance announcements=${this._instanceEmits} (unique instanceKeys)`,
     )
     console.log(
-      `[mode-a srv]   tool calls tracked=${this._toolCallAuthor.size} pending outputs=${pendingCount}`,
+      `[mode-a srv]   tool calls tracked=${this._toolCallInstance.size} pending outputs=${pendingCount}`,
     )
     if (pendingCount > 0) {
       console.warn(

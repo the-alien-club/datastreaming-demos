@@ -29,11 +29,44 @@ export interface ToolEntry {
 }
 
 /**
- * Mode A subagent roles. The orchestrator dispatches Planner → Specialist →
- * Critic in sequence. Mode B has no subagents — its text is always authored
- * by "main" implicitly (the field is omitted).
+ * Canonical agent types the renderer styles natively. The platform may
+ * dispatch other custom subagents; those fall through to `"other"` and pick
+ * up the generic styling.
+ *
+ * - `main`        the orchestrator (always exactly one per turn — its text
+ *                 and tools live at the root of the agent message)
+ * - `planner`/`specialist`/`critic`  the three workflow stages in the demo
+ *                 prompt. Multiple *instances* of each may exist within a
+ *                 turn (e.g. one specialist per planner-emitted task).
+ * - `other`       any other configured subagent name — rendered with the
+ *                 generic card style and labeled with `displayName`.
+ *
+ * Kept as an alias `AgentAuthor` for callers that still think in role terms.
  */
-export type AgentAuthor = "main" | "planner" | "specialist" | "critic"
+export type AgentType = "main" | "planner" | "specialist" | "critic" | "other"
+export type AgentAuthor = AgentType
+
+/**
+ * Per-dispatch instance identity. One `agent-instance` part is opened per
+ * unique `instanceKey` the stream surfaces; text and tool cards emitted by
+ * that dispatch nest inside `children`. Two parallel specialists carry
+ * different `instanceKey` values (e.g. `subagent-specialist#aaa…` and
+ * `subagent-specialist#bbb…`) and therefore get separate cards — so the
+ * stream events for each never collide visually.
+ */
+export interface AgentInstanceInfo {
+  /** `<agentType>` or `<agentType>#<dispatchId>` — the grouping key. */
+  instanceKey: string
+  /** Raw registry id from the platform (`MAIN`, `subagent-planner`, …). */
+  agentType: string
+  /** Canonical class used by the renderer for styling + iconography. */
+  canonicalType: AgentType
+  /** Human label from `x_alien_agent_registry` (falls back to `agentType`). */
+  displayName: string
+  /** `subagent` for everything dispatched by an orchestrator; `tool` for MCP
+   *  agents; `main` reserved for the root. */
+  kind: "main" | "subagent" | "tool"
+}
 
 /**
  * An agent turn is a chronological sequence of parts emitted by the model.
@@ -42,22 +75,34 @@ export type AgentAuthor = "main" | "planner" | "specialist" | "critic"
  * appending new parts in the order events arrive. This is the only way to
  * render tool calls and text in the same order the model produced them.
  *
- * Mode A also emits subagent banner parts that mark "the Specialist took
- * over here" inline with text and tool cards.
+ * Mode A interleaves MAIN-level parts (root text / root tool) with
+ * per-dispatch *instance* containers — one for every unique subagent
+ * dispatch surfaced by the stream. Mode B has no instances; its text and
+ * tools sit flat at the root.
  */
 export type AgentPart =
   | { kind: "text"; text: string; author?: AgentAuthor }
   | { kind: "thinking"; text: string }
   | { kind: "tool"; tool: ToolEntry }
   | {
-      kind: "subagent"
-      name: AgentAuthor
+      kind: "instance"
+      /** Stable per-dispatch key. Two specialist dispatches in parallel have
+       *  different instanceKeys → distinct cards. */
+      instanceKey: string
+      /** Canonical class for styling. */
+      canonicalType: AgentType
+      /** Raw registry id; useful as a fallback label and a debug breadcrumb. */
+      agentType: string
+      /** Title shown in the card header. */
+      displayName: string
+      /** Per-type index (1-based). When a workflow runs two planners, the
+       *  second card shows `Planner #2`. Computed at insertion time. */
+      ordinal: number
       status: "running" | "done"
-      /**
-       * Everything streamed between this subagent's `data-subagent` and the
-       * matching `data-subagent-end` nests here. Nesting is one level deep:
-       * the platform never opens a sub-subagent inside an open block.
-       */
+      /** Everything emitted by this dispatch — text, tools, and any nested
+       *  parts in the order they arrived. Nesting is one level deep in this
+       *  workflow (subagents don't open sub-subagents on stream), but the
+       *  shape supports it. */
       children: AgentPart[]
     }
 
