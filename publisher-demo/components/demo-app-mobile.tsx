@@ -4,7 +4,6 @@ import { useRef, useState } from "react"
 import {
   EMPTY_STATE,
   MODEL,
-  SUGGESTIONS,
   useOrchestratorState,
   type OrchestratorState,
 } from "@/hooks/use-orchestrator-state"
@@ -77,7 +76,8 @@ function ConfigDrawer({
  * checkboxes/composer pass through unchanged.
  */
 export function DemoAppMobile() {
-  const s = useOrchestratorState()
+  // Mobile chip cap is tighter — the row truncates over ~50 chars on a phone.
+  const s = useOrchestratorState({ suggestionsLengthHint: 55 })
   const [page, setPage] = useState(1) // 0 Data · 1 Chat · 2 Observability
   const [drawer, setDrawer] = useState(false)
   const [drag, setDrag] = useState(0)
@@ -251,7 +251,8 @@ export function DemoAppMobile() {
               railActive={s.railActive}
               input={s.input}
               pressed={s.pressed}
-              suggestions={SUGGESTIONS[s.mode]}
+              suggestions={s.suggestions}
+              suggestionsStatus={s.suggestionsStatus}
               emptyState={EMPTY_STATE[s.mode]}
               onChip={s.onChip}
               onInput={s.setInput}

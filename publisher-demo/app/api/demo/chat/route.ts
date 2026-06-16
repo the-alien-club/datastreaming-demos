@@ -22,6 +22,13 @@ type Body = {
   mode: "data" | "agentic"
   messages: ChatMessage[]
   model?: string
+  /**
+   * Mode A multi-turn: previous turn's platform `response_id` so the
+   * orchestrator threads the new prompt against the same agent runtime
+   * session (planner/specialist/critic memory + tool history). Omitted on
+   * the first turn or after a reset.
+   */
+  previousResponseId?: string
 }
 
 /**
@@ -49,7 +56,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (body.mode === "agentic") {
-    return streamAgenticTurn(userPrompt, request.signal)
+    return streamAgenticTurn(userPrompt, body.previousResponseId, request.signal)
   }
 
   if (body.mode === "data") {
@@ -142,7 +149,12 @@ function extractUserMessage(messages: ChatMessage[]): string {
   return ""
 }
 
-function streamAgenticTurn(prompt: string, signal: AbortSignal): Response {
+function streamAgenticTurn(
+  prompt: string,
+  previousResponseId: string | undefined,
+  signal: AbortSignal,
+): Response {
+  const tRoute = Date.now()
   // Resolve env eagerly so missing config returns a structured JSON 503
   // instead of a generic 500 from the streaming response. The client uses
   // the 503 as the trigger to fall back to the scripted runner.
@@ -156,6 +168,7 @@ function streamAgenticTurn(prompt: string, signal: AbortSignal): Response {
     oat = env.ADMIN_OAT
     orgId = env.ORG_ID
   } catch (err) {
+    console.error(`[mode-a route] ✗ env missing: ${err instanceof Error ? err.message : err}`)
     return NextResponse.json(
       {
         error: "platform-env-missing",
@@ -167,6 +180,19 @@ function streamAgenticTurn(prompt: string, signal: AbortSignal): Response {
       { status: 503 },
     )
   }
+  console.log(
+    `[mode-a route] ▶ streamAgenticTurn workflow=${workflowId} org=${orgId} promptLen=${prompt.length} previousResponseId=${previousResponseId ?? "—"}`,
+  )
+  console.log(`[mode-a route]   platform=${platformBase}/agent/${workflowId}/responses`)
+  console.log(`[mode-a route]   signal.aborted=${signal.aborted}`)
+  // Observe the abort signal so we know whether the client disconnected
+  // mid-stream — that's a common cause of "platform call ran fine but UI
+  // shows nothing" failures.
+  signal.addEventListener("abort", () => {
+    console.warn(
+      `[mode-a route] ⚠ AbortSignal fired ${Date.now() - tRoute}ms into the turn (client disconnect?)`,
+    )
+  })
 
   const provider = platformProvider({
     baseURL: `${platformBase}/agent/${workflowId}`,
@@ -176,10 +202,30 @@ function streamAgenticTurn(prompt: string, signal: AbortSignal): Response {
 
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
-      await runPlatformResponse({ provider, prompt, writer, signal })
+      try {
+        const r = await runPlatformResponse({
+          provider,
+          prompt,
+          writer,
+          signal,
+          previousResponseId,
+        })
+        console.log(
+          `[mode-a route] ◀ runPlatformResponse returned ok=${r.ok} responseId=${r.responseId} textLen=${r.text.length} elapsed=${Date.now() - tRoute}ms`,
+        )
+      } catch (err) {
+        console.error(
+          `[mode-a route] ✗ runPlatformResponse THREW after ${Date.now() - tRoute}ms:`,
+          err instanceof Error ? err.stack ?? err.message : err,
+        )
+        throw err
+      }
     },
     onError: (error) => {
-      console.error("[mode-a] stream error:", error)
+      console.error(
+        `[mode-a route] ✗ createUIMessageStream onError:`,
+        error instanceof Error ? error.stack ?? error.message : error,
+      )
       return error instanceof Error ? error.message : "Stream error"
     },
   })

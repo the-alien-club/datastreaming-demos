@@ -329,12 +329,17 @@ body {
 .priv-tag {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  color: var(--teal-200);
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--teal-500) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--teal-500) 30%, transparent);
   padding: 1px 7px;
   border-radius: var(--radius-full);
+  color: var(--teal-200);
+  background: color-mix(in srgb, var(--teal-500) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--teal-500) 30%, transparent);
+}
+.priv-tag--private {
+  color: var(--neutral-400);
+  background: color-mix(in srgb, var(--neutral-500) 14%, transparent);
+  border-color: color-mix(in srgb, var(--neutral-500) 30%, transparent);
 }
 .sov {
   display: inline-flex;
@@ -1241,6 +1246,96 @@ body {
   background: color-mix(in srgb, var(--primary) 22%, transparent);
   border-color: color-mix(in srgb, var(--primary) 50%, transparent);
   color: var(--teal-100);
+}
+.sugg-row {
+  min-height: 30px;
+}
+.sugg-row--loading .sugg-skel {
+  display: inline-block;
+  height: 22px;
+  width: 220px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--input) 24%, transparent) 0%,
+    color-mix(in srgb, var(--input) 48%, transparent) 50%,
+    color-mix(in srgb, var(--input) 24%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: sugg-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes sugg-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+/* "Thinking" pill: shown while Haiku regenerates between turns. Rotating word
+   gives feedback that something intentional is happening; pulsing dot reads
+   as ambient progress. */
+.sugg-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--neutral-300);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  padding: 5px 13px;
+  border-radius: var(--radius-full);
+  animation: sugg-thinking-in 0.24s ease-out;
+}
+.sugg-thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal-200);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--teal-200) 60%, transparent);
+  animation: sugg-thinking-pulse 1.05s ease-in-out infinite;
+}
+.sugg-thinking-word {
+  display: inline-block;
+  animation: sugg-thinking-word 0.4s ease;
+}
+@keyframes sugg-thinking-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sugg-thinking-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--teal-200) 55%, transparent);
+  }
+  50% {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--teal-200) 0%, transparent);
+  }
+}
+@keyframes sugg-thinking-word {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* Stagger-in for the new chip set. `--sugg-i` is set inline per chip so each
+   one starts ~110ms after the previous; the row itself has no animation —
+   delays are pinned to chips so the row collapse/expand is instant. */
+.sugg--reveal {
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+  animation: sugg-pop 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation-delay: calc(var(--sugg-i, 0) * 110ms);
+}
+@keyframes sugg-pop {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sugg--reveal,
+  .sugg-thinking,
+  .sugg-thinking-dot,
+  .sugg-thinking-word,
+  .sugg-row--loading .sugg-skel {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
 }
 .composer-input {
   display: flex;

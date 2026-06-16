@@ -257,6 +257,24 @@ function WorkingPill({ anchor }: { anchor: number }) {
 function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {
   const [openOverride, setOpenOverride] = useState<boolean | null>(null)
   const open = openOverride ?? streaming
+  // Sticky-bottom follow inside the thinking box, mirroring the chat-body
+  // behaviour: each delta auto-scrolls to the bottom only while the user is
+  // pinned there. Scroll up to read earlier reasoning → lock releases; scroll
+  // back down → lock re-arms. Without this the box parked at the top and the
+  // freshest tokens streamed below the fold.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: text is the trigger
+  useEffect(() => {
+    const el = bodyRef.current
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight
+  }, [text])
+  const onScroll = () => {
+    const el = bodyRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom <= 32
+  }
   return (
     <div className="thinking-block">
       <button
@@ -277,7 +295,7 @@ function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }
         </span>
       </button>
       {open && (
-        <div className="thinking-body">
+        <div className="thinking-body" ref={bodyRef} onScroll={onScroll}>
           {text}
           {streaming && <span className="cursor" />}
         </div>
@@ -340,6 +358,124 @@ function AgentMessage({ m }: { m: ChatMessage }) {
  * startedAt if a tool just finished, otherwise the message's own arrival
  * time so the timer still reads a sensible delta on turn 0.
  */
+/**
+ * Animated chip row under the composer. Three visible states:
+ *
+ *   1. **ready** — the model returned a set; chips fade-in one at a time
+ *      (`@keyframes sugg-pop`, staggered by `--sugg-i`).
+ *   2. **thinking** — chips have been dismissed (user clicked one OR a fresh
+ *      turn finished) and we're waiting on Haiku; a single pill rotates
+ *      between "Analyzing…" / "Proposing…" / "Composing…" to fill the gap.
+ *   3. **dismissed-pre-turn** — between the click and the assistant stream
+ *      ending the orchestrator hasn't asked for new suggestions yet (it
+ *      pauses while `isStreaming`), so the row collapses to nothing rather
+ *      than leave stale chips on screen.
+ *
+ * On the *first ever* load (no chips, status still loading) a thin shimmer
+ * bar takes the chip row's space so the composer doesn't jump.
+ */
+const THINKING_WORDS = ["Analyzing…", "Proposing…", "Composing…"] as const
+const THINKING_WORD_MS = 900
+function SuggestionRow({
+  suggestions,
+  status,
+  pressed,
+  onChip,
+}: {
+  suggestions: string[]
+  status: "idle" | "loading" | "ready" | "error"
+  pressed: number | null
+  onChip: (text: string, idx: number) => void
+}) {
+  // `dismissed` hides the previous chip set the instant the user clicks one,
+  // so chips don't linger awkwardly through the agent's stream. Cleared when
+  // a fresh "ready" status lands. Also flipped true on every loading
+  // transition so the chip → thinking pill animation always plays.
+  const [dismissed, setDismissed] = useState(false)
+  // Bumps each time a new ready set arrives — keys the stagger animation so
+  // it replays even when an old set re-orders into identical strings.
+  const [revealKey, setRevealKey] = useState(0)
+  // Rotating word inside the "thinking" pill. Lives in component state so
+  // each new loading window starts fresh at the first word.
+  const [wordIdx, setWordIdx] = useState(0)
+
+  const prevStatusRef = useRef(status)
+  useEffect(() => {
+    if (status !== prevStatusRef.current) {
+      if (status === "loading") setDismissed(true)
+      else if (status === "ready") {
+        setDismissed(false)
+        setRevealKey((k) => k + 1)
+        setWordIdx(0)
+      } else if (status === "error" || status === "idle") {
+        setDismissed(false)
+      }
+      prevStatusRef.current = status
+    }
+  }, [status])
+
+  // Cycle the thinking word while loading. Reset to first word on each
+  // loading entry so the user always sees "Analyzing…" first.
+  useEffect(() => {
+    if (status !== "loading") return
+    const id = window.setInterval(() => {
+      setWordIdx((i) => (i + 1) % THINKING_WORDS.length)
+    }, THINKING_WORD_MS)
+    return () => window.clearInterval(id)
+  }, [status])
+
+  const handleClick = (s: string, i: number) => {
+    setDismissed(true)
+    onChip(s, i)
+  }
+
+  // First-ever load with no chips yet: thin shimmer bar holds the space.
+  if (status === "loading" && suggestions.length === 0 && !dismissed) {
+    return (
+      <div className="sugg-row sugg-row--loading" aria-busy="true">
+        <span className="sugg-skel" />
+      </div>
+    )
+  }
+
+  // Thinking pill: shown while Haiku is regenerating (we already had chips,
+  // or the user dismissed them by clicking).
+  if (status === "loading") {
+    return (
+      <div className="sugg-row sugg-row--thinking" aria-busy="true" aria-live="polite">
+        <span className="sugg-thinking">
+          <span className="sugg-thinking-dot" />
+          <span className="sugg-thinking-word" key={wordIdx}>
+            {THINKING_WORDS[wordIdx]}
+          </span>
+        </span>
+      </div>
+    )
+  }
+
+  // Dismissed mid-turn (status hasn't become "loading" yet because the
+  // orchestrator pauses regeneration while the assistant streams). Collapse.
+  if (dismissed) return null
+
+  if (status !== "ready" || suggestions.length === 0) return null
+
+  return (
+    <div className="sugg-row sugg-row--ready" key={revealKey}>
+      {suggestions.map((s, i) => (
+        <button
+          key={`${i}-${s}`}
+          type="button"
+          className={`sugg sugg--reveal${pressed === i ? " pressed" : ""}`}
+          style={{ ["--sugg-i" as string]: i }}
+          onClick={() => handleClick(s, i)}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function lastTimerAnchor(parts: AgentTurn["parts"]): number {
   for (let i = parts.length - 1; i >= 0; i -= 1) {
     const p = parts[i]
@@ -365,6 +501,7 @@ export function Agent({
   input,
   pressed,
   suggestions,
+  suggestionsStatus,
   emptyState,
   onChip,
   onInput,
@@ -378,18 +515,32 @@ export function Agent({
   input: string
   pressed: number | null
   suggestions: string[]
+  /** Drives the chip-row UX while Haiku regenerates. See `useDynamicSuggestions`. */
+  suggestionsStatus: "idle" | "loading" | "ready" | "error"
   emptyState: string
   onChip: (text: string, idx: number) => void
   onInput: (text: string) => void
   onSend: () => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
-  // Scroll to bottom whenever the messages list changes.
+  // Sticky-bottom follow: auto-scroll only when the user is already pinned to
+  // the bottom. Scrolling up releases the lock so the user can read earlier
+  // turns mid-stream; scrolling back to the bottom re-arms it. Without this
+  // guard, every streamed chunk yanked the viewport back down.
+  const stickToBottomRef = useRef(true)
   // biome-ignore lint/correctness/useExhaustiveDependencies: messages is the trigger
   useEffect(() => {
     const el = bodyRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight
   }, [messages])
+  const onScroll = () => {
+    const el = bodyRef.current
+    if (!el) return
+    // 32px slack absorbs sub-pixel rounding and the trailing scroll the
+    // auto-pin itself triggers, so the lock survives normal streaming.
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom <= 32
+  }
 
   // Gently invite input if the composer sits untouched for >5.5s and is empty.
   const [invite, setInvite] = useState(false)
@@ -444,7 +595,7 @@ export function Agent({
         </aside>
 
         <div className="chat">
-          <div className="chat-body" ref={bodyRef}>
+          <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
             {messages.length === 0 && (
               <div className="chat-empty">
                 <span className="agent-ava lg">
@@ -459,18 +610,12 @@ export function Agent({
           </div>
 
           <div className="composer">
-            <div className="sugg-row">
-              {suggestions.map((s, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={`sugg${pressed === i ? " pressed" : ""}`}
-                  onClick={() => onChip(s, i)}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            <SuggestionRow
+              suggestions={suggestions}
+              status={suggestionsStatus}
+              pressed={pressed}
+              onChip={onChip}
+            />
             <div className={`composer-input${invite ? " invite" : ""}`}>
               <input
                 value={input}

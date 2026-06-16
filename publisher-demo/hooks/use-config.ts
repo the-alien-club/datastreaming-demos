@@ -123,8 +123,19 @@ function buildDraftFromServer(
   const toolsByConnector = new Map<number, string[]>()
 
   // Build the membership maps from the saved configuration first.
+  //
+  // Platform convention: omitting `dataset_ids` on a saved cluster means
+  // "all datasets included". The draft, in contrast, treats an empty set
+  // as "cluster unchecked" (see draftToPayload). Expand the omitted case
+  // to the cluster's full dataset catalog so the round-trip is stable and
+  // the UI shows the cluster as fully checked instead of empty.
+  const catalogByClusterId = new Map(sources.clusters.map((c) => [c.cluster_id, c]))
   for (const entry of saved.clusters ?? []) {
-    datasetIdsByCluster.set(entry.cluster_id, new Set(entry.dataset_ids ?? []))
+    const catalog = catalogByClusterId.get(entry.cluster_id)
+    const datasetIds = entry.dataset_ids
+      ? new Set(entry.dataset_ids)
+      : new Set(catalog?.datasets.map((d) => d.id) ?? [])
+    datasetIdsByCluster.set(entry.cluster_id, datasetIds)
     toolsByCluster.set(entry.cluster_id, [...(entry.tools ?? [])])
   }
   for (const entry of saved.external_apis ?? []) {
@@ -169,18 +180,34 @@ function cloneDraft(d: DraftState): DraftState {
   }
 }
 
-function draftToPayload(d: DraftState): McpConfigurationPickerPayload {
+function draftToPayload(
+  d: DraftState,
+  sources: DemoConfigResponse["sources"],
+): McpConfigurationPickerPayload {
+  const catalogByClusterId = new Map(sources.clusters.map((c) => [c.cluster_id, c]))
   const clusters: ConfigClusterEntry[] = []
   for (const [clusterId, datasetIds] of d.datasetIdsByCluster) {
+    // A cluster is "selected" iff at least one of its datasets is checked.
+    // The cluster-row toggle clears datasetIds for that cluster, so an empty
+    // set means the user has unchecked the cluster — exclude it from the
+    // saved configuration so the platform doesn't fan out to it.
+    if (datasetIds.size === 0) continue
     const tools = d.toolsByCluster.get(clusterId) ?? []
-    if (datasetIds.size === 0 && tools.length === 0) continue
-    // Only emit clusters with at least one tool — the platform validator
-    // requires non-empty tools[] per cluster entry.
     if (tools.length === 0) continue
+    // Platform convention: omit `dataset_ids` when every dataset is selected
+    // so the saved payload round-trips byte-equal with the platform response
+    // (which omits the field on "all included"). Without this, isDirty would
+    // flip true on every hydration of a fully-checked cluster.
+    const catalog = catalogByClusterId.get(clusterId)
+    const allSelected =
+      !!catalog &&
+      catalog.datasets.length > 0 &&
+      catalog.datasets.length === datasetIds.size &&
+      catalog.datasets.every((dataset) => datasetIds.has(dataset.id))
     clusters.push({
       cluster_id: clusterId,
       tools,
-      ...(datasetIds.size > 0 ? { dataset_ids: Array.from(datasetIds).sort((a, b) => a - b) } : {}),
+      ...(allSelected ? {} : { dataset_ids: Array.from(datasetIds).sort((a, b) => a - b) }),
     })
   }
   const external_apis: ConfigExternalApiEntry[] = []
@@ -261,8 +288,8 @@ export function useConfig(): UseConfigResult {
   )
 
   const draftPayload = useMemo<McpConfigurationPickerPayload | null>(
-    () => (draft ? draftToPayload(draft) : null),
-    [draft],
+    () => (draft && query.data ? draftToPayload(draft, query.data.sources) : null),
+    [draft, query.data],
   )
 
   const isDirty = useMemo(() => {

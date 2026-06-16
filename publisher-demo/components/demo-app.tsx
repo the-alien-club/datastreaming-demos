@@ -1,11 +1,6 @@
 "use client"
 
-import {
-  EMPTY_STATE,
-  MODEL,
-  SUGGESTIONS,
-  useOrchestratorState,
-} from "@/hooks/use-orchestrator-state"
+import { EMPTY_STATE, MODEL, useOrchestratorState } from "@/hooks/use-orchestrator-state"
 import { ConfigBar } from "./config-bar"
 import { Icon } from "./icons"
 import { Agent } from "./panels/agent"
@@ -89,7 +84,8 @@ export function DemoApp() {
           railActive={s.railActive}
           input={s.input}
           pressed={s.pressed}
-          suggestions={SUGGESTIONS[s.mode]}
+          suggestions={s.suggestions}
+          suggestionsStatus={s.suggestionsStatus}
           emptyState={EMPTY_STATE[s.mode]}
           onChip={s.onChip}
           onInput={s.setInput}
@@ -113,9 +109,9 @@ export function DemoApp() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Switch to {s.pendingMode === "agentic" ? "Agentic flow" : "Data flow"}?</h3>
             <p>
-              This restarts the session on a different runtime. You'll start a fresh chat with
-              the same datasources, APIs, and tools — the agent's memory of this conversation
-              won't carry over.
+              This restarts the session on a different runtime. You'll start a fresh chat with the
+              same datasources, APIs, and tools — the agent's memory of this conversation won't
+              carry over.
             </p>
             <div className="modal-btns">
               <DsButton variant="ghost" size="sm" onClick={() => s.setPendingMode(null)}>

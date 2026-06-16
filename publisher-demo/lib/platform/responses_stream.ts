@@ -93,6 +93,13 @@ export interface RunPlatformResponseOptions {
   prompt: string
   writer: StreamWriter
   signal?: AbortSignal
+  /**
+   * Platform `response_id` from the previous turn in this Mode A chat. When
+   * supplied, the platform threads the new turn against the same agent
+   * runtime session (planner/specialist/critic memory + tool history). Send
+   * `undefined` for the first turn or after a reset.
+   */
+  previousResponseId?: string
 }
 
 /**
@@ -104,7 +111,13 @@ export interface RunPlatformResponseOptions {
 export async function runPlatformResponse(
   opts: RunPlatformResponseOptions,
 ): Promise<PlatformResponseResult> {
-  const { provider, prompt, writer, signal } = opts
+  const { provider, prompt, writer, signal, previousResponseId } = opts
+
+  const tStart = Date.now()
+  const ms = (t0: number) => `${Date.now() - t0}ms`
+  console.log(
+    `[mode-a ▶] runPlatformResponse start promptLen=${prompt.length} signal.aborted=${signal?.aborted ?? false} previousResponseId=${previousResponseId ?? "—"}`,
+  )
 
   const result = streamText({
     model: provider.responses("agent"),
@@ -112,23 +125,55 @@ export async function runPlatformResponse(
     includeRawChunks: true,
     abortSignal: signal,
     experimental_transform: smoothStream({ delayInMs: 20, chunking: "word" }),
+    // Thread multi-turn memory on the platform side. When omitted the platform
+    // starts a fresh agent runtime session.
+    ...(previousResponseId
+      ? { providerOptions: { openai: { previousResponseId } } }
+      : {}),
   })
 
   const sidecar = new SidecarState(writer)
+  let tFirstByte = 0
+  let tFirstText = 0
+  // Per-event-type counters for the end-of-stream summary.
+  const counts: Record<string, number> = {}
+  const bump = (k: string) => {
+    counts[k] = (counts[k] ?? 0) + 1
+  }
 
   try {
     for await (const part of result.fullStream) {
+      if (tFirstByte === 0) {
+        tFirstByte = Date.now()
+        console.log(`[mode-a ⏱ ]   ttfb ${tFirstByte - tStart}ms (first fullStream part)`)
+      }
+      bump(part.type)
       switch (part.type) {
         case "start":
+          console.log(`[mode-a srv] start`)
           writer.write({ type: "start" } as WriterEvent)
           break
 
+        case "start-step":
+          // AI SDK v6 step boundary marker. No client-side analogue; we just
+          // log it for diagnostic flow.
+          console.log(`[mode-a srv] start-step`)
+          break
+
         case "text-start":
+          console.log(`[mode-a srv] text-start id=${part.id}`)
           writer.write({ type: "text-start", id: part.id } as WriterEvent)
           break
 
         case "text-delta": {
-          if (TASK_DISPATCH_RE.test(part.text.trim())) break
+          if (TASK_DISPATCH_RE.test(part.text.trim())) {
+            console.log(`[mode-a srv] text-delta SKIPPED (Task() dispatch noise) id=${part.id}`)
+            break
+          }
+          if (tFirstText === 0) {
+            tFirstText = Date.now()
+            console.log(`[mode-a ⏱ ]   ttft ${tFirstText - tStart}ms (first text-delta)`)
+          }
           writer.write({
             type: "text-delta",
             id: part.id,
@@ -139,10 +184,12 @@ export async function runPlatformResponse(
         }
 
         case "text-end":
+          console.log(`[mode-a srv] text-end id=${part.id}`)
           writer.write({ type: "text-end", id: part.id } as WriterEvent)
           break
 
         case "tool-input-start":
+          console.log(`[mode-a srv] tool-input-start id=${part.id} tool=${part.toolName}`)
           writer.write({
             type: "tool-input-start",
             toolCallId: part.id,
@@ -159,11 +206,16 @@ export async function runPlatformResponse(
           break
 
         case "tool-input-end":
+          console.log(`[mode-a srv] tool-input-end id=${part.id}`)
           // No-op: tool-call below emits tool-input-available.
           break
 
         case "tool-call": {
           const toolInput = "input" in part ? (part as { input: unknown }).input : undefined
+          const inputLen = toolInput ? JSON.stringify(toolInput).length : 0
+          console.log(
+            `[mode-a srv] tool-call id=${part.toolCallId} tool=${part.toolName} inputLen=${inputLen}`,
+          )
           writer.write({
             type: "tool-input-available",
             toolCallId: part.toolCallId,
@@ -176,7 +228,9 @@ export async function runPlatformResponse(
         }
 
         case "finish":
-          console.error("[mode-a:srv] finish reason=", part.finishReason)
+          console.log(
+            `[mode-a srv] finish reason=${part.finishReason} total=${ms(tStart)} ttfb=${tFirstByte ? tFirstByte - tStart : "—"}ms`,
+          )
           writer.write({
             type: "finish",
             finishReason: part.finishReason,
@@ -184,10 +238,15 @@ export async function runPlatformResponse(
           break
 
         case "finish-step":
+          console.log(`[mode-a srv] finish-step`)
           writer.write({ type: "finish-step" } as WriterEvent)
           break
 
         case "error":
+          console.error(
+            `[mode-a srv] error part:`,
+            part.error instanceof Error ? part.error.stack ?? part.error.message : part.error,
+          )
           writer.write({
             type: "error",
             errorText: part.error instanceof Error ? part.error.message : String(part.error),
@@ -199,16 +258,26 @@ export async function runPlatformResponse(
           break
 
         default:
+          console.log(`[mode-a srv] unknown fullStream part.type=${String(part.type)}`)
           break
       }
     }
   } catch (err) {
+    console.error(
+      `[mode-a srv] EXCEPTION in fullStream loop after ${ms(tStart)}:`,
+      err instanceof Error ? err.stack ?? err.message : err,
+    )
     writer.write({
       type: "error",
       errorText: err instanceof Error ? err.message : String(err),
     } as WriterEvent)
   }
 
+  const summary = Object.entries(counts)
+    .sort(([, a], [, b]) => b - a)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(" ")
+  console.log(`[mode-a ⏱ ] runPlatformResponse done total=${ms(tStart)} parts: ${summary}`)
   return sidecar.result()
 }
 
@@ -237,6 +306,11 @@ class SidecarState {
   // call_id. We snapshot the author at output_item.added time so handleToolCall
   // can tag the outbound `data-toolCall` with the right subagent.
   private readonly _toolCallAuthor = new Map<string, string>()
+  // Per-event-type counters across the whole turn. Dumped from `result()` so
+  // the dev log has a final tally next to the AI SDK fullStream tally.
+  private readonly _rawCounts = new Map<string, number>()
+  private _subagentEmits = 0
+  private _subagentEndEmits = 0
 
   constructor(writer: StreamWriter) {
     this._writer = writer
@@ -251,15 +325,24 @@ class SidecarState {
     const payload = rawValue as Record<string, unknown>
     const eventType = typeof payload.type === "string" ? payload.type : null
     if (eventType === null) return
+    this._rawCounts.set(eventType, (this._rawCounts.get(eventType) ?? 0) + 1)
 
     switch (eventType) {
       case "response.created": {
         const response = payload.response as ResponseCreatedPayload | undefined
+        const meta = response?.metadata ?? {}
+        console.log(
+          `[mode-a raw] response.created id=${response?.id} status=${response?.status} jobId=${meta.x_alien_job_id} rootAgent=${meta.x_alien_root_agent_id}`,
+        )
         if (response?.id) this._responseId = response.id
         this._loadRegistry(response)
         this._maybeEmitJobId(response)
+        this._maybeEmitResponseId(response)
         break
       }
+      case "response.in_progress":
+        // Heartbeat from the platform. Don't log every one; just count.
+        break
       case "response.cost_breakdown": {
         // Platform-specific event written by the backend immediately before
         // `response.completed`. Forward the assembled CostBreakdown payload
@@ -267,7 +350,17 @@ class SidecarState {
         // royalty cascade. Schema: lib/cost_breakdown_types.ts on the backend.
         const jobId = typeof payload.job_id === "number" ? payload.job_id : null
         const costBreakdown = payload.cost_breakdown
-        if (jobId === null || typeof costBreakdown !== "object" || costBreakdown === null) break
+        if (jobId === null || typeof costBreakdown !== "object" || costBreakdown === null) {
+          console.warn(
+            `[mode-a raw] cost_breakdown SKIPPED jobId=${jobId} cbType=${typeof costBreakdown}`,
+          )
+          break
+        }
+        const cb = costBreakdown as Record<string, unknown>
+        const keys = Object.keys(cb).join(",")
+        console.log(
+          `[mode-a raw] cost_breakdown jobId=${jobId} keys=[${keys}] sample=${JSON.stringify(cb).slice(0, 400)}`,
+        )
         this._writer.write({
           type: "data-costBreakdown",
           data: { jobId, costBreakdown },
@@ -276,57 +369,92 @@ class SidecarState {
       }
       case "response.output_item.added": {
         const item = payload.item as OutputItem | undefined
+        console.log(
+          `[mode-a raw] output_item.added id=${item?.id} type=${item?.type} call_id=${item?.call_id ?? "—"} name=${item?.name ?? "—"}`,
+        )
         this._maybeAnnounceSubagent(item?.id, item?.type)
         // Snapshot author for function_call items so handleToolCall can tag
         // the outbound data-toolCall with the right subagent.
         if (item?.type === "function_call" && typeof item.call_id === "string") {
           const author = this._decodeAuthorFromItemId(item.id)
-          if (author) this._toolCallAuthor.set(item.call_id, author)
+          if (author) {
+            this._toolCallAuthor.set(item.call_id, author)
+            console.log(
+              `[mode-a raw]   ↳ tracked toolCall ${item.call_id} author=${author}`,
+            )
+          }
         }
         break
       }
       case "response.output_item.done": {
-        // Tool calls complete server-side; the platform stream signals
-        // completion via item.status on the function_call output_item, but
-        // never echoes back a function_call_output. The platform also emits
-        // response.output_item.done BEFORE AI SDK's fullStream surfaces its
-        // synthetic tool-call part — so we buffer the completion and flush
-        // it from handleToolCall (which runs right after data-toolCall is
-        // written). Without this, data-toolResult races ahead of
-        // data-toolCall and the client's tool card never settles.
         const item = payload.item as OutputItem | undefined
+        console.log(
+          `[mode-a raw] output_item.done id=${item?.id} type=${item?.type} call_id=${item?.call_id ?? "—"} status=${item?.status ?? "—"}`,
+        )
         if (item?.type === "function_call" && typeof item.call_id === "string") {
           if (this._emittedCallIds.has(item.call_id)) {
+            console.log(`[mode-a raw]   ↳ flush IMMEDIATE tool-output for ${item.call_id}`)
             this._emitToolOutput(item)
           } else {
+            console.log(`[mode-a raw]   ↳ DEFER tool-output for ${item.call_id} until tool-call`)
             this._pendingOutputs.set(item.call_id, item)
           }
         }
         break
       }
+      case "response.content_part.added":
+      case "response.content_part.done":
+      case "response.output_text.delta":
+      case "response.output_text.done":
+      case "response.function_call_arguments.delta":
+      case "response.function_call_arguments.done":
+        // High-frequency events; let the count summary cover them.
+        break
       case "response.completed": {
         const response = payload.response as
           | { id?: string; usage?: Record<string, unknown> | null }
           | undefined
+        const usage = response?.usage ?? null
+        const usageStr = usage
+          ? `in=${(usage as Record<string, unknown>).input_tokens ?? "?"} out=${(usage as Record<string, unknown>).output_tokens ?? "?"}`
+          : "—"
+        console.log(`[mode-a raw] response.completed id=${response?.id} usage:${usageStr}`)
         if (response?.id) this._responseId = response.id
         if (response?.usage) this._usage = response.usage
         this._ok = true
         break
       }
-      case "response.failed":
+      case "response.failed": {
+        // Full payload, no truncation — error context is critical here.
+        const response = payload.response as
+          | { id?: string; status?: string; error?: unknown; metadata?: Record<string, string> }
+          | undefined
+        const errMeta = response?.metadata ?? {}
         console.error(
-          "[mode-a:srv] response.failed payload=",
-          JSON.stringify(payload).slice(0, 500),
+          `[mode-a raw] ✗ response.failed id=${response?.id} status=${response?.status}`,
         )
+        console.error(`[mode-a raw]   error_code=${errMeta.x_alien_error_code ?? "—"}`)
+        console.error(`[mode-a raw]   error_message=${errMeta.x_alien_error_message ?? "—"}`)
+        console.error(`[mode-a raw]   job_id=${errMeta.x_alien_job_id ?? "—"}`)
+        console.error(`[mode-a raw]   response.error=${JSON.stringify(response?.error)}`)
+        console.error(`[mode-a raw]   FULL PAYLOAD=${JSON.stringify(payload)}`)
         this._ok = false
         break
+      }
+      case "response.incomplete":
+        console.warn(`[mode-a raw] response.incomplete payload=${JSON.stringify(payload).slice(0, 400)}`)
+        break
       default:
+        console.log(`[mode-a raw] (uncategorized) ${eventType}`)
         break
     }
   }
 
   handleToolCall(toolCallId: string, toolName: string, args: unknown): void {
     const author = this._toolCallAuthor.get(toolCallId) ?? null
+    console.log(
+      `[mode-a srv] → data-toolCall id=${toolCallId} tool=${toolName} author=${author ?? "—"}`,
+    )
     this._writer.write({
       type: "data-toolCall",
       data: { id: toolCallId, name: toolName, args, author },
@@ -334,6 +462,7 @@ class SidecarState {
     this._emittedCallIds.add(toolCallId)
     const pending = this._pendingOutputs.get(toolCallId)
     if (pending) {
+      console.log(`[mode-a srv]   ↳ flushing pending tool-output for ${toolCallId}`)
       this._pendingOutputs.delete(toolCallId)
       this._emitToolOutput(pending)
     }
@@ -342,6 +471,9 @@ class SidecarState {
   private _emitToolOutput(item: OutputItem): void {
     if (typeof item.call_id !== "string") return
     const author = this._toolCallAuthor.get(item.call_id) ?? null
+    console.log(
+      `[mode-a srv] → tool-output-available + data-toolResult id=${item.call_id} status=${item.status ?? "completed"} author=${author ?? "—"}`,
+    )
     this._writer.write({
       type: "tool-output-available",
       toolCallId: item.call_id,
@@ -368,6 +500,7 @@ class SidecarState {
   }
 
   private _emittedJobId: boolean = false
+  private _emittedResponseId: boolean = false
 
   private _maybeEmitJobId(response: ResponseCreatedPayload | undefined): void {
     if (this._emittedJobId) return
@@ -375,11 +508,24 @@ class SidecarState {
     if (typeof raw !== "string" || raw.length === 0) return
     const jobId = Number.parseInt(raw, 10)
     if (!Number.isFinite(jobId)) return
+    console.log(`[mode-a srv] → data-jobId ${jobId}`)
     this._writer.write({
       type: "data-jobId",
       data: { jobId },
     } as WriterEvent)
     this._emittedJobId = true
+  }
+
+  private _maybeEmitResponseId(response: ResponseCreatedPayload | undefined): void {
+    if (this._emittedResponseId) return
+    const id = response?.id
+    if (typeof id !== "string" || id.length === 0) return
+    console.log(`[mode-a srv] → data-responseId ${id}`)
+    this._writer.write({
+      type: "data-responseId",
+      data: { responseId: id },
+    } as WriterEvent)
+    this._emittedResponseId = true
   }
 
   private _loadRegistry(response: ResponseCreatedPayload | undefined): void {
@@ -428,7 +574,11 @@ class SidecarState {
       // Tool calls are attributed to MAIN in item IDs even when logically
       // dispatched by a subagent — only close the fold for message items.
       if (itemType !== "function_call" && this._activeSubagentId !== null) {
+        console.log(
+          `[mode-a srv] → data-subagent-end (was active: ${this._activeSubagentId}, MAIN took over via ${itemType})`,
+        )
         this._writer.write({ type: "data-subagent-end", data: {} } as WriterEvent)
+        this._subagentEndEmits += 1
         this._activeSubagentId = null
       }
       return
@@ -437,6 +587,9 @@ class SidecarState {
 
     const entry = this._registry.get(agentId)
     const displayName = entry?.name ?? agentId
+    console.log(
+      `[mode-a srv] → data-subagent agentId=${agentId} name=${displayName} kind=${entry?.kind ?? "subagent"} (prev active=${this._activeSubagentId ?? "none"})`,
+    )
     this._writer.write({
       type: "data-subagent",
       data: {
@@ -446,18 +599,41 @@ class SidecarState {
         parentId: entry?.parent_id ?? null,
       },
     } as WriterEvent)
+    this._subagentEmits += 1
     this._activeSubagentId = agentId
   }
 
   result(): PlatformResponseResult {
-    console.error(
-      "[mode-a:srv] result ok=",
-      this._ok,
-      "textLen=",
-      this._fullText.length,
-      "preview=",
-      this._fullText.slice(0, 300).replace(/\n/g, " "),
+    const rawSummary = Array.from(this._rawCounts.entries())
+      .sort(([, a], [, b]) => b - a)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(" ")
+    const pendingCount = this._pendingOutputs.size
+    console.log(
+      `[mode-a srv] ─── SidecarState result ──────────────────────`,
     )
+    console.log(`[mode-a srv]   ok=${this._ok} textLen=${this._fullText.length}`)
+    console.log(`[mode-a srv]   responseId=${this._responseId}`)
+    console.log(`[mode-a srv]   usage=${this._usage ? JSON.stringify(this._usage) : "—"}`)
+    console.log(
+      `[mode-a srv]   subagent emits=${this._subagentEmits} ends=${this._subagentEndEmits}`,
+    )
+    console.log(
+      `[mode-a srv]   tool calls tracked=${this._toolCallAuthor.size} pending outputs=${pendingCount}`,
+    )
+    if (pendingCount > 0) {
+      console.warn(
+        `[mode-a srv]   ⚠ ${pendingCount} pending tool-output(s) NEVER FLUSHED (tool-call from AI SDK never arrived for these call_ids):`,
+      )
+      for (const [callId, item] of this._pendingOutputs) {
+        console.warn(`[mode-a srv]      - ${callId} (${item.name ?? "—"})`)
+      }
+    }
+    console.log(`[mode-a srv]   raw event tally: ${rawSummary}`)
+    console.log(
+      `[mode-a srv]   text preview=${JSON.stringify(this._fullText.slice(0, 200))}${this._fullText.length > 200 ? "…" : ""}`,
+    )
+    console.log(`[mode-a srv] ──────────────────────────────────────────────`)
     return {
       text: this._fullText,
       responseId: this._responseId,

@@ -92,6 +92,10 @@ export interface ModeACallbacks {
    * Fires once per turn, on `response.created`. Lets the hook reach back to
    * `GET /jobs/:id` for retries / diagnostics. */
   onJobId: (jobId: number) => void
+  /** Platform-assigned `response_id` for this turn. Fires once on
+   * `response.created`. The hook stashes it as `previousResponseId` for the
+   * NEXT turn so the orchestrator threads multi-turn memory. */
+  onResponseId: (responseId: string) => void
   /** Platform-assembled per-job cost breakdown, arrives immediately before
    * the terminal frame. The hook walks the bricks to surface per-connector
    * and per-dataset royalty attribution on the observability tape. */
@@ -106,21 +110,49 @@ export interface ModeARunOptions {
   query: string
   /** Ref the orchestrator polls externally (Reset / mode switch). */
   cancelRef: { readonly current: boolean }
+  /** Platform `response_id` from the previous turn in this chat session.
+   * `null`/`undefined` on the first turn or after a reset. Forwarded
+   * server-side as `providerOptions.openai.previousResponseId`. */
+  previousResponseId?: string | null
   callbacks: ModeACallbacks
 }
 
 export async function runModeA(opts: ModeARunOptions): Promise<void> {
-  const { query, cancelRef, callbacks } = opts
+  const { query, cancelRef, previousResponseId, callbacks } = opts
 
-  const res = await fetch("/api/demo/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      mode: "agentic",
-      messages: [{ role: "user", content: query }],
-    }),
-  })
+  const tStart = Date.now()
+  const ms = () => `${Date.now() - tStart}ms`
+  // Per-chunk-type counters dumped at end-of-turn so it's easy to confirm "I
+  // got 13 tool calls, 13 results, 1 cost breakdown, 1 finish".
+  const counts: Record<string, number> = {}
+  const bump = (k: string) => {
+    counts[k] = (counts[k] ?? 0) + 1
+  }
+  console.log(
+    `[mode-a client] ▶ runModeA start queryLen=${query.length} previousResponseId=${previousResponseId ?? "—"}`,
+  )
+
+  let res: Response
+  try {
+    res = await fetch("/api/demo/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "agentic",
+        messages: [{ role: "user", content: query }],
+        ...(previousResponseId ? { previousResponseId } : {}),
+      }),
+    })
+  } catch (err) {
+    console.error(`[mode-a client] ✗ fetch threw after ${ms()}:`, err)
+    callbacks.onStreamEnd()
+    throw err
+  }
+  console.log(
+    `[mode-a client]   POST /api/demo/chat → ${res.status} ${res.statusText} (after ${ms()})`,
+  )
   if (!res.ok || !res.body) {
+    callbacks.onStreamEnd()
     throw new Error(`Mode A failed: ${res.status} ${res.statusText}`)
   }
 
@@ -131,12 +163,23 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
 
   try {
     for await (const chunk of readUiMessageChunks(res.body)) {
-      if (cancelRef.current) break
+      if (cancelRef.current) {
+        console.warn(`[mode-a client] ⚠ cancelRef tripped after ${ms()} — aborting loop`)
+        break
+      }
       const type = chunk.type as string | undefined
+      if (type) bump(type)
       switch (type) {
+        case "start":
+          console.log(`[mode-a client] start (${ms()})`)
+          break
         case "text-start": {
           const id = typeof chunk.id === "string" ? chunk.id : null
-          if (id) authorByItemId.set(id, decodeAuthor(id))
+          if (id) {
+            const author = decodeAuthor(id)
+            authorByItemId.set(id, author)
+            console.log(`[mode-a client] text-start id=${id} → author=${author}`)
+          }
           break
         }
         case "text-delta": {
@@ -149,14 +192,21 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
         }
         case "text-end": {
           const id = typeof chunk.id === "string" ? chunk.id : null
-          if (id) authorByItemId.delete(id)
+          if (id) {
+            const author = authorByItemId.get(id) ?? "?"
+            console.log(`[mode-a client] text-end id=${id} (author=${author})`)
+            authorByItemId.delete(id)
+          }
           break
         }
         case "data-toolCall": {
           const data = chunk.data as
             | { id?: string; name?: string; args?: unknown; author?: string }
             | undefined
-          if (!data?.name) break
+          if (!data?.name) {
+            console.warn(`[mode-a client] ⚠ data-toolCall with no name, skipped:`, data)
+            break
+          }
           const argsObj =
             data.args && typeof data.args === "object"
               ? (data.args as Record<string, unknown>)
@@ -165,6 +215,9 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
             data.author && KNOWN_AUTHORS.has(data.author as AgentAuthor)
               ? (data.author as AgentAuthor)
               : null
+          console.log(
+            `[mode-a client] data-toolCall id=${data.id} tool=${data.name} author=${author ?? "—"} args=${argsObj ? JSON.stringify(argsObj).slice(0, 120) : "null"}`,
+          )
           callbacks.onToolCall(data.id ?? null, data.name, argsObj, author)
           break
         }
@@ -172,7 +225,11 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
           const data = chunk.data as { agentId?: string; name?: string } | undefined
           const raw = data?.name ?? data?.agentId ?? ""
           const bare = raw.replace(/^subagent-/, "")
-          if (!bare) break
+          if (!bare) {
+            console.warn(`[mode-a client] ⚠ data-subagent with no name, skipped:`, data)
+            break
+          }
+          console.log(`[mode-a client] data-subagent ${raw} → bare=${bare}`)
           callbacks.onSubagentSeen(bare)
           if (KNOWN_AUTHORS.has(bare as AgentAuthor) && bare !== "main") {
             callbacks.onSubagentStart(bare as AgentAuthor)
@@ -180,19 +237,37 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
           break
         }
         case "data-subagent-end":
+          console.log(`[mode-a client] data-subagent-end`)
           callbacks.onSubagentEnd()
           break
         case "data-toolResult": {
-          const data = chunk.data as { id?: string; name?: string } | undefined
+          const data = chunk.data as
+            | { id?: string; name?: string; status?: string; author?: string }
+            | undefined
           const toolUseId = data?.id ?? null
-          if (!toolUseId) break
+          if (!toolUseId) {
+            console.warn(`[mode-a client] ⚠ data-toolResult with no id, skipped:`, data)
+            break
+          }
+          console.log(
+            `[mode-a client] data-toolResult id=${toolUseId} tool=${data?.name ?? "—"} status=${data?.status ?? "—"} author=${data?.author ?? "—"}`,
+          )
           callbacks.onToolResult(toolUseId, data?.name ?? null)
           break
         }
         case "data-jobId": {
           const data = chunk.data as { jobId?: number } | undefined
           if (typeof data?.jobId === "number" && Number.isFinite(data.jobId)) {
+            console.log(`[mode-a client] data-jobId ${data.jobId}`)
             callbacks.onJobId(data.jobId)
+          }
+          break
+        }
+        case "data-responseId": {
+          const data = chunk.data as { responseId?: string } | undefined
+          if (typeof data?.responseId === "string" && data.responseId.length > 0) {
+            console.log(`[mode-a client] data-responseId ${data.responseId}`)
+            callbacks.onResponseId(data.responseId)
           }
           break
         }
@@ -205,20 +280,47 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
             data.costBreakdown &&
             Array.isArray(data.costBreakdown.bricks)
           ) {
-            callbacks.onCostBreakdown(data.jobId, data.costBreakdown)
+            const cb = data.costBreakdown
+            const totalEur = cb.bricks.reduce((s, b) => s + (b.cost_eur || 0), 0)
+            console.log(
+              `[mode-a client] data-costBreakdown jobId=${data.jobId} status=${cb.status} bricks=${cb.bricks.length} totalEur=${totalEur.toFixed(4)}`,
+            )
+            for (const b of cb.bricks) {
+              console.log(
+                `[mode-a client]   brick ${b.id} category=${b.category} node=${b.node_id} parent=${b.parent_brick_id ?? "—"} eur=${b.cost_eur} units=${b.units ? JSON.stringify(b.units) : "—"}`,
+              )
+            }
+            callbacks.onCostBreakdown(data.jobId, cb)
+          } else {
+            console.warn(`[mode-a client] ⚠ data-costBreakdown malformed:`, data)
           }
           break
         }
         case "finish":
+          console.log(
+            `[mode-a client] finish reason=${(chunk as { finishReason?: string }).finishReason} (after ${ms()})`,
+          )
           callbacks.onFinish()
           break
+        case "finish-step":
+          console.log(`[mode-a client] finish-step`)
+          break
         case "error":
+          console.error(`[mode-a client] ✗ error chunk:`, chunk)
           throw new Error(String(chunk.errorText ?? "stream error"))
         default:
+          if (type) {
+            console.log(`[mode-a client] (uncategorized chunk) type=${type}`, chunk)
+          }
           break
       }
     }
   } finally {
+    const tally = Object.entries(counts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(" ")
+    console.log(`[mode-a client] ◀ runModeA done total=${ms()} chunks: ${tally}`)
     callbacks.onStreamEnd()
   }
 }
