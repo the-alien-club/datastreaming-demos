@@ -76,6 +76,15 @@ export type ToolResultEvent = {
   hits: number
   /** Truncated text of the result (max 280 chars) for the chat message. */
   resultSnippet: string
+  /**
+   * True when the underlying MCP tool returned `isError`. The result is still
+   * emitted so the placeholder tape row gets patched (instead of staying at
+   * its initial "no price · 0 hits" string forever), but listeners must NOT
+   * credit hits or royalties for an errored call — `attributionRows` and
+   * `royaltyEur` are zero, `hits` is zero, and the tape label should read
+   * "error" rather than "0 hits".
+   */
+  isError: boolean
 }
 
 export type ConfigSavedEvent = { type: "config-saved" }

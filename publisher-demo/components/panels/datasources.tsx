@@ -193,7 +193,11 @@ export function Datasources({
                         >
                           <Cbx state={d.checked ? "on" : "off"} />
                           <span className="ds-name">{d.name}</span>
-                          {!d.is_public && <span className="priv-tag">Private</span>}
+                          <span
+                            className={`priv-tag ${d.is_public ? "priv-tag--public" : "priv-tag--private"}`}
+                          >
+                            {d.is_public ? "Public" : "Private"}
+                          </span>
                           <span className="status-dot indexed" />
                         </Row>
                       )

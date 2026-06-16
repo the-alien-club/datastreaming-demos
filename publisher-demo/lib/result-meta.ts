@@ -15,6 +15,25 @@ export interface ToolResultMeta {
   datasetIds: number[]
   entryIds: number[]
   hits: number
+  /**
+   * Number of returned entries grouped by `dataset_id`. Populated for tools
+   * whose result rows carry both `entry_id` and `dataset_id` (keyword_search,
+   * vector_search_chunks, get_entries, …). Royalty is `Dataset.access_price`
+   * per hit, so callers must multiply `price[did] × entriesPerDataset[did]` —
+   * not just `price[did]`, which under-bills datasets that returned many
+   * entries and inflates per-source cost for sources that span many datasets.
+   * Empty when the tool does not return entries (e.g. `list_datasets`).
+   */
+  entriesPerDataset: Record<number, number>
+  /**
+   * `entry_id → dataset_id` pairs observed in the result payload (objects that
+   * carried both fields, typically search result rows). Callers accumulate
+   * these session-wide so that follow-up tools whose result body lacks
+   * `dataset_id` — `get_entry_content`, `get_entry_documents`,
+   * `get_entry_file` — can still attribute the hit to the right dataset by
+   * looking up the entry the caller asked for.
+   */
+  entryToDataset: Record<number, number>
 }
 
 export function extractResultMeta(rawContent: unknown): ToolResultMeta {
@@ -47,6 +66,8 @@ export function extractResultMeta(rawContent: unknown): ToolResultMeta {
   const clusterIds = new Set<number>()
   const datasetIds = new Set<number>()
   const entryIds = new Set<number>()
+  const entriesPerDataset: Record<number, number> = {}
+  const entryToDataset: Record<number, number> = {}
   let hits = 0
 
   const walk = (node: unknown): void => {
@@ -56,6 +77,15 @@ export function extractResultMeta(rawContent: unknown): ToolResultMeta {
       return
     }
     const obj = node as Record<string, unknown>
+    // Pricing is `€ per hit` (Dataset.access_price). A "hit" is a returned
+    // entry — an object that carries both `entry_id` and `dataset_id`. Count
+    // those occurrences per dataset so callers can bill price × hits.
+    const rawEntryId = obj.entry_id ?? obj.entryId
+    const rawDatasetId = obj.dataset_id ?? obj.datasetId
+    if (typeof rawEntryId === "number" && typeof rawDatasetId === "number") {
+      entriesPerDataset[rawDatasetId] = (entriesPerDataset[rawDatasetId] ?? 0) + 1
+      entryToDataset[rawEntryId] = rawDatasetId
+    }
     for (const [k, v] of Object.entries(obj)) {
       if (k === "cluster_id" && typeof v === "number") clusterIds.add(v)
       if ((k === "dataset_id" || k === "datasetId") && typeof v === "number") {
@@ -97,6 +127,8 @@ export function extractResultMeta(rawContent: unknown): ToolResultMeta {
     datasetIds: [...datasetIds],
     entryIds: [...entryIds],
     hits: hits || datasetIds.size || entryIds.size || 0,
+    entriesPerDataset,
+    entryToDataset,
   }
 }
 
