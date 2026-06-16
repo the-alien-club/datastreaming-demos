@@ -125,9 +125,17 @@ export interface ModeACallbacks {
     args: Record<string, unknown> | null,
     instance: AgentInstanceInfo | null,
   ) => void
-  /** Pair-event for a previously-dispatched tool. Mode A has no result body
-   *  — the hook resolves attribution from its own dispatch ref. */
-  onToolResult: (toolUseId: string, fallbackName?: string | null) => void
+  /** Pair-event for a previously-dispatched tool. `content` is the
+   *  structured tool output body when the platform supplied one (success
+   *  path), or `null` on the error path / pre-Phase-2 backends.
+   *  `isError` is derived from the `data-toolResult.status`. The hook
+   *  routes this through the same `settleToolCall` path Mode B uses. */
+  onToolResult: (
+    toolUseId: string,
+    fallbackName: string | null,
+    content: unknown,
+    isError: boolean,
+  ) => void
   /** Job-id correlation from `Response.metadata.x_alien_job_id`. Fires once
    *  per turn, on `response.created`. */
   onJobId: (jobId: number) => void
@@ -350,17 +358,25 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
         }
         case "data-toolResult": {
           const data = chunk.data as
-            | { id?: string; name?: string; status?: string; instanceKey?: string }
+            | {
+                id?: string
+                name?: string
+                status?: string
+                instanceKey?: string
+                content?: unknown
+              }
             | undefined
           const toolUseId = data?.id ?? null
           if (!toolUseId) {
             console.warn(`[mode-a client] ⚠ data-toolResult with no id, skipped:`, data)
             break
           }
+          const isError = data?.status === "failed" || data?.status === "error"
+          const content = data?.content !== undefined ? data.content : null
           console.log(
-            `[mode-a client] data-toolResult id=${toolUseId} tool=${data?.name ?? "—"} instance=${data?.instanceKey ?? "—"} status=${data?.status ?? "—"}`,
+            `[mode-a client] data-toolResult id=${toolUseId} tool=${data?.name ?? "—"} instance=${data?.instanceKey ?? "—"} status=${data?.status ?? "—"} hasContent=${content !== null}`,
           )
-          callbacks.onToolResult(toolUseId, data?.name ?? null)
+          callbacks.onToolResult(toolUseId, data?.name ?? null, content, isError)
           break
         }
         case "data-jobId": {

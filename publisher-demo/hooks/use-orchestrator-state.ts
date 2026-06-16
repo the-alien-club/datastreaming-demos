@@ -1047,25 +1047,46 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
   // platform agent runtime session.
   const modeAResponseIdRef = useRef<string | null>(null)
 
+  // Tool-use ids that already settled live via `settleToolCall(content)` in
+  // the current Mode A turn. Populated by the `onToolResult` callback when
+  // the backend supplied a structured `content` body, used by
+  // `emitCostBreakdownRows` to suppress double-counting: a non-empty set
+  // means the live path is authoritative for connector/dataset bricks and
+  // the end-of-turn breakdown should only fire as a parity-check log.
+  // Cleared at the start of each Mode A turn.
+  const liveSettledToolUseIds = useRef<Set<string>>(new Set())
+
   // Replay the platform's per-job cost breakdown into the existing royalty
-  // cascade. One synthetic `tool-result` event is emitted per attributable
-  // brick — connectors and datasets only. LLM/compute/platform bricks are
-  // ignored: LLM cost lives in the Usage panel via tokens; compute/platform
-  // bricks are containers without a meaningful "source" attribution.
+  // cascade. Used as a fallback / parity-check path when the per-call live
+  // cascade did not settle a body — i.e. backend hasn't deployed the
+  // `response.tool_call.output` sideband frame yet, or the worker emitted
+  // events without `result`. When `settleToolCall(content)` already
+  // attributed connector/dataset bricks live (Phase 3 of the
+  // mode-a-live-tool-output plan), this synthesizer skips connector/dataset
+  // bricks to avoid double-counting against the same `connector:<id>` /
+  // `cluster:<id>` attribution keys.
   //
-  // The per-tool-call cascade (`settleToolCall` for API tools, line 711) has
-  // already emitted €0 rows for each API call because the local OpenAIRE
-  // pricing is set to 0. Emitting cost_breakdown rows with the same
-  // `connector:<id>` key merges them additively via `upsertAttribution` (line
-  // 102) — call counts inflate slightly but total € reflects the backend
-  // truth. Dataset rows are pure addition because Mode A's per-call settle
-  // emits nothing for datasets (no result body to walk for dataset_ids).
+  // LLM/compute/platform bricks are ignored unconditionally: LLM cost lives
+  // in the Usage panel via tokens; compute/platform bricks are containers
+  // without a meaningful "source" attribution.
   const emitCostBreakdownRows = useCallback(
     (jobId: number, breakdown: CostBreakdownPayload) => {
       if (breakdown.status !== "complete" && breakdown.status !== "partial") return
+      // Live settlement is authoritative when at least one tool-result
+      // arrived with a structured body during this turn. The set is
+      // populated by `onToolResult` and cleared at the start of each turn.
+      const liveSettleHappened = liveSettledToolUseIds.current.size > 0
       const datasetToCluster = datasetToClusterRef.current
+      let suppressed = 0
       for (const brick of breakdown.bricks) {
         if (brick.cost_eur === 0) continue
+        if (
+          liveSettleHappened &&
+          (brick.category === "connector" || brick.category === "dataset")
+        ) {
+          suppressed += 1
+          continue
+        }
         if (brick.category === "connector") {
           const u = brick.units ?? {}
           const connectorId =
@@ -1130,7 +1151,7 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
         }
       }
       console.debug(
-        `[mode-a] cost breakdown for job ${jobId}: ${breakdown.bricks.length} bricks, status=${breakdown.status}`,
+        `[mode-a] cost breakdown for job ${jobId}: ${breakdown.bricks.length} bricks, status=${breakdown.status}, liveSettleHappened=${liveSettleHappened}, suppressed=${suppressed}`,
       )
     },
     [events],
@@ -1139,6 +1160,11 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
   const runModeATurn = useCallback(
     async (query: string, agentUid: number) => {
       const previousResponseId = modeAResponseIdRef.current
+      // Fresh per-turn state — see the ref's jsdoc above for why this set
+      // gates `emitCostBreakdownRows`. The breakdown frame fires at the end
+      // of the turn, after all `onToolResult` callbacks have populated the
+      // set for this turn, so clearing at the start is the correct point.
+      liveSettledToolUseIds.current = new Set()
       console.log(
         `[mode-a hook] ▶ runModeATurn agentUid=${agentUid} previousResponseId=${previousResponseId ?? "—"}`,
       )
@@ -1241,12 +1267,22 @@ export function useOrchestratorState(options: UseOrchestratorStateOptions = {}):
               dispatchToolCall(toolName, args, toolUseId, agentUid, instance, ord)
               if (instance) refreshTimeline()
             },
-            onToolResult: (toolUseId, fallbackName) => {
+            onToolResult: (toolUseId, fallbackName, content, isError) => {
               toolResultCount += 1
+              // Track per-call settled state so emitCostBreakdownRows can
+              // suppress double-counting connector/dataset bricks that we
+              // already paid out via live settleToolCall against `content`.
+              if (content !== null) {
+                liveSettledToolUseIds.current.add(toolUseId)
+              }
               console.log(
-                `[mode-a hook] onToolResult #${toolResultCount} id=${toolUseId} fallback=${fallbackName ?? "—"}`,
+                `[mode-a hook] onToolResult #${toolResultCount} id=${toolUseId} fallback=${fallbackName ?? "—"} hasContent=${content !== null} isError=${isError}`,
               )
-              settleToolCall(agentUid, toolUseId, { fallbackToolName: fallbackName })
+              settleToolCall(agentUid, toolUseId, {
+                content: content ?? undefined,
+                isError,
+                fallbackToolName: fallbackName,
+              })
             },
             onJobId: (jobId) => {
               console.log(`[mode-a hook] onJobId ${jobId} (stashed in modeAJobIdRef)`)

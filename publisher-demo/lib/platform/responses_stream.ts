@@ -113,6 +113,12 @@ interface OutputItem {
   call_id?: string
   name?: string
   status?: string
+  /** Tool output body, populated when the matching
+   *  `response.tool_call.output` sideband frame arrives. Pass-through
+   *  to `data-toolResult.content` so the orchestrator hook's
+   *  `settleToolCall` can compute per-entry royalty using the exact
+   *  same path Mode B already uses. */
+  output?: unknown
 }
 
 export interface PlatformResponseResult {
@@ -433,6 +439,40 @@ class SidecarState {
         } as WriterEvent)
         break
       }
+      case "response.tool_call.output": {
+        // Backend's non-SDK sideband frame (`responses_v1.md` §5, see
+        // `lib/streaming/translators/responses.ts` SidebandFrame in the
+        // platform repo). Carries the raw tool body keyed by call_id,
+        // emitted strictly AFTER `response.output_item.done` for the
+        // matching function_call. Attach to the pending OutputItem; if
+        // the AI SDK `tool-call` part already fired (which has been
+        // deferred awaiting this body), flush data-toolResult now.
+        const callId = typeof payload.call_id === "string" ? payload.call_id : null
+        if (callId === null) {
+          console.warn(`[mode-a raw] tool_call.output missing call_id, skipped`)
+          break
+        }
+        const output = payload.output
+        const pending = this._pendingOutputs.get(callId)
+        if (pending) {
+          pending.output = output
+          console.log(
+            `[mode-a raw]   ↳ attached output to pending ${callId} (type=${Array.isArray(output) ? "array" : typeof output})`,
+          )
+        } else {
+          // Sideband arrived before output_item.done — defensive.
+          // Backend ordering should prevent this in production, but stash
+          // the body so the eventual output_item.done picks it up.
+          this._pendingOutputs.set(callId, {
+            call_id: callId,
+            type: "function_call",
+            output,
+          })
+          console.log(`[mode-a raw]   ↳ early tool_call.output for ${callId}, stashed`)
+        }
+        this._maybeFlushToolOutput(callId)
+        break
+      }
       case "response.output_item.added": {
         const item = payload.item as OutputItem | undefined
         console.log(
@@ -461,13 +501,17 @@ class SidecarState {
           `[mode-a raw] output_item.done id=${item?.id} type=${item?.type} call_id=${item?.call_id ?? "—"} status=${item?.status ?? "—"}`,
         )
         if (item?.type === "function_call" && typeof item.call_id === "string") {
-          if (this._emittedCallIds.has(item.call_id)) {
-            console.log(`[mode-a raw]   ↳ flush IMMEDIATE tool-output for ${item.call_id}`)
-            this._emitToolOutput(item)
-          } else {
-            console.log(`[mode-a raw]   ↳ DEFER tool-output for ${item.call_id} until tool-call`)
-            this._pendingOutputs.set(item.call_id, item)
-          }
+          // Merge OutputItem fields with anything the sideband
+          // `response.tool_call.output` already stashed (if it arrived
+          // first, we'd have a stub carrying only `output`). Then let
+          // `_maybeFlushToolOutput` decide whether all three signals
+          // (output_item.done, sideband body, AI SDK tool-call) are in.
+          const existing = this._pendingOutputs.get(item.call_id)
+          const merged: OutputItem = existing
+            ? { ...existing, ...item, output: existing.output ?? item.output }
+            : item
+          this._pendingOutputs.set(item.call_id, merged)
+          this._maybeFlushToolOutput(item.call_id)
         }
         break
       }
@@ -544,19 +588,35 @@ class SidecarState {
       },
     } as WriterEvent)
     this._emittedCallIds.add(toolCallId)
-    const pending = this._pendingOutputs.get(toolCallId)
-    if (pending) {
-      console.log(`[mode-a srv]   ↳ flushing pending tool-output for ${toolCallId}`)
-      this._pendingOutputs.delete(toolCallId)
-      this._emitToolOutput(pending)
-    }
+    this._maybeFlushToolOutput(toolCallId)
+  }
+
+  /**
+   * Emit data-toolResult exactly when all three signals have arrived for
+   * a given call_id: the SDK `output_item.done` (populating the OutputItem
+   * shape), the AI SDK `tool-call` part (driving the cross-panel ripple),
+   * and the non-SDK `response.tool_call.output` sideband frame (carrying
+   * the raw tool body). The deferral avoids a double-emit race when one
+   * of the three lags the others. The `result()` backstop flushes any
+   * still-pending OutputItem at stream end, which covers old backends
+   * that never send the sideband — those flush with `output: undefined`
+   * and the demo falls back to its end-of-turn cost breakdown.
+   */
+  private _maybeFlushToolOutput(callId: string): void {
+    const pending = this._pendingOutputs.get(callId)
+    if (!pending) return
+    if (!this._emittedCallIds.has(callId)) return
+    if (pending.output === undefined) return
+    this._pendingOutputs.delete(callId)
+    this._emitToolOutput(pending)
   }
 
   private _emitToolOutput(item: OutputItem): void {
     if (typeof item.call_id !== "string") return
     const inst = this._toolCallInstance.get(item.call_id) ?? null
+    const hasContent = item.output !== undefined
     console.log(
-      `[mode-a srv] → tool-output-available + data-toolResult id=${item.call_id} status=${item.status ?? "completed"} instance=${inst?.instanceKey ?? "—"}`,
+      `[mode-a srv] → tool-output-available + data-toolResult id=${item.call_id} status=${item.status ?? "completed"} hasContent=${hasContent} instance=${inst?.instanceKey ?? "—"}`,
     )
     this._writer.write({
       type: "tool-output-available",
@@ -572,6 +632,11 @@ class SidecarState {
         instanceKey: inst?.instanceKey ?? null,
         agentType: inst?.agentType ?? null,
         displayName: inst?.displayName ?? null,
+        // Pass-through of the worker's structured tool body. The
+        // orchestrator hook's `settleToolCall` consumes this directly
+        // via Mode B's existing extractResultMeta / computeRoyalty path,
+        // no special-casing required.
+        content: item.output ?? null,
       },
     } as WriterEvent)
   }
@@ -702,6 +767,27 @@ class SidecarState {
   }
 
   result(): PlatformResponseResult {
+    // Backstop: flush any pending OutputItems that never saw the
+    // `response.tool_call.output` sideband frame (old backends that
+    // don't emit it yet). Without this, an old-backend turn would
+    // strand `data-toolResult` for any function_call whose body never
+    // arrived. The flushed frame carries `content: null` and the demo
+    // falls back to its end-of-turn cost breakdown.
+    if (this._pendingOutputs.size > 0) {
+      for (const [callId, item] of this._pendingOutputs) {
+        if (this._emittedCallIds.has(callId) && item.output === undefined) {
+          console.warn(`[mode-a srv]   ↳ backstop flush for ${callId} (no sideband body arrived)`)
+          this._emitToolOutput(item)
+        }
+      }
+      // Remove every entry we just flushed; anything left is a true
+      // never-tool-called orphan and the warn loop below surfaces it.
+      for (const [callId, item] of Array.from(this._pendingOutputs)) {
+        if (this._emittedCallIds.has(callId) && item.output === undefined) {
+          this._pendingOutputs.delete(callId)
+        }
+      }
+    }
     const rawSummary = Array.from(this._rawCounts.entries())
       .sort(([, a], [, b]) => b - a)
       .map(([k, v]) => `${k}=${v}`)
