@@ -150,7 +150,10 @@ function toSnakeCase(value: string | null | undefined): string {
 }
 
 function pathToOpId(method: string, path: string): string {
-  const cleaned = path.replace(/\{([^}]+)\}/g, "$1").replace(/\//g, " ").trim()
+  const cleaned = path
+    .replace(/\{([^}]+)\}/g, "$1")
+    .replace(/\//g, " ")
+    .trim()
   return `${method.toLowerCase()} ${cleaned}`
 }
 
@@ -167,12 +170,19 @@ function deriveToolName(
 }
 
 /**
- * Different MCP servers normalise the connector slug differently in the
- * tool name they expose: BNF servers convert dashes to underscores
- * (`bnf_gallica_api_*`), OpenAIRE preserves them (`openaire-…-api_*`). We
- * write the price under BOTH forms so the frontend's lookup hits either
- * way, since there is no single rule that matches every MCP server.
+ * Different MCP servers normalise the tool name they expose differently:
+ * - BNF servers convert dashes to underscores (`bnf_gallica_api_*`).
+ * - OpenAIRE preserves dashes (`openaire-…-api_*`).
+ * - MCP-Alien (the unified gateway) prepends `mcp_` to every tool name
+ *   regardless of the underlying connector — what the agent actually
+ *   sees in tool calls is `mcp_<slug>_<op>` (e.g.
+ *   `mcp_openaire-knowledge-graph-api_search`).
+ *
+ * We write the price under every form so the frontend's lookup hits
+ * regardless of which MCP server / gateway routes the call.
  */
 function nameVariants(name: string): string[] {
-  return Array.from(new Set([name, name.replace(/-/g, "_")]))
+  const dashed = name
+  const underscored = name.replace(/-/g, "_")
+  return Array.from(new Set([dashed, underscored, `mcp_${dashed}`, `mcp_${underscored}`]))
 }
