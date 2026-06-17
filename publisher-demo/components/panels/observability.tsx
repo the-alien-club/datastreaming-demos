@@ -140,7 +140,7 @@ export function Observability({
           <BumpNum display={fmtNum(counters.dataPoints)} />
           <span className="lab">Data points</span>
         </div>
-        <div className="counter royalty">
+        <div className="counter royalty" data-particle-anchor="royalties">
           {royFlash > 0 && <span className="roy-flash" key={royFlash} />}
           <RollingText text={`€${counters.royalties.toFixed(3)}`} />
           <span className="lab">Royalties</span>

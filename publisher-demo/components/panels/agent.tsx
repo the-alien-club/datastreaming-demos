@@ -58,7 +58,10 @@ function ToolCard({ tool, fresh }: { tool: ToolEntry; fresh?: boolean }) {
       ? `${elapsedMs}ms`
       : `${(elapsedMs / 1000).toFixed(elapsedMs < 10_000 ? 1 : 0)}s`
   return (
-    <div className={`tool-card${fresh ? " enter" : ""}${tool.running ? " running" : ""}`}>
+    <div
+      className={`tool-card${fresh ? " enter" : ""}${tool.running ? " running" : ""}`}
+      data-particle-anchor={tool.toolUseId ? `tool:${tool.toolUseId}` : undefined}
+    >
       <button
         type="button"
         className="tool-head"
@@ -700,7 +703,7 @@ export function Agent({
   const showRail = mode === "agentic" && railActive
 
   return (
-    <section className="panel p-agent agent">
+    <section className="panel p-agent agent" data-particle-anchor="agent">
       <header className="panel-head agent-head">
         <Icon name="spark" size={15} style={{ color: "var(--neutral-400)" }} />
         <span className="panel-title">Agent</span>

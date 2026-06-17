@@ -15,6 +15,7 @@ import { Agent } from "./panels/agent"
 import { Datasources } from "./panels/datasources"
 import { ExternalApis } from "./panels/external-apis"
 import { Observability } from "./panels/observability"
+import { ParticleLayer } from "./particle-layer"
 import { DsButton } from "./widgets"
 
 const PAGES = ["data", "chat", "obs"] as const
@@ -146,7 +147,15 @@ export function DemoAppMobile() {
   return (
     <div className="m-app">
       <div className="m-titlebar">
-        <img className="m-logo" src="/assets/logo-w.svg" alt="Alien" />
+        <a
+          className="logo-link"
+          href="https://alien.club"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Alien — open alien.club in a new tab"
+        >
+          <img className="m-logo" src="/assets/logo-w.svg" alt="Alien" />
+        </a>
         <span className="tb-pill">
           <span className="pulse-dot" />
           Live demo
@@ -286,6 +295,8 @@ export function DemoAppMobile() {
           />
         ))}
       </div>
+
+      <ParticleLayer />
 
       {drawer && <ConfigDrawer s={s} onClose={() => setDrawer(false)} />}
 

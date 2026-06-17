@@ -77,6 +77,21 @@ body {
   width: auto;
   opacity: 0.95;
 }
+.logo-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.18s ease;
+}
+.logo-link:hover {
+  opacity: 0.75;
+}
+.logo-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 60%, transparent);
+  outline-offset: 3px;
+}
 .tb-title {
   font-family: var(--font-display);
   font-weight: 600;

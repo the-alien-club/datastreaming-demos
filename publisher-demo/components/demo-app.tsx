@@ -7,6 +7,7 @@ import { Agent } from "./panels/agent"
 import { Datasources } from "./panels/datasources"
 import { ExternalApis } from "./panels/external-apis"
 import { Observability } from "./panels/observability"
+import { ParticleLayer } from "./particle-layer"
 import { DsButton } from "./widgets"
 
 /**
@@ -20,7 +21,15 @@ export function DemoApp() {
     <div className="app">
       <div className="titlebar">
         <div className="tb-left">
-          <img className="logo" src="/assets/logo-w.svg" alt="Alien" />
+          <a
+            className="logo-link"
+            href="https://alien.club"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Alien — open alien.club in a new tab"
+          >
+            <img className="logo" src="/assets/logo-w.svg" alt="Alien" />
+          </a>
           <span className="tb-pill">
             <span className="pulse-dot" />
             Live demo
@@ -105,6 +114,8 @@ export function DemoApp() {
           sessionRoyalty={s.sessionRoyalty}
         />
       </div>
+
+      <ParticleLayer />
 
       {s.pendingMode && (
         <div className="modal-overlay" onClick={() => s.setPendingMode(null)}>

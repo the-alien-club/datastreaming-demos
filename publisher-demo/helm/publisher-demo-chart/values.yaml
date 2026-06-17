@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: rg.fr-par.scw.cloud/ns-data-streaming/publisher-demo
   pullPolicy: Always
-  tag: "0.2.4"
+  tag: "0.2.5"
 
 imagePullSecrets: []
 

@@ -23,6 +23,7 @@ function Row({
   child,
   isPulse,
   onClick,
+  anchor,
   children,
 }: {
   rowKey: string
@@ -31,12 +32,16 @@ function Row({
   child?: boolean
   isPulse: boolean
   onClick: () => void
+  /** Optional `data-particle-anchor` value — used by the particle layer
+   *  to flow tool-call particles from this specific row. */
+  anchor?: string
   children: ReactNode
 }) {
   const [rip, setRip] = useState(0)
   return (
     <div
       key={rowKey}
+      data-particle-anchor={anchor}
       className={
         "ds-row" +
         (child ? " child" : "") +
@@ -102,7 +107,7 @@ export function Datasources({
   }
 
   return (
-    <section className="panel p-ds">
+    <section className="panel p-ds" data-particle-anchor="panel:datasources">
       <header className="panel-head">
         <Icon name="database" size={15} style={{ color: "var(--neutral-400)" }} />
         <span className="panel-title">Datasources</span>
@@ -163,6 +168,7 @@ export function Datasources({
                     parent
                     isPulse={false}
                     onClick={() => onToggleCluster(c.cluster_id)}
+                    anchor={`cluster:${c.cluster_id}`}
                   >
                     <button
                       type="button"
@@ -190,6 +196,7 @@ export function Datasources({
                           child
                           isPulse={isPulse}
                           onClick={() => onToggleDataset(c.cluster_id, d.id)}
+                          anchor={`dataset:${d.id}`}
                         >
                           <Cbx state={d.checked ? "on" : "off"} />
                           <span className="ds-name">{d.name}</span>

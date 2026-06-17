@@ -67,7 +67,7 @@ export function ExternalApis({
   const sel = view ? view.externalApis.filter((a) => a.checked).length : 0
 
   return (
-    <section className="panel p-api">
+    <section className="panel p-api" data-particle-anchor="panel:apis">
       <header className="panel-head">
         <Icon name="plug" size={15} style={{ color: "var(--neutral-400)" }} />
         <span className="panel-title">External APIs</span>
@@ -118,6 +118,7 @@ export function ExternalApis({
               return (
                 <div
                   key={a.connector_id + (isPulse ? `#${spark?.pulseN}` : "")}
+                  data-particle-anchor={`connector:${a.connector_id}`}
                   className={
                     "api-row" +
                     (off ? " off" : "") +
