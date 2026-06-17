@@ -19,34 +19,36 @@ export function DemoApp() {
   return (
     <div className="app">
       <div className="titlebar">
-        <img className="logo" src="/assets/logo-w.svg" alt="Alien" />
-        <span className="tb-pill">
-          <span className="pulse-dot" />
-          Live demo
-        </span>
-        <span className="tb-spacer" />
-        {s.config.errorMessage && (
-          <span
-            className="tb-pill"
-            style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
-            title={s.config.errorMessage}
-          >
-            <span className="pulse-dot" style={{ background: "var(--destructive)" }} />
-            backend disconnected
+        <div className="tb-left">
+          <img className="logo" src="/assets/logo-w.svg" alt="Alien" />
+          <span className="tb-pill">
+            <span className="pulse-dot" />
+            Live demo
           </span>
-        )}
-        <DsButton variant="ghost" size="sm" onClick={s.reset}>
-          <Icon name="reset" size={14} />
-          Reset
-        </DsButton>
-      </div>
+          {s.config.errorMessage && (
+            <span
+              className="tb-pill"
+              style={{ color: "var(--destructive)", borderColor: "var(--destructive)" }}
+              title={s.config.errorMessage}
+            >
+              <span className="pulse-dot" style={{ background: "var(--destructive)" }} />
+              backend disconnected
+            </span>
+          )}
+        </div>
 
-      <div className="substrip">
-        <h1>
+        <h1 className="tb-title">
           <span className="muted">Your data. Your APIs.</span>{" "}
           <span className="accent">Agent-ready.</span>{" "}
           <span className="muted">Royalty-bearing.</span>
         </h1>
+
+        <div className="tb-right">
+          <DsButton variant="ghost" size="sm" onClick={s.reset}>
+            <Icon name="reset" size={14} />
+            Reset
+          </DsButton>
+        </div>
       </div>
 
       <ConfigBar

@@ -205,7 +205,7 @@ export function ChatInterface({ persona, conversationId }: ChatInterfaceProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-5xl mx-auto overflow-hidden bg-background">
+    <div className="flex flex-col h-svh max-w-5xl mx-auto overflow-hidden bg-background pb-[env(safe-area-inset-bottom)]">
       {/* Header */}
       <div className="flex-shrink-0 border-b bg-card/50 backdrop-blur-sm p-5 flex items-center justify-between shadow-sm">
         {/* Left: Home Button */}
