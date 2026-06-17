@@ -251,10 +251,17 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   padding: 8px 10px;
+  /* Reset properties InfoTip may inherit from parents like .cfg-modes-label
+     (uppercase mono labels): without these, tip text renders uppercase on
+     a single non-wrapping line and overflows the panel. */
+  font-family: var(--font-sans);
   font-size: 11.5px;
   line-height: 1.4;
   font-weight: 400;
   letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
   opacity: 0;
   transform: translateY(-3px);
   pointer-events: none;
