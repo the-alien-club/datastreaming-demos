@@ -218,11 +218,14 @@ function adaptChatTurns(
 function adaptParts(
   parts: ReadonlyArray<unknown>,
   bridge: PublisherBridge | null,
+  /** Author for text parts inside an instance block — drives the panel's
+   *  per-subagent styling (planner-cards rendering, specialist colour, etc.). */
+  author: "main" | "planner" | "specialist" | "critic" | "other" = "main",
 ): AgentPart[] {
   return parts.map((raw) => {
     const p = raw as Record<string, unknown>
     if (p.kind === "text") {
-      return { kind: "text", text: String(p.text ?? "") }
+      return { kind: "text", text: String(p.text ?? ""), author }
     }
     if (p.kind === "thinking") {
       return { kind: "thinking", text: String(p.text ?? "") }
@@ -281,7 +284,10 @@ function adaptParts(
       displayName: inst.displayName,
       ordinal: inst.ordinal,
       status: inst.status,
-      children: adaptParts(inst.children, bridge),
+      // Propagate the instance's canonical type as author on its child text
+      // parts so the panel's `author === "planner"` path renders the planner
+      // task list as cards instead of raw JSON.
+      children: adaptParts(inst.children, bridge, inst.canonicalType),
     }
   })
 }
