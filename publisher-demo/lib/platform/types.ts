@@ -85,10 +85,24 @@ export interface McpConfigurationSummary {
 /**
  * Demo-internal combined response. The frontend's `useConfig` fetches this
  * single endpoint to populate both the picker tree and the source catalog.
+ *
+ * `slug` is the canonical per-browser configuration id. The client always
+ * overwrites `localStorage` with this value on every successful response so
+ * an env-bootstrap or a server-side recreate (because the prior slug 404'd)
+ * is picked up transparently.
+ *
+ * `resolved_via` reports how the slug was determined this turn:
+ *   - `"client"` — the browser supplied a slug via the `x-demo-config-slug`
+ *     header and it resolved.
+ *   - `"env-fallback"` — no client slug, but `env.DEMO_CONFIG_SLUG` was set
+ *     and resolved (one-time bootstrap path).
+ *   - `"created"` — neither resolved, server created a fresh row.
  */
 export interface DemoConfigResponse {
+  slug: string
   configuration: McpConfigurationSummary
   sources: AvailableSourcesResponse
+  resolved_via: "client" | "env-fallback" | "created"
 }
 
 /**

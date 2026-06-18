@@ -2,12 +2,13 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { useCallback } from "react"
+import { demoFetch } from "@/lib/client/demo-fetch"
 import type { DemoPricingResponse, PricingMap } from "@/lib/platform/types"
 
 const PRICING_KEY = ["demo", "pricing"] as const
 
 async function fetchPricing(): Promise<DemoPricingResponse> {
-  const res = await fetch("/api/demo/pricing", { cache: "no-store" })
+  const res = await demoFetch("/api/demo/pricing", { cache: "no-store" })
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(`pricing ${res.status}: ${body.slice(0, 200)}`)
@@ -87,8 +88,7 @@ function round4(n: number): number {
 function extractDatasetIds(args: Record<string, unknown> | null): number[] {
   if (!args) return []
   const out: number[] = []
-  const raw =
-    (args.dataset_ids as unknown) ?? (args.datasetIds as unknown) ?? undefined
+  const raw = (args.dataset_ids as unknown) ?? (args.datasetIds as unknown) ?? undefined
   if (Array.isArray(raw)) {
     for (const v of raw) {
       const n = Number(v)

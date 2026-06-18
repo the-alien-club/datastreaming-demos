@@ -141,9 +141,24 @@ export interface PlatformProviderOptions {
   accessToken: string
   /** Numeric organization id pinned via `x-organization-id`. */
   orgId: string
+  /**
+   * Caller-supplied input fields merged into every outgoing Responses-API
+   * request body as a top-level `extra_fields` map. Threaded through to the
+   * workflow input node by the backend's Responses controller (per the
+   * `extra_fields` plumbing in `responses_controller.ts`). When this map is
+   * non-empty we wrap `createOpenAI`'s `fetch` so the AI SDK call surface
+   * stays unchanged while still letting us add a top-level field the
+   * provider schema does not know about.
+   */
+  extraFields?: Record<string, unknown>
 }
 
 export function platformProvider(opts: PlatformProviderOptions): ReturnType<typeof createOpenAI> {
+  const customFetch =
+    opts.extraFields && Object.keys(opts.extraFields).length > 0
+      ? buildExtraFieldsFetch(opts.extraFields)
+      : undefined
+
   return createOpenAI({
     baseURL: opts.baseURL,
     apiKey: "unused",
@@ -152,7 +167,34 @@ export function platformProvider(opts: PlatformProviderOptions): ReturnType<type
       "x-oauth-access-token": opts.accessToken,
       "x-organization-id": opts.orgId,
     },
+    ...(customFetch ? { fetch: customFetch } : {}),
   })
+}
+
+/**
+ * Wrap `globalThis.fetch` so every POST with a JSON body gets a top-level
+ * `extra_fields` field merged in before the request goes out. Non-JSON bodies
+ * and non-POST requests pass through untouched. Existing `extra_fields` keys
+ * in the body are preserved (we shallow-merge ours over them rather than
+ * overwriting the whole map) — defensive belt-and-braces; the AI SDK does
+ * not currently emit `extra_fields` itself.
+ */
+function buildExtraFieldsFetch(extraFields: Record<string, unknown>): typeof fetch {
+  return async (input, init) => {
+    const method = (init?.method ?? "GET").toUpperCase()
+    const body = init?.body
+    if (method === "POST" && typeof body === "string" && body.length > 0) {
+      try {
+        const parsed = JSON.parse(body) as Record<string, unknown>
+        const existing = (parsed.extra_fields as Record<string, unknown> | undefined) ?? {}
+        parsed.extra_fields = { ...existing, ...extraFields }
+        return await fetch(input, { ...init, body: JSON.stringify(parsed) })
+      } catch {
+        // Body wasn't a JSON object we can mutate, forward unchanged.
+      }
+    }
+    return await fetch(input, init)
+  }
 }
 
 // ── Stream runner ────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@
  * break Mode A.
  */
 import type { StreamedToolEvent } from "@/lib/claude-sdk/agent-query"
+import { demoFetch } from "@/lib/client/demo-fetch"
 
 export interface ChatHistoryMessage {
   role: "user" | "assistant"
@@ -105,7 +106,7 @@ export async function runModeB(opts: ModeBRunOptions): Promise<void> {
   let res: Response
   try {
     const body = [...history, { role: "user" as const, content: query }]
-    res = await fetch("/api/demo/chat", {
+    res = await demoFetch("/api/demo/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode: "data", messages: body }),

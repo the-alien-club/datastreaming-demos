@@ -1,72 +1,42 @@
 import { NextResponse } from "next/server"
 import { adminFetch } from "@/lib/platform/admin-fetch"
-import { invalidateConfigCache, resolveConfig } from "@/lib/platform/resolve-slug"
+import { getOrCreateUserConfig } from "@/lib/platform/per-user-config"
 import type {
-  AvailableSourcesResponse,
   DemoConfigResponse,
   McpConfigurationPickerPayload,
   McpConfigurationSummary,
 } from "@/lib/platform/types"
-import {
-  clusterWhitelist,
-  connectorWhitelist,
-  filterConfig,
-  filterSources,
-} from "@/lib/platform/whitelist"
+import { clusterWhitelist, connectorWhitelist } from "@/lib/platform/whitelist"
 
 export const dynamic = "force-dynamic"
 
+const CONFIG_SLUG_HEADER = "x-demo-config-slug"
+
 /**
- * GET — returns the resolved configuration row + the available-sources
- * catalog in one shot. The configuration is resolved by `resolveConfig()`:
- *   1. the env-pinned `DEMO_CONFIG_SLUG` if it exists on the platform, OR
- *   2. the admin OAT user's default configuration as a fallback.
+ * GET — returns the per-browser MCP configuration row + the available-sources
+ * catalog in one shot. The configuration is resolved by `getOrCreateUserConfig`:
+ *   1. The browser's `x-demo-config-slug` header (its localStorage value), OR
+ *   2. The env-pinned `DEMO_CONFIG_SLUG` as a one-time bootstrap fallback, OR
+ *   3. A freshly created "whitelist all" configuration owned by the admin OAT
+ *      user (the new slug is returned so the browser can persist it).
  *
- * The response includes a `resolved_via` field so the UI can hint when the
- * env slug wasn't found and the default was used instead.
+ * The response always includes the canonical `slug` field — the client must
+ * write it back to localStorage so a returning visitor or a 404-on-stale-slug
+ * scenario heals transparently. `resolved_via` reports which branch fired.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const slug = readConfigSlugHeader(request)
+
   try {
-    const resolved = await resolveConfig()
-    if (!resolved) {
-      return NextResponse.json(
-        {
-          error: "no-mcp-configuration",
-          message:
-            "No MCP configuration found on the platform for this admin OAT. " +
-            "Create one at /mcp/configure on the platform, or run the demo's " +
-            "setup script (npm run setup:config).",
-        },
-        { status: 404 },
-      )
+    const resolved = await getOrCreateUserConfig(slug)
+    const response: DemoConfigResponse = {
+      slug: resolved.slug,
+      configuration: resolved.configuration,
+      sources: resolved.sources,
+      resolved_via: resolved.resolvedVia,
     }
 
-    const sourcesRes = await adminFetch("/mcp-configurations/available-sources")
-    if (!sourcesRes.ok) {
-      const body = await sourcesRes.text().catch(() => "")
-      return NextResponse.json(
-        {
-          error: "available-sources-fetch-failed",
-          status: sourcesRes.status,
-          detail: body.slice(0, 400),
-        },
-        { status: sourcesRes.status },
-      )
-    }
-    const rawSources = await unwrap<AvailableSourcesResponse>(sourcesRes)
-    // Apply CLUSTER_WHITELIST / CONNECTOR_WHITELIST. Filtering BOTH the
-    // available-sources catalog AND the saved configuration keeps the panels
-    // and the local draft state in lockstep — items hidden from the UI never
-    // appear in the picker and never travel back on save.
-    const sources = filterSources(rawSources)
-    const trimmedConfig = filterConfig(resolved.configuration.config)
-    const configuration: McpConfigurationSummary = {
-      ...resolved.configuration,
-      config: trimmedConfig,
-    }
-
-    const response: DemoConfigResponse = { configuration, sources }
-    return NextResponse.json({ ...response, resolved_via: resolved.resolvedVia })
+    return NextResponse.json(response)
   } catch (err) {
     return NextResponse.json(
       { error: "platform-env-missing", detail: errString(err) },
@@ -77,8 +47,10 @@ export async function GET() {
 
 /**
  * PUT — accepts a partial picker payload and forwards it as the `config`
- * field of the platform's update endpoint, targeting whichever slug
- * `resolveConfig()` settled on.
+ * field of the platform's update endpoint, targeting the slug resolved for
+ * this browser. The header must already match a row the resolver can find;
+ * a missing/stale slug triggers the same resolve-or-create path the GET uses
+ * so the picker can edit a freshly minted config on its very first save.
  */
 export async function PUT(request: Request) {
   let body: McpConfigurationPickerPayload
@@ -94,14 +66,13 @@ export async function PUT(request: Request) {
     )
   }
 
+  const slug = readConfigSlugHeader(request)
+
   try {
-    const resolved = await resolveConfig()
-    if (!resolved) {
-      return NextResponse.json({ error: "no-mcp-configuration" }, { status: 404 })
-    }
+    const resolved = await getOrCreateUserConfig(slug)
 
     // The UI only saw whitelisted entries, so its payload only references
-    // them. Re-attach any saved entries that the whitelist hides — otherwise
+    // them. Re-attach any saved entries that the whitelist hides, otherwise
     // a save would silently delete them from the platform configuration.
     const clusters = clusterWhitelist()
     const connectors = connectorWhitelist()
@@ -109,9 +80,7 @@ export async function PUT(request: Request) {
     const mergedConfig: McpConfigurationPickerPayload = {
       clusters: [
         ...body.clusters,
-        ...(clusters
-          ? (saved.clusters ?? []).filter((c) => !clusters.has(c.cluster_id))
-          : []),
+        ...(clusters ? (saved.clusters ?? []).filter((c) => !clusters.has(c.cluster_id)) : []),
       ],
       external_apis: [
         ...body.external_apis,
@@ -137,15 +106,24 @@ export async function PUT(request: Request) {
       )
     }
     const updated = await unwrap<McpConfigurationSummary>(res)
-    // Re-resolve next time so a slug rename (or a default flip) is picked up.
-    invalidateConfigCache()
-    return NextResponse.json({ configuration: updated })
+    return NextResponse.json({ slug: resolved.slug, configuration: updated })
   } catch (err) {
     return NextResponse.json(
       { error: "platform-env-missing", detail: errString(err) },
       { status: 503 },
     )
   }
+}
+
+/**
+ * Read the per-browser slug header. The browser sends it on every request
+ * once `localStorage` has been populated; the resolver tolerates both an
+ * absent header (first visit) and a malformed value (the regex check lives
+ * in `getOrCreateUserConfig`).
+ */
+function readConfigSlugHeader(request: Request): string | null {
+  const raw = request.headers.get(CONFIG_SLUG_HEADER)
+  return raw && raw.length > 0 ? raw : null
 }
 
 async function unwrap<T>(res: Response): Promise<T> {

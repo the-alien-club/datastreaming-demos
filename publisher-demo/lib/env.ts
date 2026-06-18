@@ -4,7 +4,18 @@ const envSchema = z.object({
   PLATFORM_API_URL: z.string().url(),
   MCP_ALIEN_URL: z.string().url(),
   ADMIN_OAT: z.string().startsWith("oat_"),
-  DEMO_CONFIG_SLUG: z.string().regex(/^cfg_[A-Za-z0-9_-]{6,64}$/),
+  /**
+   * Optional bootstrap fallback. When set AND the browser has no
+   * `cfg_*` slug in localStorage (or that slug 404s), the demo reuses
+   * this configuration on first load. Useful for fixed presentations
+   * where every viewer should land on the same curated config. Leave
+   * unset for the general multi-user demo where each browser gets its
+   * own auto-created config.
+   */
+  DEMO_CONFIG_SLUG: z
+    .string()
+    .regex(/^cfg_[A-Za-z0-9_-]{6,64}$/)
+    .optional(),
   DEMO_WORKFLOW_ID: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().startsWith("sk-ant-"),
   /**
@@ -34,7 +45,7 @@ function readEnv(): Env {
       PLATFORM_API_URL: "https://build-placeholder.invalid",
       MCP_ALIEN_URL: "https://build-placeholder.invalid",
       ADMIN_OAT: "oat_build_placeholder",
-      DEMO_CONFIG_SLUG: "cfg_build_placeholder",
+      DEMO_CONFIG_SLUG: undefined,
       DEMO_WORKFLOW_ID: "build-placeholder",
       ANTHROPIC_API_KEY: "sk-ant-build-placeholder",
       ORG_ID: "0",
@@ -44,7 +55,10 @@ function readEnv(): Env {
     PLATFORM_API_URL: process.env.PLATFORM_API_URL,
     MCP_ALIEN_URL: process.env.MCP_ALIEN_URL,
     ADMIN_OAT: process.env.ADMIN_OAT,
-    DEMO_CONFIG_SLUG: process.env.DEMO_CONFIG_SLUG,
+    // Treat empty-string the same as unset so a `DEMO_CONFIG_SLUG=` line in .env
+    // means "no env bootstrap, always create per-browser configs", rather than
+    // failing the slug regex.
+    DEMO_CONFIG_SLUG: process.env.DEMO_CONFIG_SLUG || undefined,
     DEMO_WORKFLOW_ID: process.env.DEMO_WORKFLOW_ID,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     ORG_ID: process.env.ORG_ID,
@@ -58,5 +72,4 @@ export const env = new Proxy({} as Env, {
   },
 })
 
-export const PUBLIC_CONFIG_SLUG = process.env.NEXT_PUBLIC_DEMO_CONFIG_SLUG ?? "cfg_publisher_demo"
 export const PUBLIC_MCP_URL = process.env.NEXT_PUBLIC_MCP_ALIEN_URL ?? "https://mcp.alien.club"

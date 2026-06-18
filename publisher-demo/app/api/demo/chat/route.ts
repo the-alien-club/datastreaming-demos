@@ -1,10 +1,12 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai"
 import { NextResponse } from "next/server"
-import { streamModeB, type StreamedToolEvent } from "@/lib/claude-sdk/agent-query"
+import { type StreamedToolEvent, streamModeB } from "@/lib/claude-sdk/agent-query"
 import { env } from "@/lib/env"
 import { adminFetch } from "@/lib/platform/admin-fetch"
-import { resolveConfig } from "@/lib/platform/resolve-slug"
+import { getOrCreateUserConfig } from "@/lib/platform/per-user-config"
 import { platformProvider, runPlatformResponse } from "@/lib/platform/responses_stream"
+
+const CONFIG_SLUG_HEADER = "x-demo-config-slug"
 
 async function unwrap<T>(res: Response): Promise<T> {
   const json = (await res.json()) as { data?: T } | T
@@ -55,28 +57,38 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "No user message text found" }, { status: 400 })
   }
 
+  // Per-browser MCP configuration. The browser sends its localStorage slug
+  // here (or omits the header on the very first visit); the resolver creates
+  // or fetches the matching row so both modes target the same slug for the
+  // duration of this tab's session.
+  const configSlug = request.headers.get(CONFIG_SLUG_HEADER)
+
   if (body.mode === "agentic") {
-    return streamAgenticTurn(userPrompt, body.previousResponseId, request.signal)
+    return streamAgenticTurn(userPrompt, body.previousResponseId, configSlug, request.signal)
   }
 
   if (body.mode === "data") {
-    return streamDataTurn(body, request.signal)
+    return streamDataTurn(body, configSlug, request.signal)
   }
 
   return NextResponse.json({ error: "Unknown mode" }, { status: 400 })
 }
 
-async function streamDataTurn(body: Body, signal: AbortSignal): Promise<Response> {
-  const resolved = await resolveConfig().catch(() => null)
+async function streamDataTurn(
+  body: Body,
+  configSlug: string | null,
+  signal: AbortSignal,
+): Promise<Response> {
+  const resolved = await getOrCreateUserConfig(configSlug).catch(() => null)
   if (!resolved) {
     return NextResponse.json(
       {
         error: "no-mcp-configuration",
         message:
-          "No MCP configuration found on the platform for the admin OAT. " +
+          "No MCP configuration found or creatable for this session. " +
           "Mode B needs a configuration to point the MCP connector at.",
       },
-      { status: 404 },
+      { status: 503 },
     )
   }
 
@@ -149,11 +161,12 @@ function extractUserMessage(messages: ChatMessage[]): string {
   return ""
 }
 
-function streamAgenticTurn(
+async function streamAgenticTurn(
   prompt: string,
   previousResponseId: string | undefined,
+  configSlug: string | null,
   signal: AbortSignal,
-): Response {
+): Promise<Response> {
   const tRoute = Date.now()
   // Resolve env eagerly so missing config returns a structured JSON 503
   // instead of a generic 500 from the streaming response. The client uses
@@ -162,31 +175,57 @@ function streamAgenticTurn(
   let workflowId: string
   let oat: string
   let orgId: string
+  let mcpBase: string
   try {
     platformBase = env.PLATFORM_API_URL.replace(/\/$/, "")
     workflowId = env.DEMO_WORKFLOW_ID
     oat = env.ADMIN_OAT
     orgId = env.ORG_ID
+    mcpBase = env.MCP_ALIEN_URL.replace(/\/$/, "")
   } catch (err) {
     console.error(`[mode-a route] ✗ env missing: ${err instanceof Error ? err.message : err}`)
     return NextResponse.json(
       {
         error: "platform-env-missing",
         message:
-          "Mode A requires PLATFORM_API_URL, DEMO_WORKFLOW_ID, ADMIN_OAT and ORG_ID. " +
+          "Mode A requires PLATFORM_API_URL, DEMO_WORKFLOW_ID, ADMIN_OAT, ORG_ID and MCP_ALIEN_URL. " +
           "Fill in .env to enable the live platform workflow.",
         detail: err instanceof Error ? err.message : String(err),
       },
       { status: 503 },
     )
   }
+
+  // Resolve (or create) the per-browser MCP config so the workflow's
+  // mcpServer nodes can target the slug this browser owns. The cloned
+  // demo workflow references "@httpRequest-0.mcp_server_url" on every
+  // mcpServer node, so we ship the full URL through "extra_fields"
+  // alongside the slug itself (the latter is informational for the
+  // workflow author, the former is what the runtime consumes).
+  const resolvedConfig = await getOrCreateUserConfig(configSlug).catch((err) => {
+    console.error(
+      `[mode-a route] ✗ getOrCreateUserConfig threw: ${err instanceof Error ? err.message : err}`,
+    )
+    return null
+  })
+  if (!resolvedConfig) {
+    return NextResponse.json(
+      {
+        error: "no-mcp-configuration",
+        message: "Could not resolve or create an MCP configuration for this session.",
+      },
+      { status: 503 },
+    )
+  }
+  const mcpServerUrl = `${mcpBase}/mcp?config=${resolvedConfig.slug}`
+
   console.log(
-    `[mode-a route] ▶ streamAgenticTurn workflow=${workflowId} org=${orgId} promptLen=${prompt.length} previousResponseId=${previousResponseId ?? "—"}`,
+    `[mode-a route] ▶ streamAgenticTurn workflow=${workflowId} org=${orgId} promptLen=${prompt.length} previousResponseId=${previousResponseId ?? "—"} configSlug=${resolvedConfig.slug} resolvedVia=${resolvedConfig.resolvedVia}`,
   )
   console.log(`[mode-a route]   platform=${platformBase}/agent/${workflowId}/responses`)
   console.log(`[mode-a route]   signal.aborted=${signal.aborted}`)
   // Observe the abort signal so we know whether the client disconnected
-  // mid-stream — that's a common cause of "platform call ran fine but UI
+  // mid-stream, that's a common cause of "platform call ran fine but UI
   // shows nothing" failures.
   signal.addEventListener("abort", () => {
     console.warn(
@@ -198,6 +237,10 @@ function streamAgenticTurn(
     baseURL: `${platformBase}/agent/${workflowId}`,
     accessToken: oat,
     orgId,
+    extraFields: {
+      config_slug: resolvedConfig.slug,
+      mcp_server_url: mcpServerUrl,
+    },
   })
 
   const stream = createUIMessageStream({
@@ -216,7 +259,7 @@ function streamAgenticTurn(
       } catch (err) {
         console.error(
           `[mode-a route] ✗ runPlatformResponse THREW after ${Date.now() - tRoute}ms:`,
-          err instanceof Error ? err.stack ?? err.message : err,
+          err instanceof Error ? (err.stack ?? err.message) : err,
         )
         throw err
       }
@@ -224,7 +267,7 @@ function streamAgenticTurn(
     onError: (error) => {
       console.error(
         `[mode-a route] ✗ createUIMessageStream onError:`,
-        error instanceof Error ? error.stack ?? error.message : error,
+        error instanceof Error ? (error.stack ?? error.message) : error,
       )
       return error instanceof Error ? error.message : "Stream error"
     },

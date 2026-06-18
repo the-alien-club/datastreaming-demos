@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { adminFetch } from "@/lib/platform/admin-fetch"
-import { resolveConfig } from "@/lib/platform/resolve-slug"
+import { getOrCreateUserConfig } from "@/lib/platform/per-user-config"
 import type {
   AvailableSourcesResponse,
   DemoPricingResponse,
@@ -8,6 +8,8 @@ import type {
 } from "@/lib/platform/types"
 
 export const dynamic = "force-dynamic"
+
+const CONFIG_SLUG_HEADER = "x-demo-config-slug"
 
 /**
  * Build a flat pricing map from the platform's authoritative sources:
@@ -19,15 +21,14 @@ export const dynamic = "force-dynamic"
  * call per connector). The frontend's `usePricing` hook reads this once and
  * `computeRoyalty()` looks up `(toolName, args)` against the map.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const slug = request.headers.get(CONFIG_SLUG_HEADER)
+
   try {
     const [resolved, sourcesRes] = await Promise.all([
-      resolveConfig(),
+      getOrCreateUserConfig(slug),
       adminFetch("/mcp-configurations/available-sources"),
     ])
-    if (!resolved) {
-      return NextResponse.json({ pricing: {} as PricingMap })
-    }
     if (!sourcesRes.ok) return errFor("available-sources-fetch-failed", sourcesRes)
 
     const config = resolved.configuration
