@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ConfigView } from "@/hooks/use-config"
 import type { Mode } from "@/hooks/use-mode"
+import { demoFetch } from "@/lib/client/demo-fetch"
 import type {
   SuggestionsErrorBody,
   SuggestionsMcpSnapshot,
@@ -132,7 +133,7 @@ export function useDynamicSuggestions({
         ...(typeof lengthHint === "number" ? { lengthHint } : {}),
       }
 
-      fetch("/api/demo/suggestions", {
+      demoFetch("/api/demo/suggestions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

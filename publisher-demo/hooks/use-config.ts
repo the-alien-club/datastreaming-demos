@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { demoFetch } from "@/lib/client/demo-fetch"
+import { setStoredConfigSlug } from "@/lib/client/local-config"
 import type {
   AvailableCluster,
   AvailableDataset,
@@ -15,16 +17,21 @@ import type {
 const CONFIG_KEY = ["demo", "config"] as const
 
 async function fetchConfig(): Promise<DemoConfigResponse> {
-  const res = await fetch("/api/demo/config", { cache: "no-store" })
+  const res = await demoFetch("/api/demo/config", { cache: "no-store" })
   if (!res.ok) {
     const body = await res.text().catch(() => "")
     throw new Error(`config ${res.status}: ${body.slice(0, 200)}`)
   }
-  return (await res.json()) as DemoConfigResponse
+  const data = (await res.json()) as DemoConfigResponse
+  // Persist the canonical slug returned by the server on EVERY response,
+  // not just the first one, so an env-fallback or a server-side recreate
+  // (because the prior localStorage slug 404'd) is picked up transparently.
+  if (data?.slug) setStoredConfigSlug(data.slug)
+  return data
 }
 
 async function putConfig(payload: McpConfigurationPickerPayload): Promise<DemoConfigResponse> {
-  const res = await fetch("/api/demo/config", {
+  const res = await demoFetch("/api/demo/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -33,7 +40,7 @@ async function putConfig(payload: McpConfigurationPickerPayload): Promise<DemoCo
     const body = await res.text().catch(() => "")
     throw new Error(`config PUT ${res.status}: ${body.slice(0, 200)}`)
   }
-  // Returns { configuration } after PUT — refetch the full GET to also
+  // Returns { slug, configuration } after PUT, refetch the full GET to also
   // refresh the sources catalog.
   return fetchConfig()
 }

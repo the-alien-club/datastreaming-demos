@@ -29,6 +29,7 @@
  * surfaces.
  */
 import type { AgentInstanceInfo, AgentType } from "@/lib/chat-messages"
+import { demoFetch } from "@/lib/client/demo-fetch"
 import { readUiMessageChunks } from "@/lib/ui-stream"
 
 /** Parsed composite agent item-id. */
@@ -173,7 +174,7 @@ export async function runModeA(opts: ModeARunOptions): Promise<void> {
 
   let res: Response
   try {
-    res = await fetch("/api/demo/chat", {
+    res = await demoFetch("/api/demo/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
