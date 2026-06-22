@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next"
 import type { ReactNode } from "react"
+import Script from "next/script"
 import { Providers } from "@/components/providers"
 import "./globals.css"
+
+const GA_MEASUREMENT_ID = "G-Q95CSZ6MPD"
 
 export const metadata: Metadata = {
   title: "Alien — Live demo",
@@ -26,6 +29,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div id="app-root">
           <Providers>{children}</Providers>
         </div>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="ga4-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_MEASUREMENT_ID}');
+          `}
+        </Script>
       </body>
     </html>
   )

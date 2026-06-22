@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
+import Script from "next/script"
 import { NextIntlClientProvider } from "next-intl"
 import { getMessages, getTranslations } from "next-intl/server"
 import { Toaster } from "@/components/ui/sonner"
@@ -8,6 +9,8 @@ import { Providers } from "@/components/providers"
 import { routing } from "@/i18n/routing"
 import { notFound } from "next/navigation"
 import "../globals.css"
+
+const GA_MEASUREMENT_ID = "G-848ERZPCWE"
 
 const inter = Inter({
   variable: "--font-inter",
@@ -60,6 +63,18 @@ export default async function LocaleLayout({
             </TooltipProvider>
           </Providers>
         </NextIntlClientProvider>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="ga4-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GA_MEASUREMENT_ID}');
+          `}
+        </Script>
       </body>
     </html>
   )
