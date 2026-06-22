@@ -104,8 +104,8 @@ const TopNavBar: React.FC<TopNavBarProps> = ({ selectedModel, onModelChange }) =
               size="sm"
               className="h-8 text-sm gap-1.5"
               onClick={() =>
-                authClient.signIn.social({
-                  provider: "authentik",
+                authClient.signIn.oauth2({
+                  providerId: "authentik",
                   callbackURL: window.location.href,
                 })
               }
