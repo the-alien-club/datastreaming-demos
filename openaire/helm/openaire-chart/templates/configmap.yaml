@@ -14,3 +14,8 @@ data:
   AUTHENTIK_APP_SLUG: {{ .Values.config.authentikAppSlug | quote }}
   BETTER_AUTH_URL: {{ .Values.config.betterAuthUrl | quote }}
   OTEL_SERVICE_NAME: {{ .Values.config.otelServiceName | quote }}
+  # Read at runtime by server-side better-auth (lib/auth.ts) to mount the auth
+  # router under the app's subpath. Next.js only bakes NEXT_PUBLIC_* into the
+  # client bundle and next.config at build time — server route handlers read it
+  # at runtime, so it must also be present here. Kept in sync with istio.path.
+  NEXT_PUBLIC_BASE_PATH: {{ .Values.istio.path | quote }}
