@@ -8,6 +8,7 @@ message and prints the exact figures.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -22,7 +23,13 @@ from analyze import load
 
 HERE = Path(__file__).resolve().parent
 DOCUMENTED = 300  # req/min communicated by BnF
-CLIENT_CAP = 180  # our own broker token-bucket cap
+
+p = argparse.ArgumentParser()
+p.add_argument("--csv", default=None, help="path to broker-calls CSV")
+p.add_argument("--suffix", default="", help="filename suffix, e.g. _new")
+p.add_argument("--client-cap", type=int, default=180, help="our broker token-bucket cap")
+ARGS, _ = p.parse_known_args()
+CLIENT_CAP = ARGS.client_cap
 
 sns.set_theme(style="whitegrid", context="talk", font_scale=0.9)
 ALIEN = "#2563eb"
@@ -67,7 +74,8 @@ def per_minute_proof(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    df = load()
+    sfx = ARGS.suffix
+    df = load(ARGS.csv)
     pm = per_minute_proof(df)
     frozen = pm[pm.frozen]
     acc = frozen.accepted_before_429
@@ -77,40 +85,61 @@ def main() -> None:
     n_200 = int((g.status == 200).sum())
     n_freeze = int((g.note == "freeze").sum())
     win_start, win_end = g.ts.min(), g.ts.max()
-    band = acc.quantile([0.05, 0.5, 0.95])
+    # full minutes only (drop the partial first/last) for the achieved-rate stat
+    full_min = pm.iloc[1:-1] if len(pm) > 2 else pm
+    achieved_mean = full_min.n200_total.mean()
+    achieved_max = full_min.n200_total.max() if len(full_min) else g.groupby("minute").size().max()
+    enough = len(frozen) >= 5  # enough freezes to claim an enforced ceiling
+    med = acc.median() if len(acc) else float("nan")
+
     print("================ FIGURES FOR THE BnF MESSAGE ================")
     print(f"Window (partner API traffic): {win_start:%Y-%m-%d %H:%M} – {win_end:%H:%M} UTC")
     print(f"Successful (200) responses delivered: {n_200:,}")
     print(f"Real 429 responses from BnF: {n_freeze:,}")
     print(f"Distinct clock-minutes in which BnF returned 429: {len(frozen)}")
-    print("Successful responses delivered each minute BEFORE the first 429:")
-    print(f"  median {acc.median():.0f}  |  mean {acc.mean():.1f}  |  std {acc.std():.1f}")
-    print(f"  IQR {acc.quantile(.25):.0f}–{acc.quantile(.75):.0f}  |  "
-          f"5th–95th pct {band.iloc[0]:.0f}–{band.iloc[2]:.0f}")
-    pct_100_103 = 100 * acc.between(100, 103).mean()
-    print(f"  {pct_100_103:.0f}% of minutes fell in 100–103")
-    print(f"First-429 offset within the minute: median {frozen.first_429_offset_s.median():.0f}s, "
-          f"min {frozen.first_429_offset_s.min():.0f}s (a hard floor — no 429 before this)")
-    print(f"Mean sustained successful throughput: {pm[pm.frozen].n200_total.mean():.0f}/min "
-          f"(documented {DOCUMENTED}, our client cap {CLIENT_CAP})")
+    print(f"Mean sustained successful throughput (full minutes): {achieved_mean:.0f}/min "
+          f"| peak {achieved_max:.0f}/min")
+    if enough:
+        band = acc.quantile([0.05, 0.5, 0.95])
+        print("Successful responses delivered each minute BEFORE the first 429:")
+        print(f"  median {med:.0f}  |  mean {acc.mean():.1f}  |  std {acc.std():.1f}")
+        print(f"  IQR {acc.quantile(.25):.0f}–{acc.quantile(.75):.0f}  |  "
+              f"5th–95th pct {band.iloc[0]:.0f}–{band.iloc[2]:.0f}")
+        print(f"First-429 offset within the minute: median "
+              f"{frozen.first_429_offset_s.median():.0f}s, min {frozen.first_429_offset_s.min():.0f}s")
+    else:
+        print(f"Too few 429s ({n_freeze}) to measure an enforced ceiling — traffic is "
+              f"bound by our own client cap ({CLIENT_CAP}/min), NOT by BnF.")
+        if len(acc):
+            print(f"  (the {len(frozen)} freeze-minute(s) saw ~{med:.0f} accepted before 429)")
+    print(f"Documented quota {DOCUMENTED}/min, our client cap {CLIENT_CAP}/min")
     print("============================================================")
 
-    # ---- CHART 1: the proof — accepted-before-429 distribution ---------------
+    # ---- CHART 1: accepted-before-429 distribution ---------------------------
     fig, ax = plt.subplots(figsize=(11, 6))
-    sns.histplot(acc, binwidth=1, color=ALIEN, edgecolor="white", ax=ax)
-    med = acc.median()
-    ax.axvline(med, color=BNF_RED, lw=2.5, ls="--")
-    ax.text(med + 1, ax.get_ylim()[1] * 0.92, f"median {med:.0f} req/min",
-            color=BNF_RED, fontweight="bold")
+    if enough:
+        sns.histplot(acc, binwidth=1, color=ALIEN, edgecolor="white", ax=ax)
+        ax.axvline(med, color=BNF_RED, lw=2.5, ls="--")
+        ax.text(med + 1, ax.get_ylim()[1] * 0.92, f"median {med:.0f} req/min",
+                color=BNF_RED, fontweight="bold")
+        lo = max(50, int(acc.min()) - 10)
+        ax.set_xlim(lo, int(acc.max()) + 15)
+    else:
+        if acc.nunique() > 1:
+            sns.histplot(acc, binwidth=1, color=ALIEN, edgecolor="white", ax=ax)
+        ax.text(0.5, 0.5,
+                f"Only {n_freeze} HTTP 429 in {len(pm)} minutes.\n"
+                f"BnF did not throttle us — we are bound by our own\n"
+                f"client cap of {CLIENT_CAP}/min (peak {achieved_max:.0f}/min achieved).",
+                transform=ax.transAxes, ha="center", va="center", fontsize=14,
+                color=GREY, fontweight="bold")
     ax.set_title("BnF partner API: requests accepted per minute before HTTP 429\n"
-                 f"({len(frozen)} distinct clock-minutes, single OAuth client)",
-                 fontsize=14)
+                 f"({len(frozen)} clock-minute(s) with a 429, single OAuth client)", fontsize=14)
     ax.set_xlabel("successful (200) responses delivered before the first 429")
     ax.set_ylabel("number of clock-minutes")
-    ax.set_xlim(85, 130)
     sns.despine()
     fig.tight_layout()
-    fig.savefig(HERE / "proof_01_limit_histogram.png", dpi=140)
+    fig.savefig(HERE / f"proof_01_limit_histogram{sfx}.png", dpi=140)
     plt.close(fig)
 
     # ---- CHART 2: sustained throughput vs documented quota -------------------
@@ -124,13 +153,19 @@ def main() -> None:
     ts = ts.set_index("minute").reindex(full).reset_index(names="minute")
 
     fig, ax = plt.subplots(figsize=(13, 6))
-    sns.lineplot(data=ts, x="minute", y="ok", color=ALIEN, lw=1.4, ax=ax, label="delivered 200s/min")
+    sns.lineplot(data=ts, x="minute", y="ok", color=ALIEN, lw=1.6, marker="o",
+                 markersize=4, ax=ax, label="delivered 200s/min")
     ax.axhline(DOCUMENTED, color=BNF_RED, ls="--", lw=2, label=f"documented quota ({DOCUMENTED}/min)")
-    ax.axhline(CLIENT_CAP, color=GREY, ls=":", lw=2, label=f"our client cap ({CLIENT_CAP}/min)")
-    ax.axhline(med, color="#059669", ls="-", lw=1.5, label=f"measured ceiling ({med:.0f}/min)")
-    ax.set_ylim(0, DOCUMENTED + 20)
-    ax.set_title("Sustained successful throughput vs documented quota — pinned at ~100/min",
-                 fontsize=14)
+    if CLIENT_CAP != DOCUMENTED:
+        ax.axhline(CLIENT_CAP, color=GREY, ls=":", lw=2, label=f"our client cap ({CLIENT_CAP}/min)")
+    if enough:
+        ax.axhline(med, color="#059669", lw=1.5, label=f"measured BnF ceiling ({med:.0f}/min)")
+        title = f"Sustained successful throughput vs documented quota — capped by BnF at ~{med:.0f}/min"
+    else:
+        title = (f"Sustained successful throughput — reaching {DOCUMENTED}/min cleanly "
+                 f"({n_freeze} × 429 only)")
+    ax.set_ylim(0, DOCUMENTED + 30)
+    ax.set_title(title, fontsize=13)
     ax.set_xlabel("time (UTC)")
     ax.set_ylabel("successful responses / min")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
@@ -138,10 +173,10 @@ def main() -> None:
     sns.despine()
     fig.autofmt_xdate()
     fig.tight_layout()
-    fig.savefig(HERE / "proof_02_throughput_vs_quota.png", dpi=140)
+    fig.savefig(HERE / f"proof_02_throughput_vs_quota{sfx}.png", dpi=140)
     plt.close(fig)
 
-    print(f"\nCharts: {HERE}/proof_01_limit_histogram.png, proof_02_throughput_vs_quota.png")
+    print(f"\nCharts: proof_01_limit_histogram{sfx}.png, proof_02_throughput_vs_quota{sfx}.png")
 
 
 if __name__ == "__main__":

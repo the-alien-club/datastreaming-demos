@@ -57,8 +57,8 @@ def parse_french_retry(val: str):
     )
 
 
-def load() -> pd.DataFrame:
-    df = pd.read_csv(CSV)
+def load(csv_path=None) -> pd.DataFrame:
+    df = pd.read_csv(csv_path or CSV)
     df["ts"] = pd.to_datetime(df["timestamp_iso"], utc=True)
     df["authed"] = df["authed"].astype(str).str.lower() == "true"
     df["minute"] = df["ts"].dt.floor("min")
