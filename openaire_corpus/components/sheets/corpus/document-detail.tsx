@@ -116,13 +116,17 @@ export function SheetDocumentDetail({ doc, projectId, open, onOpenChange }: Prop
   const [removeReason, setRemoveReason] = useState("")
   const [findSimilar, setFindSimilar] = useState(false)
 
-  // Reset the remove flow whenever the selected doc changes.
+  // Reset the remove flow whenever the selected doc changes — the "store info
+  // from previous renders" pattern (react.dev), adjusting state during render
+  // rather than in an effect (no cascading render).
   const openaireId = doc?.openaireId
-  useEffect(() => {
+  const [prevId, setPrevId] = useState(openaireId)
+  if (openaireId !== prevId) {
+    setPrevId(openaireId)
     setRemoveExpanded(false)
     setRemoveReason("")
     setFindSimilar(false)
-  }, [openaireId])
+  }
 
   // Auto-retry metadata resolution on first paint of a failed document. Once per
   // id per mount (guard ref); if it fails again the manual "retry" takes over.

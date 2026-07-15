@@ -42,11 +42,15 @@
     "ingerer": "Ingest",
     "rechercher": "Research",
     "carnet": "Notebook",
-    "workspace": "BnF workspace",
+    "workspace": "OpenAIRE workspace",
     "newProject": "New project",
     "switchProject": "Switch project",
     "userMenu": "User menu",
-    "language": "Language"
+    "language": "Language",
+    "corpus": "Corpus",
+    "ingest": "Ingestion",
+    "research": "Research",
+    "notebook": "Notebook"
   },
   "health": {
     "aria": "Service health",
@@ -182,7 +186,15 @@
       "languages": "Languages",
       "sources": "Sources",
       "empty": "No documents in the corpus",
-      "pendingSub": "{count} resolving"
+      "pendingSub": "{count} resolving",
+      "records": "Records",
+      "recordsSub": "research products",
+      "openAccess": "Open access",
+      "openAccessSub": "{open} / {total} open",
+      "withAbstracts": "With abstracts",
+      "withAbstractsSub": "of {total} resolved",
+      "peerReviewed": "Peer-reviewed",
+      "peerReviewedSub": "of {total} resolved"
     },
     "filters": {
       "title": "Filters and statistics",
@@ -237,7 +249,8 @@
         "sansTexteSub": "not ingested",
         "nonNumerise": "Not digitized",
         "nonNumeriseSub": "not ingested"
-      }
+      },
+      "facetOaTitle": "Open access"
     },
     "documents": {
       "empty": "No documents. Ask the agent to build a corpus.",
@@ -287,7 +300,12 @@
           "deposit": "Repository",
           "digitization": "Digitization",
           "ocr": "OCR",
-          "ingestion": "Ingestion"
+          "ingestion": "Ingestion",
+          "venue": "Venue",
+          "funder": "Funder",
+          "citations": "Citations",
+          "openAccess": "Open access",
+          "peerReview": "Peer review"
         },
         "values": {
           "digitized": "Digitized",
@@ -299,8 +317,28 @@
           "ingestVision": "Image · visual analysis (Gemma)",
           "ingestSansTexte": "No text · not ingested",
           "ingestNonNumerise": "Not ingested",
-          "unknown": "—"
-        }
+          "unknown": "—",
+          "peerReviewed": "Peer-reviewed",
+          "notPeerReviewed": "Not peer-reviewed"
+        },
+        "abstract": "Abstract",
+        "graphRelations": "Graph relations",
+        "citedBy": "cited-by",
+        "references": "references",
+        "related": "related",
+        "doiIdentifier": "DOI",
+        "open": "Open this record",
+        "openDoi": "Open via DOI",
+        "openDoiSub": "Resolve the DOI at the publisher",
+        "openaireRecord": "OpenAIRE record",
+        "openaireRecordSub": "Full record in the Graph",
+        "sourceRepo": "Source / repository",
+        "sourceRepoSub": "Repository or hosting landing page",
+        "removeReasonLabel": "Why are you removing it?",
+        "removeReasonPlaceholder": "Optional — recorded as the version note",
+        "removeFindSimilar": "Ask the agent to find other similar cases in the corpus",
+        "removeConfirm": "Remove",
+        "removeCancel": "Cancel"
       }
     },
     "docTypes": {
@@ -554,12 +592,19 @@
       "eyebrow": "Reference · cited source",
       "folioLabel": "Folio {folio}",
       "arkLabel": "ARK identifier",
-      "consult": "View on the BnF",
+      "consult": "Open",
       "iiifViewer": "IIIF viewer — view {folio}",
       "iiifViewerSub": "Open the exact page in the viewer",
       "gallicaViewer": "View on Gallica",
       "gallicaViewerSub": "The document in the Gallica viewer",
-      "usages": "Used in other notes"
+      "usages": "Used in other notes",
+      "pageLabel": "Page {page}",
+      "abstractLabel": "Abstract",
+      "doiLabel": "DOI",
+      "openDoi": "Open via DOI",
+      "openDoiSub": "Resolve the DOI at the publisher",
+      "openaireRecord": "OpenAIRE record",
+      "openaireRecordSub": "Full record in the Graph"
     }
   },
   "notes": {
