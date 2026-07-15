@@ -56,7 +56,7 @@
     "aria": "Service health",
     "app": "App",
     "alien": "Alien",
-    "bnf": "BnF",
+    "bnf": "OpenAIRE",
     "status": {
       "green": "operational",
       "orange": "degraded",
@@ -85,9 +85,9 @@
   },
   "auth": {
     "brand": {
-      "eyebrow": "Alien Intelligence × BnF",
+      "eyebrow": "Alien Intelligence × OpenAIRE",
       "title": "Your corpus. Your sources. Your research.",
-      "tagline": "Build, ingest and query the holdings of the Bibliothèque nationale de France, with an agent that cites every source.",
+      "tagline": "Build, ingest and query 600M+ open-science research products from OpenAIRE, with an agent that cites every source.",
       "footer": "Corpus research workspace"
     },
     "signIn": {
@@ -119,7 +119,7 @@
     }
   },
   "projects": {
-    "eyebrow": "BnF workspace",
+    "eyebrow": "OpenAIRE workspace",
     "title": "Projects",
     "subtitle": "Your research workspaces",
     "new": "New project",
@@ -158,11 +158,11 @@
     "intro": {
       "tag": "Step 1 · Build",
       "title": "Build your corpus",
-      "lead": "Chat with the agent to gather documents from the BnF, then explore your corpus composition on the right.",
+      "lead": "Chat with the agent to gather documents from OpenAIRE, then explore your corpus composition on the right.",
       "points": {
         "chat": {
           "title": "Chat with the agent",
-          "text": "Describe the topic, period or sources you want: the agent searches the BnF holdings and adds documents to the corpus."
+          "text": "Describe the topic, period or sources you want: the agent searches the OpenAIRE Graph and adds documents to the corpus."
         },
         "panel": {
           "title": "Understand your corpus",
@@ -255,7 +255,7 @@
     "documents": {
       "empty": "No documents. Ask the agent to build a corpus.",
       "askAgentHint": "Start a conversation on the left to begin.",
-      "openOnBnf": "View on BnF",
+      "openOnBnf": "View on OpenAIRE",
       "excerptLabel": "Excerpt",
       "arkLabel": "ARK",
       "authorLabel": "Author",
@@ -269,29 +269,29 @@
       "resolveFailed": "Resolution failed",
       "filtering": "Updating…",
       "detail": {
-        "eyebrow": "Notice · BnF",
+        "eyebrow": "Notice · OpenAIRE",
         "close": "Close",
         "excerptOcr": "OCR excerpt",
         "arkIdentifier": "ARK identifier",
-        "consultBnf": "View on the BnF",
+        "consultBnf": "View on OpenAIRE",
         "iiifViewer": "IIIF viewer",
-        "iiifViewerSub": "Open in the BnF viewer",
-        "gallicaNotice": "Gallica record",
+        "iiifViewerSub": "Open in OpenAIRE viewer",
+        "gallicaNotice": "OpenAIRE record",
         "gallicaNoticeSub": "Document page and facsimile",
         "iiifManifest": "IIIF manifest",
         "iiifManifestSub": "manifest.json",
         "oai": "OAI record",
         "oaiSub": "Dublin Core (oai_dc)",
-        "catalogueRecord": "BnF catalogue record",
+        "catalogueRecord": "OpenAIRE catalogue record",
         "catalogueRecordSub": "catalogue.bnf.fr",
         "remove": "Remove from corpus",
         "removing": "Removing…",
         "resolvingMeta": "Extracting metadata…",
         "metaFailed": "Metadata extraction failed.",
         "retry": "Retry",
-        "promoteHint": "Conversion to the digitized Gallica document failed (BnF API temporarily unavailable). You can retry.",
+        "promoteHint": "Conversion to the digitized OpenAIRE document failed (OpenAIRE API temporarily unavailable). You can retry.",
         "promote": "Promote to digitized document",
-        "notOnGallica": "This document is not digitized on Gallica — catalogue notice only.",
+        "notOnOpenAIRE": "This document is not digitized on OpenAIRE — catalogue notice only.",
         "fields": {
           "type": "Type",
           "date": "Date",
@@ -374,15 +374,15 @@
       "he": "Hebrew"
     },
     "sources": {
-      "gallica": "Gallica",
-      "catalogue": "BnF Catalogue",
+      "gallica": "OpenAIRE",
+      "catalogue": "OpenAIRE Catalogue",
       "databnf": "data.bnf.fr",
       "other": "Other"
     },
     "chat": {
       "headerTitle": "Conversation",
       "headerSubtitle": "Corpus-building agent",
-      "systemPromptIntro": "Hello, I help you build your corpus from the BnF holdings. Describe the topic, period or sources you are interested in.",
+      "systemPromptIntro": "Hello, I help you build your corpus from the OpenAIRE Graph. Describe the topic, period or sources you are interested in.",
       "placeholder": "Refine the corpus…",
       "send": "Send",
       "stop": "Stop",
@@ -467,10 +467,10 @@
       "seconds": "{count}s"
     },
     "bnf": {
-      "search_catalogue": "BnF Catalogue search",
-      "search_gallica": "Gallica search",
-      "get_catalogue_record": "Resolve BnF record",
-      "get_document_info": "Resolve Gallica document",
+      "search_catalogue": "OpenAIRE Catalogue search",
+      "search_gallica": "OpenAIRE search",
+      "get_catalogue_record": "Resolve OpenAIRE record",
+      "get_document_info": "Resolve OpenAIRE document",
       "sparql_query": "data.bnf.fr SPARQL query",
       "find_person": "Find a person",
       "find_work": "Find a work",
@@ -516,7 +516,7 @@
     "intro": {
       "tag": "Step 3 · Research",
       "title": "Query your corpus",
-      "lead": "Chat with the research agent, open cited sources on the BnF, and build your research journal.",
+      "lead": "Chat with the research agent, open cited sources on OpenAIRE, and build your research journal.",
       "points": {
         "ask": {
           "title": "Query the corpus",
@@ -524,7 +524,7 @@
         },
         "cite": {
           "title": "Open the sources",
-          "text": "Each citation points to the exact ARK and folio: click to open the document on the BnF (IIIF, Gallica)."
+          "text": "Each citation points to the exact ARK and folio: click to open the document on OpenAIRE (IIIF, OpenAIRE)."
         },
         "carnet": {
           "title": "Build your journal",
@@ -595,8 +595,8 @@
       "consult": "Open",
       "iiifViewer": "IIIF viewer — view {folio}",
       "iiifViewerSub": "Open the exact page in the viewer",
-      "gallicaViewer": "View on Gallica",
-      "gallicaViewerSub": "The document in the Gallica viewer",
+      "gallicaViewer": "View on OpenAIRE",
+      "gallicaViewerSub": "The document in the OpenAIRE viewer",
       "usages": "Used in other notes",
       "pageLabel": "Page {page}",
       "abstractLabel": "Abstract",
@@ -663,7 +663,7 @@
     "pipeline": {
       "title": "Ingestion in progress",
       "target": "Target",
-      "targetValue": "BnF RAG cluster",
+      "targetValue": "OpenAIRE RAG cluster",
       "overall": "Overall progress",
       "pending": "Pending",
       "skipped": "Skipped",
@@ -681,7 +681,7 @@
     "queue": {
       "title": "Processing",
       "finalized": "Documents finalized",
-      "fetchTitle": "BnF fetch",
+      "fetchTitle": "OpenAIRE fetch",
       "foliosFetched": "{done} / {total} folios fetched",
       "etaLabel": "Time left",
       "etaComputing": "estimating…",

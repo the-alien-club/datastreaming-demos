@@ -1,8 +1,8 @@
 "use client"
 
 // components/layouts/workspace/header.tsx
-// WorkspaceHeader — the co-branded Alien Intelligence × BnF top bar shared by
-// every workspace screen. Left: Alien wordmark · divider · BnF logo · optional
+// WorkspaceHeader — the co-branded Alien Intelligence × OpenAIRE top bar shared
+// by every workspace screen. Left: Alien wordmark · divider · OpenAIRE logo · optional
 // project label. Centre: the step-nav (only on a project). Right: MCP status +
 // user menu. Mirrors design/BnF Corpus Research.dc.html header (lines 34-114).
 //
@@ -69,11 +69,11 @@ export function WorkspaceHeader({
         />
         <div className="h-6.5 w-px bg-border" aria-hidden />
         <Image
-          src="/brand/bnf-logo-w.png"
-          alt="BnF — Bibliothèque nationale de France"
-          title="Bibliothèque nationale de France"
-          width={960}
-          height={359}
+          src="/brand/openaire-logo-w.svg"
+          alt="OpenAIRE — Open Science"
+          title="OpenAIRE"
+          width={168}
+          height={30}
           priority
           className="h-5 w-auto opacity-90"
         />

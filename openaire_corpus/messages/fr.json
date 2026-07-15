@@ -56,7 +56,7 @@
     "aria": "État des services",
     "app": "App",
     "alien": "Alien",
-    "bnf": "BnF",
+    "bnf": "OpenAIRE",
     "status": {
       "green": "opérationnel",
       "orange": "dégradé",
@@ -85,9 +85,9 @@
   },
   "auth": {
     "brand": {
-      "eyebrow": "Alien Intelligence × BnF",
+      "eyebrow": "Alien Intelligence × OpenAIRE",
       "title": "Votre corpus. Vos sources. Votre recherche.",
-      "tagline": "Constituez, ingérez et interrogez les fonds de la Bibliothèque nationale de France, avec un agent qui cite chaque source.",
+      "tagline": "Constituez, ingérez et interrogez 600M+ produits de recherche en science ouverte d'OpenAIRE, avec un agent qui cite chaque source.",
       "footer": "Espace de recherche sur corpus"
     },
     "signIn": {
@@ -119,7 +119,7 @@
     }
   },
   "projects": {
-    "eyebrow": "Espace de travail BnF",
+    "eyebrow": "Espace de travail OpenAIRE",
     "title": "Projets",
     "subtitle": "Vos espaces de recherche",
     "new": "Nouveau projet",
@@ -158,11 +158,11 @@
     "intro": {
       "tag": "Étape 1 · Constituer",
       "title": "Constituez votre corpus",
-      "lead": "Dialoguez avec l'agent pour rassembler des documents de la BnF, puis explorez la composition de votre corpus à droite.",
+      "lead": "Dialoguez avec l'agent pour rassembler des documents d'OpenAIRE, puis explorez la composition de votre corpus à droite.",
       "points": {
         "chat": {
           "title": "Dialoguez avec l'agent",
-          "text": "Décrivez le sujet, la période ou les sources souhaitées : l'agent cherche dans les fonds de la BnF et ajoute les documents au corpus."
+          "text": "Décrivez le sujet, la période ou les sources souhaitées : l'agent cherche dans le graphe OpenAIRE et ajoute les documents au corpus."
         },
         "panel": {
           "title": "Comprenez votre corpus",
@@ -255,7 +255,7 @@
     "documents": {
       "empty": "Aucun document. Demandez à l'agent de constituer un corpus.",
       "askAgentHint": "Démarrez une conversation à gauche pour commencer.",
-      "openOnBnf": "Voir sur la BnF",
+      "openOnBnf": "Voir sur OpenAIRE",
       "excerptLabel": "Extrait",
       "arkLabel": "ARK",
       "authorLabel": "Auteur",
@@ -269,29 +269,29 @@
       "resolveFailed": "Échec de résolution",
       "filtering": "Mise à jour…",
       "detail": {
-        "eyebrow": "Notice · BnF",
+        "eyebrow": "Notice · OpenAIRE",
         "close": "Fermer",
         "excerptOcr": "Extrait océrisé",
         "arkIdentifier": "Identifiant ARK",
-        "consultBnf": "Consulter sur la BnF",
+        "consultBnf": "Consulter sur OpenAIRE",
         "iiifViewer": "Visionneuse IIIF",
-        "iiifViewerSub": "Ouvrir dans le viewer BnF",
-        "gallicaNotice": "Notice Gallica",
+        "iiifViewerSub": "Ouvrir dans le viewer OpenAIRE",
+        "gallicaNotice": "Notice OpenAIRE",
         "gallicaNoticeSub": "Fiche document et fac-similé",
         "iiifManifest": "Manifeste IIIF",
         "iiifManifestSub": "manifest.json",
         "oai": "Notice OAI",
         "oaiSub": "Dublin Core (oai_dc)",
-        "catalogueRecord": "Notice du catalogue BnF",
+        "catalogueRecord": "Notice du catalogue OpenAIRE",
         "catalogueRecordSub": "catalogue.bnf.fr",
         "remove": "Retirer du corpus",
         "removing": "Retrait…",
         "resolvingMeta": "Extraction des métadonnées en cours…",
         "metaFailed": "L'extraction des métadonnées a échoué.",
         "retry": "Réessayer",
-        "promoteHint": "La conversion vers le document numérisé Gallica a échoué (API BnF momentanément indisponible). Vous pouvez réessayer.",
+        "promoteHint": "La conversion vers le document numérisé OpenAIRE a échoué (API OpenAIRE momentanément indisponible). Vous pouvez réessayer.",
         "promote": "Promouvoir vers le document numérisé",
-        "notOnGallica": "Ce document n'est pas numérisé sur Gallica — notice catalographique uniquement.",
+        "notOnOpenAIRE": "Ce document n'est pas numérisé sur OpenAIRE — notice catalographique uniquement.",
         "fields": {
           "type": "Type",
           "date": "Date",
@@ -374,15 +374,15 @@
       "he": "Hébreu"
     },
     "sources": {
-      "gallica": "Gallica",
-      "catalogue": "Catalogue BnF",
+      "gallica": "OpenAIRE",
+      "catalogue": "Catalogue OpenAIRE",
       "databnf": "data.bnf.fr",
       "other": "Autre"
     },
     "chat": {
       "headerTitle": "Conversation",
       "headerSubtitle": "Agent de constitution du corpus",
-      "systemPromptIntro": "Bonjour, je vous aide à constituer votre corpus à partir des fonds de la BnF. Décrivez le sujet, la période ou les sources qui vous intéressent.",
+      "systemPromptIntro": "Bonjour, je vous aide à constituer votre corpus à partir des fonds d'OpenAIRE. Décrivez le sujet, la période ou les sources qui vous intéressent.",
       "placeholder": "Affiner le corpus…",
       "send": "Envoyer",
       "stop": "Arrêter",
@@ -467,10 +467,10 @@
       "seconds": "{count} s"
     },
     "bnf": {
-      "search_catalogue": "Recherche Catalogue BnF",
-      "search_gallica": "Recherche Gallica",
-      "get_catalogue_record": "Résolution notice BnF",
-      "get_document_info": "Résolution document Gallica",
+      "search_catalogue": "Recherche Catalogue OpenAIRE",
+      "search_gallica": "Recherche OpenAIRE",
+      "get_catalogue_record": "Résolution notice OpenAIRE",
+      "get_document_info": "Résolution document OpenAIRE",
       "sparql_query": "Requête SPARQL data.bnf.fr",
       "find_person": "Recherche d'une personne",
       "find_work": "Recherche d'une œuvre",
@@ -516,7 +516,7 @@
     "intro": {
       "tag": "Étape 3 · Rechercher",
       "title": "Interrogez votre corpus",
-      "lead": "Dialoguez avec l'agent de recherche, ouvrez les sources citées sur la BnF, et constituez votre carnet de notes.",
+      "lead": "Dialoguez avec l'agent de recherche, ouvrez les sources citées sur OpenAIRE, et constituez votre carnet de notes.",
       "points": {
         "ask": {
           "title": "Interrogez le corpus",
@@ -524,7 +524,7 @@
         },
         "cite": {
           "title": "Ouvrez les sources",
-          "text": "Chaque citation renvoie à l'ARK et au folio exacts : cliquez pour ouvrir le document sur la BnF (IIIF, Gallica)."
+          "text": "Chaque citation renvoie à l'ARK et au folio exacts : cliquez pour ouvrir le document sur OpenAIRE (IIIF, OpenAIRE)."
         },
         "carnet": {
           "title": "Constituez votre carnet",
@@ -595,8 +595,8 @@
       "consult": "Ouvrir",
       "iiifViewer": "Visionneuse IIIF — vue {folio}",
       "iiifViewerSub": "Ouvrir la page exacte dans le viewer",
-      "gallicaViewer": "Voir sur Gallica",
-      "gallicaViewerSub": "Le document dans la visionneuse Gallica",
+      "gallicaViewer": "Voir sur OpenAIRE",
+      "gallicaViewerSub": "Le document dans la visionneuse OpenAIRE",
       "usages": "Cité dans d'autres notes",
       "pageLabel": "Page {page}",
       "abstractLabel": "Résumé",
@@ -663,7 +663,7 @@
     "pipeline": {
       "title": "Ingestion en cours",
       "target": "Cible",
-      "targetValue": "cluster RAG BnF",
+      "targetValue": "cluster RAG OpenAIRE",
       "overall": "Progression globale",
       "pending": "En attente",
       "skipped": "Ignoré",
@@ -681,7 +681,7 @@
     "queue": {
       "title": "Traitement en cours",
       "finalized": "Documents finalisés",
-      "fetchTitle": "Récupération BnF",
+      "fetchTitle": "Récupération OpenAIRE",
       "foliosFetched": "{done} / {total} folios récupérés",
       "etaLabel": "Temps restant",
       "etaComputing": "estimation…",

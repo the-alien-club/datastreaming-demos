@@ -22,8 +22,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "BnF Corpus Research",
-  description: "Alien Intelligence × BnF — Espace de recherche sur corpus",
+  title: "OpenAIRE Literature Research",
+  description: "Alien Intelligence × OpenAIRE — literature corpus research workspace",
 }
 
 export function generateStaticParams() {
