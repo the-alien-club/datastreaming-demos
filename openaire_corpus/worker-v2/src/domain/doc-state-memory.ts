@@ -2,7 +2,7 @@
  * In-memory DocStateStore for unit tests. Single-threaded JS → folio recording is
  * trivially atomic; idempotency is enforced by keying landed folios in a Set.
  */
-import type { DocMeta } from "./types.js";
+import type { OaMeta } from "./types.js";
 import type { Lane } from "./queues.js";
 import type {
   DocRow,
@@ -23,7 +23,7 @@ export class MemoryDocState implements DocStateStore {
   async upsertDoc(d: {
     docJobId: string;
     projectId: string;
-    ark: string;
+    openaireId: string;
     runId?: string | null;
   }): Promise<void> {
     if (this.docs.has(d.docJobId)) return;
@@ -31,7 +31,7 @@ export class MemoryDocState implements DocStateStore {
       docJobId: d.docJobId,
       runId: d.runId ?? null,
       projectId: d.projectId,
-      ark: d.ark,
+      openaireId: d.openaireId,
       lane: null,
       status: "queued",
       pagesExpected: null,
@@ -52,7 +52,7 @@ export class MemoryDocState implements DocStateStore {
 
   async recordPlan(
     docJobId: string,
-    plan: { lane: Lane; pagesExpected: number; meta: DocMeta },
+    plan: { lane: Lane; pagesExpected: number; meta: OaMeta },
   ): Promise<void> {
     const e = this.require(docJobId);
     e.lane = plan.lane;
@@ -130,8 +130,8 @@ export class MemoryDocState implements DocStateStore {
   async listFailedDocs(runId: string): Promise<FailedDoc[]> {
     return [...this.docs.values()]
       .filter((e) => e.runId === runId && e.status === "failed")
-      .sort((a, b) => a.ark.localeCompare(b.ark))
-      .map((e) => ({ ark: e.ark, lane: e.lane, error: e.error }));
+      .sort((a, b) => a.openaireId.localeCompare(b.openaireId))
+      .map((e) => ({ openaireId: e.openaireId, lane: e.lane, error: e.error }));
   }
 
   async donePageCount(runId: string): Promise<number> {

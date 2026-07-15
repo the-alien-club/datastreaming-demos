@@ -15,25 +15,23 @@ import { createMemoryLogger } from "../core/logger.js";
 import { MemoryDocState } from "../domain/doc-state-memory.js";
 import { MemoryRunStore } from "../domain/run-store-memory.js";
 import {
-  FakeBnfClient,
+  FakeOpenAireClient,
   FakeClusterSink,
-  FakeDescriber,
   FakeEmbedder,
-  FakeOcrEngine,
-  type FakeDocSpec,
+  type FakeProductSpec,
 } from "../testing/fakes.js";
 import { TerminalEmitter } from "./progress-callback.js";
 import { CompletionMonitor } from "./completion-monitor.js";
 import { createRunAndSeed, parseIngestRequest } from "./ingress.js";
 
-function buildHarness(specs: FakeDocSpec[]) {
+function buildHarness(specs: FakeProductSpec[]) {
   const queue = new MemoryQueue();
   const blob = new MemoryBlobStore();
   const { logger } = createMemoryLogger();
   const docState = new MemoryDocState();
   const runStore = new MemoryRunStore();
-  const bnf = new FakeBnfClient();
-  for (const s of specs) bnf.add(s);
+  const openaire = new FakeOpenAireClient();
+  for (const s of specs) openaire.add(s);
 
   const posts: Array<Record<string, unknown>> = [];
   const emitter = new TerminalEmitter(docState, runStore, logger, {
@@ -48,24 +46,22 @@ function buildHarness(specs: FakeDocSpec[]) {
     queue,
     blob,
     log: logger,
-    bnf,
+    openaire,
     docState,
-    describer: new FakeDescriber(),
-    ocr: new FakeOcrEngine(),
     embedder: new FakeEmbedder(),
     cluster: new FakeClusterSink(),
     onOutcome: (e) => completion.noteOutcome({ kind: e.kind, payload: e.payload }),
-    config: { mistralEnabled: true, maxPages: 200 },
+    config: { fulltextEnabled: false },
   });
 
   return { queue, docState, runStore, completion, posts, pipeline };
 }
 
-const body = (arks: string[]) => ({
+const body = (ids: string[]) => ({
   projectId: "p1",
   targetVersionId: "v2",
   appJobId: "job-1",
-  added: arks.map((ark) => ({ ark })),
+  added: ids.map((openaireId) => ({ openaireId, doi: null })),
   removed: [],
   callbackUrl: "http://127.0.0.1:1/api/internal/ingest/job-1/progress",
   callbackSecret: "s3cr3t",
@@ -73,23 +69,18 @@ const body = (arks: string[]) => ({
 
 test("ingress → full pipeline → exactly one terminal 'done' callback that reconciles", async () => {
   const h = buildHarness([
-    { ark: "ark:/12148/textdoc", ocrAvailable: true, docType: "texte", pageCount: 3 },
-    { ark: "ark:/12148/visiondoc", ocrAvailable: false, docType: "estampe", pageCount: 3 },
-    { ark: "ark:/12148/mistraldoc", ocrAvailable: false, docType: "texte", pageCount: 3 },
+    { openaireId: "d1", product: { descriptions: ["a1"] } },
+    { openaireId: "d2", product: { descriptions: [] } },
+    { openaireId: "d3", product: { descriptions: ["a3"] } },
   ]);
   await h.pipeline.start();
 
-  const parsed = parseIngestRequest(body([
-    "ark:/12148/textdoc",
-    "ark:/12148/visiondoc",
-    "ark:/12148/mistraldoc",
-  ]));
+  const parsed = parseIngestRequest(body(["d1", "d2", "d3"]));
   assert.equal(parsed.ok, true);
   if (!parsed.ok) return;
   await createRunAndSeed({ runStore: h.runStore, docState: h.docState, queue: h.queue }, parsed.value);
 
   await h.queue.idle();
-  // The completion check is detached (fire-and-forget); let it settle.
   await new Promise((r) => setTimeout(r, 10));
 
   assert.equal(h.posts.length, 1, `exactly one terminal callback, got ${h.posts.length}`);
@@ -101,23 +92,14 @@ test("ingress → full pipeline → exactly one terminal 'done' callback that re
   assert.equal(stats.total, 3);
 });
 
-test("a run with a hard-failing doc → terminal 'done' partial with the failed ark in errors[]", async () => {
+test("a run with a hard-failing doc → terminal 'done' partial with the failed id in errors[]", async () => {
   const h = buildHarness([
-    { ark: "ark:/12148/ok", ocrAvailable: true, docType: "texte", pageCount: 2 },
-    {
-      ark: "ark:/12148/lossy",
-      ocrAvailable: true,
-      docType: "texte",
-      pageCount: 4,
-      folioFaults: {
-        1: { alwaysTransient: true, status: 500 },
-        2: { alwaysTransient: true, status: 500 },
-      }, // 2/4 lost > 25% → fail-ratio trip
-    },
+    { openaireId: "ok", product: { descriptions: ["a"] } },
+    { openaireId: "down", fault: { alwaysTransient: true, status: 500 } },
   ]);
   await h.pipeline.start();
 
-  const parsed = parseIngestRequest(body(["ark:/12148/ok", "ark:/12148/lossy"]));
+  const parsed = parseIngestRequest(body(["ok", "down"]));
   assert.equal(parsed.ok, true);
   if (!parsed.ok) return;
   await createRunAndSeed({ runStore: h.runStore, docState: h.docState, queue: h.queue }, parsed.value);
@@ -131,9 +113,9 @@ test("a run with a hard-failing doc → terminal 'done' partial with the failed 
   const stats = event.stats as {
     done: number;
     failed: number;
-    errors: Array<{ ark: string }>;
+    errors: Array<{ id: string }>;
   };
   assert.equal(stats.done, 1);
   assert.equal(stats.failed, 1);
-  assert.equal(stats.errors[0]?.ark, "ark:/12148/lossy");
+  assert.equal(stats.errors[0]?.id, "down");
 });

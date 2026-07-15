@@ -1,9 +1,9 @@
 /**
  * Worker V2 entrypoint — the production composition. Wires the durable transport
- * (pg-boss), the per-doc state (Postgres), the artifact store (S3), the live BnF
- * client + the four downstream live ports, and the two binding rate gates (BnF
- * fetch + IIIF manifest), then starts the pipeline. Long-running: every stage
- * long-polls its bucket forever; the process stays up until SIGINT/SIGTERM.
+ * (pg-boss), the per-doc state (Postgres), the artifact store (S3), the live
+ * OpenAIRE Graph API client + the two downstream live ports (embedder + cluster
+ * sink), and the resolve rate gate, then starts the pipeline. Long-running: every
+ * stage long-polls its bucket forever; the process stays up until SIGINT/SIGTERM.
  *
  * This file does I/O only — all behaviour lives in the stages + buildPipeline,
  * which the fake-mode integration test exercises with the exact same wiring.
@@ -18,18 +18,19 @@ import { RateLimiter } from "./core/rate.js";
 import { createLogger } from "./core/logger.js";
 import { PgDocState } from "./domain/doc-state-pg.js";
 import { PgRunStore } from "./domain/run-store-pg.js";
-import { LiveBnfClient } from "./bnf/client.js";
-import { LiveDescriber } from "./live/describer.js";
-import { LiveOcrEngine } from "./live/ocr.js";
+import { HostGate } from "./core/host-gate.js";
+import { LiveOpenAireClient } from "./openaire/client.js";
 import { LiveEmbedder } from "./live/embedder.js";
 import { LiveClusterSink } from "./live/cluster.js";
+import { LivePdfFetcher } from "./live/pdf-fetcher.js";
+import { LivePdfExtractor } from "./live/pdf-extractor.js";
 import { TerminalEmitter } from "./live/progress-callback.js";
 import { CompletionMonitor } from "./live/completion-monitor.js";
 import { startServer } from "./server.js";
 
 async function main(): Promise<void> {
   const cfg = loadConfig();
-  const log = createLogger({ worker: "bnf-ingest-v2" });
+  const log = createLogger({ worker: "openaire-ingest-v2" });
 
   const queue = new PgBossQueue(cfg.databaseUrl);
   await queue.start();
@@ -41,8 +42,14 @@ async function main(): Promise<void> {
 
   const blob = new S3BlobStore({ ...cfg.s3, prefix: cfg.s3Prefix });
 
-  const fetchRate = new RateLimiter({ ratePerMin: cfg.fetchRatePerMin });
-  const manifestRate = new RateLimiter({ ratePerMin: cfg.manifestRatePerMin });
+  const resolveRate = new RateLimiter({ ratePerMin: cfg.openaireRpm });
+
+  // Full-text lane clients — only built when enabled (they own their own net I/O).
+  const hostGate = cfg.fulltextEnabled ? new HostGate({ ratePerMin: cfg.pdfHostRpm }) : null;
+  const pdfFetcher = hostGate
+    ? new LivePdfFetcher({ hostGate, maxBytes: cfg.pdfMaxBytes })
+    : undefined;
+  const pdfExtractor = cfg.fulltextEnabled ? new LivePdfExtractor() : undefined;
 
   // The terminal commit callback + the run-completion detector. The detector is
   // wired to the pipeline's onOutcome seam (below), so a doc reaching a terminal
@@ -54,28 +61,25 @@ async function main(): Promise<void> {
     queue,
     blob,
     log,
-    bnf: new LiveBnfClient(),
+    openaire: new LiveOpenAireClient({
+      ...(cfg.openaireApiBase !== undefined ? { baseUrl: cfg.openaireApiBase } : {}),
+      ...(cfg.openaireApiToken !== undefined ? { token: cfg.openaireApiToken } : {}),
+    }),
     docState,
-    describer: new LiveDescriber(),
-    ocr: new LiveOcrEngine(),
     embedder: new LiveEmbedder(),
     cluster: new LiveClusterSink(),
+    ...(pdfFetcher ? { pdfFetcher } : {}),
+    ...(pdfExtractor ? { pdfExtractor } : {}),
     onOutcome: (e) => completion.noteOutcome({ kind: e.kind, payload: e.payload }),
-    rates: { fetch: fetchRate, manifest: manifestRate },
+    rates: { resolve: resolveRate },
     config: {
-      mistralEnabled: cfg.mistralEnabled,
-      maxPages: cfg.maxPages,
-      maxCanvases: cfg.maxCanvases,
-      visionImageSize: cfg.visionImageSize,
-      fetchConcurrency: cfg.fetchConcurrency,
-      metadataConcurrency: cfg.metadataConcurrency,
-      registerConcurrency: cfg.registerConcurrency,
-      describeConcurrency: cfg.describeConcurrency,
-      describeCallConcurrency: cfg.describeCallConcurrency,
+      fulltextEnabled: cfg.fulltextEnabled,
+      resolveConcurrency: cfg.resolveConcurrency,
+      fetchPdfConcurrency: cfg.fetchPdfConcurrency,
+      extractConcurrency: cfg.extractConcurrency,
+      extractMaxPages: cfg.pdfMaxPages,
       embedConcurrency: cfg.embedConcurrency,
-      ocrSubmitConcurrency: cfg.ocrSubmitConcurrency,
-      ocrPollConcurrency: cfg.ocrPollConcurrency,
-      failRatio: cfg.failRatio,
+      registerConcurrency: cfg.registerConcurrency,
     },
   });
 
@@ -90,17 +94,16 @@ async function main(): Promise<void> {
       queue,
       completion,
       log,
-      fetchRatePerMin: cfg.fetchRatePerMin,
-      manifestRatePerMin: cfg.manifestRatePerMin,
+      fetchRatePerMin: cfg.processRatePerMin,
+      manifestRatePerMin: 42,
     },
     cfg.httpPort,
   );
 
   log.info("worker_v2_up", {
     httpPort: cfg.httpPort,
-    fetchRatePerMin: cfg.fetchRatePerMin,
-    manifestRatePerMin: cfg.manifestRatePerMin,
-    mistralEnabled: cfg.mistralEnabled,
+    openaireRpm: cfg.openaireRpm,
+    fulltextEnabled: cfg.fulltextEnabled,
   });
 
   let shuttingDown = false;
@@ -108,8 +111,9 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info("worker_v2_shutdown", { sig });
-    fetchRate.stop();
-    manifestRate.stop();
+    resolveRate.stop();
+    hostGate?.stop();
+    pdfFetcher?.stop();
     await new Promise<void>((r) => server.close(() => r()));
     await pipeline.stop().catch(() => {});
     await pool.end().catch(() => {});

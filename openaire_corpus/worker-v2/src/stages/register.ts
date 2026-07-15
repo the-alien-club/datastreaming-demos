@@ -1,12 +1,12 @@
 /**
- * Register stage — terminal. Reads the doc's pages + embeddings back from S3 and
- * upserts them into the project's data-cluster dataset (the RAG store). On success
- * it writes a registration receipt to S3 and flips the doc-state row to `done`.
+ * Register stage — terminal. Reads the doc's chunks + embeddings + rendered
+ * markdown back from S3 and upserts them into the project's data-cluster dataset
+ * (the RAG store). On success it records the chunk tally (so the read-model
+ * reconciles chunks-written), writes a registration receipt to S3, and flips the
+ * doc-state row to `done`.
  *
- * Registration is distinct from embedding (it can lag or fail independently — the
- * observability model counts it separately). Idempotent via the receipt: a
- * redelivered doc whose receipt already exists just confirms `done` and stops, so
- * it never double-inserts into the cluster.
+ * Idempotent via the receipt: a redelivered doc whose receipt already exists just
+ * confirms `done` and stops, so it never double-inserts into the cluster.
  */
 import { PipelineStage, type StageDeps } from "../core/stage.js";
 import type { StageContext, StageOutcome } from "../core/types.js";
@@ -14,7 +14,7 @@ import type { ClusterSink } from "../ports.js";
 import type { DocStateStore } from "../domain/doc-state.js";
 import { keys } from "../domain/keys.js";
 import { Q } from "../domain/queues.js";
-import type { EmbeddedDoc, PreparedPage } from "../domain/types.js";
+import type { EmbeddedDoc, PreparedChunk } from "../domain/types.js";
 import { failDoc } from "./doc-fail.js";
 
 interface EmbeddingsBlob {
@@ -38,42 +38,53 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
     opts: { concurrency?: number } = {},
   ) {
     super(deps);
-    // Indexing into the data cluster (which autoscales). Default 4; raise to drain
-    // the register backlog when the cluster can take the load.
     this.concurrency = opts.concurrency ?? 4;
   }
 
   async process(doc: EmbeddedDoc, ctx: StageContext): Promise<StageOutcome<never>> {
-    const existing = await this.blob.getJson<Receipt>(keys.registered(doc.ark));
+    const existing = await this.blob.getJson<Receipt>(keys.registered(doc.openaireId));
     if (existing) {
       await this.docState.setStatus(doc.docJobId, "done");
-      ctx.log.info("register_dedup", { ark: doc.ark, entryId: existing.entryId });
+      ctx.log.info("register_dedup", { id: doc.openaireId, entryId: existing.entryId });
       return { kind: "done" };
     }
 
-    const pages = await this.blob.getJson<PreparedPage[]>(keys.pages(doc.ark));
+    const chunks = await this.blob.getJson<PreparedChunk[]>(keys.chunks(doc.openaireId));
     const embeddings = await this.blob.getJson<EmbeddingsBlob>(doc.embeddingsKey);
-    if (!pages || !embeddings) {
+    const markdownBytes = await this.blob.getBytes(keys.doc(doc.openaireId));
+    if (!chunks || !embeddings || !markdownBytes) {
       return failDoc(this.docState, doc.docJobId, "register_missing_artifacts");
     }
+    const markdown = markdownBytes.toString("utf8");
+    const hasFulltext = doc.lane === "fulltext";
+    const original = hasFulltext
+      ? await this.pdfOriginal(doc.openaireId, markdown)
+      : mdOriginal(markdown);
 
     try {
       const { datasetId } = await this.cluster.ensureDataset({ projectId: doc.projectId });
       const { entryId } = await this.cluster.upsert({
         datasetId,
-        ark: doc.ark,
+        openaireId: doc.openaireId,
         meta: doc.meta,
-        pages,
+        lane: doc.lane,
+        chunks,
         embeddings: embeddings.vectors,
+        original,
+        markdown,
+        hasFulltext,
       });
-      await this.blob.putJson(keys.registered(doc.ark), { datasetId, entryId } satisfies Receipt);
+      await this.blob.putJson(keys.registered(doc.openaireId), { datasetId, entryId } satisfies Receipt);
+      // Record chunks-written so the read-model reconciles (chunks tally).
+      for (let i = 0; i < chunks.length; i++) {
+        await this.docState.recordFolio(doc.docJobId, i, true);
+      }
       await this.docState.setStatus(doc.docJobId, "done");
-      ctx.log.info("registered", { ark: doc.ark, datasetId, entryId, pages: pages.length });
+      ctx.log.info("registered", { id: doc.openaireId, datasetId, entryId, chunks: chunks.length });
       return { kind: "done" };
     } catch (e) {
-      // The cluster sink is flaky/slow (real backend). Retry while attempts remain;
-      // on the last attempt mark the doc failed so it reaches a terminal state
-      // rather than orphaning in 'ready' when the queue exhausts its retries.
+      // The cluster sink is flaky/slow. Retry while attempts remain; on the last
+      // attempt mark the doc failed so it reaches a terminal state.
       if (ctx.attempt >= this.retry.attempts) {
         const reason = `register_failed_after_retries: ${e instanceof Error ? e.message : String(e)}`;
         return failDoc(this.docState, doc.docJobId, reason);
@@ -81,4 +92,22 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
       throw e;
     }
   }
+
+  /** The fulltext original is the PDF when present; fall back to the markdown. */
+  private async pdfOriginal(
+    openaireId: string,
+    markdown: string,
+  ): Promise<{ filename: string; bytes: Buffer; contentType: string }> {
+    const pdf = await this.blob.getBytes(keys.pdf(openaireId));
+    if (pdf) return { filename: "document.pdf", bytes: pdf, contentType: "application/pdf" };
+    return mdOriginal(markdown);
+  }
+}
+
+function mdOriginal(markdown: string): { filename: string; bytes: Buffer; contentType: string } {
+  return {
+    filename: "doc.md",
+    bytes: Buffer.from(markdown, "utf8"),
+    contentType: "text/markdown; charset=utf-8",
+  };
 }

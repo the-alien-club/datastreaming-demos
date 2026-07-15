@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { Pool } from "pg";
 
-import type { DocMeta } from "./types.js";
+import type { OaMeta } from "./types.js";
 import type { Lane } from "./queues.js";
 import type {
   DocRow,
@@ -28,7 +28,7 @@ import type {
 
 const SCHEMA = "sandbox_ingest_v2";
 const JOBS = `${SCHEMA}.document_ingest_job_v2`;
-const FOLIOS = `${SCHEMA}.document_folio_v2`;
+const FOLIOS = `${SCHEMA}.document_chunk_v2`;
 const PRE_ROUTED = ["queued", "planned", "fetching"];
 
 export class PgDocState implements DocStateStore {
@@ -44,20 +44,20 @@ export class PgDocState implements DocStateStore {
   async upsertDoc(d: {
     docJobId: string;
     projectId: string;
-    ark: string;
+    openaireId: string;
     runId?: string | null;
   }): Promise<void> {
     await this.pool.query(
-      `INSERT INTO ${JOBS} (doc_job_id, run_id, project_id, ark, status)
+      `INSERT INTO ${JOBS} (doc_job_id, run_id, project_id, openaire_id, status)
        VALUES ($1, $2, $3, $4, 'queued')
        ON CONFLICT (doc_job_id) DO NOTHING`,
-      [d.docJobId, d.runId ?? null, d.projectId, d.ark],
+      [d.docJobId, d.runId ?? null, d.projectId, d.openaireId],
     );
   }
 
   async recordPlan(
     docJobId: string,
-    plan: { lane: Lane; pagesExpected: number; meta: DocMeta },
+    plan: { lane: Lane; pagesExpected: number; meta: OaMeta },
   ): Promise<void> {
     await this.pool.query(
       `UPDATE ${JOBS}
@@ -134,11 +134,11 @@ export class PgDocState implements DocStateStore {
       doc_job_id: string;
       run_id: string | null;
       project_id: string;
-      ark: string;
+      openaire_id: string;
       lane: Lane | null;
       status: DocStatus;
       pages_expected: number | null;
-      meta: DocMeta | null;
+      meta: OaMeta | null;
       error: string | null;
       skip_reason: string | null;
       pages_done: string;
@@ -159,7 +159,7 @@ export class PgDocState implements DocStateStore {
       docJobId: r.doc_job_id,
       runId: r.run_id,
       projectId: r.project_id,
-      ark: r.ark,
+      openaireId: r.openaire_id,
       lane: r.lane,
       status: r.status,
       pagesExpected: r.pages_expected,
@@ -213,16 +213,16 @@ export class PgDocState implements DocStateStore {
 
   async listFailedDocs(runId: string): Promise<FailedDoc[]> {
     const { rows } = await this.pool.query<{
-      ark: string;
+      openaire_id: string;
       lane: Lane | null;
       error: string | null;
     }>(
-      `SELECT ark, lane, error FROM ${JOBS}
+      `SELECT openaire_id, lane, error FROM ${JOBS}
        WHERE run_id = $1 AND status = 'failed'
-       ORDER BY ark ASC`,
+       ORDER BY openaire_id ASC`,
       [runId],
     );
-    return rows.map((r) => ({ ark: r.ark, lane: r.lane, error: r.error }));
+    return rows.map((r) => ({ openaireId: r.openaire_id, lane: r.lane, error: r.error }));
   }
 
   async donePageCount(runId: string): Promise<number> {

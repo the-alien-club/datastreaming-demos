@@ -46,10 +46,10 @@ export class Pipeline {
     this.log.info("pipeline_started", { stages: this.stages.map((s) => s.name) });
   }
 
-  /** Seed the head of the pipeline with documents to ingest (enters the metadata stage). */
+  /** Seed the head of the pipeline with documents to ingest (enters the resolve stage). */
   async seed(docs: readonly DocRef[]): Promise<void> {
     if (docs.length === 0) return;
-    await this.queue.sendMany(Q.metadata, docs);
+    await this.queue.sendMany(Q.resolve, docs);
     this.log.info("pipeline_seeded", { count: docs.length });
   }
 

@@ -1,11 +1,10 @@
--- Worker V2 per-doc state — the one stateful piece of the pipeline (the Monitor's
--- fan-in counter + the doc lifecycle status). Lives in its own schema alongside
+-- Worker V2 per-doc state — the one stateful piece of the (linear) pipeline: the
+-- doc lifecycle status + the per-doc chunk tally. Lives in its own schema alongside
 -- pg-boss, sharing the bundled Postgres. Applied idempotently at worker startup.
 --
--- Folios are a separate table keyed (doc_job_id, ordre) so recording a folio is
+-- Chunks are a separate table keyed (doc_job_id, ordre) so recording a chunk is
 -- idempotent (INSERT ON CONFLICT DO NOTHING — first write wins) and a redelivered
--- FolioResult never double-counts. The fan-in tally + fail-ratio are derived from
--- it; citations read the ok folios back in ordre order.
+-- register never double-counts. The chunks-written tally is derived from it.
 
 CREATE SCHEMA IF NOT EXISTS sandbox_ingest_v2;
 
@@ -34,8 +33,8 @@ CREATE TABLE IF NOT EXISTS sandbox_ingest_v2.document_ingest_job_v2 (
   doc_job_id     text PRIMARY KEY,
   run_id         text,                       -- groups docs by ingest_run (null for seed-CLI docs)
   project_id     text NOT NULL,
-  ark            text NOT NULL,
-  lane           text,                       -- text | vision | mistral (null until planned)
+  openaire_id    text NOT NULL,
+  lane           text,                       -- fulltext | abstract | metadata (null until planned)
   status         text NOT NULL DEFAULT 'queued',
   pages_expected integer,
   meta           jsonb,
@@ -56,7 +55,8 @@ CREATE INDEX IF NOT EXISTS document_ingest_job_v2_project_status_idx
 CREATE INDEX IF NOT EXISTS document_ingest_job_v2_run_status_idx
   ON sandbox_ingest_v2.document_ingest_job_v2 (run_id, status);
 
-CREATE TABLE IF NOT EXISTS sandbox_ingest_v2.document_folio_v2 (
+-- One row per registered chunk (ordre = chunk index) — the chunks-written tally.
+CREATE TABLE IF NOT EXISTS sandbox_ingest_v2.document_chunk_v2 (
   doc_job_id text NOT NULL
     REFERENCES sandbox_ingest_v2.document_ingest_job_v2 (doc_job_id) ON DELETE CASCADE,
   ordre      integer NOT NULL,

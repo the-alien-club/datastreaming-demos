@@ -8,8 +8,15 @@
  * ALWAYS surfaced and the doc totals ALWAYS reconcile —
  *   done + running + queued + failed + skipped + excluded = total.
  * A UI that shows only done/running/queued lies about completion; this model
- * refuses to. ETA = BnF-fetch bucket depth ÷ fetch rate + the one-time Mistral
- * tail, so a long batch wait reads as "~Xh remaining", not a hang.
+ * refuses to. ETA = the embed-phase bucket depth ÷ an embed rate, so a long queue
+ * reads as "~Xh remaining", not a hang.
+ *
+ * The per-stage buckets map into the app's three headline groups:
+ *   Deduplication ← resolve
+ *   Embedding     ← fetchPdf + extract + prepare + embed
+ *   Indexing      ← register
+ * The BnF-era `folios`/`foliosAhead`/rate fields are kept (populated from the doc
+ * CHUNK counts) so the app's ClusterQueueProgress reader doesn't break.
  */
 import type { DocStateStore, DocStatus } from "./domain/doc-state.js";
 import type { QueueClient } from "./core/types.js";
@@ -28,26 +35,24 @@ export interface ProgressReport {
   docsTotal: number;
   /** "Docs finished" headline — docs fully registered. */
   docsFinished: number;
-  /** Per-stage bucket counts, keyed by stage name. */
+  /** Per-stage bucket counts, keyed by stage name — plus the three headline groups
+   *  (dedup/embedding/indexing) merged in. */
   stages: Record<string, StageProgress>;
-  /** Run-scoped BnF-fetch folio tally — the honest récupérés/total for the fetch
-   *  headline (NOT the shared pg-boss bucket counts, which accumulate across runs). */
+  /** Run-scoped chunk tally — the honest written/total for the headline (NOT the
+   *  shared pg-boss bucket counts, which accumulate across runs). Kept under the
+   *  `folios` name the app's ClusterQueueProgress reader expects. */
   folios: { expected: number; done: number; failed: number };
-  /** Folios from OTHER concurrent runs still pending in the shared BnF-fetch queue
-   *  (active + queued, run-excluded). The 300/1000-per-min cap is shared, so this is
-   *  the work "ahead of you" — surfaced so a contended run reads as "N en attente
-   *  devant vous", not as a stall. 0 when this run has the queue to itself. */
+  /** Docs from OTHER concurrent runs still pending in the shared embed-phase queues
+   *  — the work "ahead of you". 0 when this run has the queues to itself. Kept under
+   *  the `foliosAhead` name the app UI reads. */
   foliosAhead: number;
-  /** The binding BnF fetch rate (folios/min) the ETA assumes — surfaced so the UI
-   *  can headline the constraint ("≈ 300/min"). */
+  /** The rate (docs/min) the ETA assumes — surfaced so the UI can headline it. */
   fetchRatePerMin: number;
-  /** The IIIF manifest rate (manifests/min) — the binding cap on the metadata
-   *  lane's image-doc sub-stage. Surfaced so the UI shows the rate, not just the
-   *  in-flight concurrency. */
+  /** Kept for the app UI's ClusterQueueProgress reader (no longer a binding cap). */
   manifestRatePerMin: number;
-  /** Estimated seconds remaining (fetch backlog ÷ rate + Mistral tail), or null. */
+  /** Estimated seconds remaining (embed-phase backlog ÷ rate), or null. */
   etaSeconds: number | null;
-  /** Paid Mistral OCR spend so far / budget (USD), when a budget is configured. */
+  /** Optional spend/budget passthrough, when configured. */
   paidOcr?: { spentUsd: number; budgetUsd: number | null };
   /** True iff the doc totals reconcile — a guard the caller can assert/log. */
   reconciles: boolean;
@@ -60,27 +65,30 @@ export interface ProgressOpts {
    *  shared pg-boss queues and are NOT run-scoped — fine for the prototype's
    *  one-run-at-a-time cadence; the headline doc reconciliation IS run-scoped. */
   runId?: string;
-  /** BnF fetch rate (folios/min) for the ETA — 300 today, 1000 if the raise lands. */
+  /** Processing rate (docs/min) for the ETA (default 300). */
   fetchRatePerMin?: number;
-  /** IIIF manifest rate (manifests/min) — surfaced on the metadata row (default 42). */
+  /** Kept for the app UI passthrough (default 42). */
   manifestRatePerMin?: number;
-  /** One-time Mistral batch tail (seconds) added to the ETA when OCR work is queued. */
-  mistralTailSeconds?: number;
   paidOcr?: { spentUsd: number; budgetUsd: number | null };
 }
 
 /** The buckets surfaced in the UI, in pipeline order. */
 const STAGE_QUEUES: Array<{ key: string; queue: string }> = [
-  { key: "metadata", queue: Q.metadata },
-  { key: "manifest", queue: Q.manifest },
-  { key: "fetch", queue: Q.fetch },
-  { key: "assemble", queue: Q.assemble },
-  { key: "describe", queue: Q.describe },
-  { key: "ocrSubmit", queue: Q.ocrSubmit },
-  { key: "ocrPoll", queue: Q.ocrPoll },
+  { key: "resolve", queue: Q.resolve },
+  { key: "fetchPdf", queue: Q.fetchPdf },
+  { key: "extract", queue: Q.extract },
+  { key: "prepare", queue: Q.prepare },
   { key: "embed", queue: Q.embed },
   { key: "register", queue: Q.register },
 ];
+
+/** The three headline groups the app's ClusterQueueProgress reads. Each sums the
+ *  bucket counts of its member stages. */
+const HEADLINE_GROUPS: Record<string, string[]> = {
+  dedup: ["resolve"],
+  embedding: ["fetchPdf", "extract", "prepare", "embed"],
+  indexing: ["register"],
+};
 
 export async function buildProgress(
   docState: DocStateStore,
@@ -109,37 +117,61 @@ export async function buildProgress(
     stages[key] = { done: c.completed, running: c.running, queued: c.queued, failed: c.failed };
   }
 
-  // Folios from OTHER runs still pending in the shared fetch queue = global pending
-  // − this run's pending. The fetch rate cap is shared, so this is the work ahead of
-  // you. Only meaningful when run-scoped.
+  // Group the buckets into the three headline groups the app reads.
+  const headline: Record<string, StageProgress> = {};
+  for (const [group, members] of Object.entries(HEADLINE_GROUPS)) {
+    headline[group] = members.reduce(
+      (acc, key) => {
+        const s = stages[key];
+        if (!s) return acc;
+        return {
+          done: acc.done + s.done,
+          running: acc.running + s.running,
+          queued: acc.queued + s.queued,
+          failed: acc.failed + s.failed,
+        };
+      },
+      { done: 0, running: 0, queued: 0, failed: 0 } as StageProgress,
+    );
+  }
+
+  // Docs from OTHER runs still pending in the shared embed-phase queues = global
+  // pending − this run's pending. Only meaningful when run-scoped. (Kept under the
+  // `foliosAhead` name the app UI reads.)
+  const embedPhase = HEADLINE_GROUPS.embedding!;
   let foliosAhead = 0;
   if (docJobIds) {
-    const globalFetch = await queue.counts(Q.fetch);
-    const globalPending = globalFetch.running + globalFetch.queued;
-    const runPending = (stages.fetch?.running ?? 0) + (stages.fetch?.queued ?? 0);
+    let globalPending = 0;
+    for (const key of embedPhase) {
+      const name = STAGE_QUEUES.find((s) => s.key === key)?.queue;
+      if (!name) continue;
+      const g = await queue.counts(name);
+      globalPending += g.running + g.queued;
+    }
+    const runPending = embedPhase.reduce(
+      (n, key) => n + (stages[key]?.running ?? 0) + (stages[key]?.queued ?? 0),
+      0,
+    );
     foliosAhead = Math.max(0, globalPending - runPending);
   }
 
-  // ETA: the binding stage is BnF fetch (your backlog + the folios queued AHEAD of
-  // you, since the rate cap is shared) ÷ rate. Add the one-time Mistral tail only
-  // while OCR work is still in flight.
+  // ETA: the binding phase is the embed pipeline (resolve + fetch/extract/prepare/
+  // embed backlog + the docs queued ahead of you) ÷ rate.
   const rate = opts.fetchRatePerMin ?? 300;
-  const fetchBacklog =
-    (stages.fetch?.queued ?? 0) + (stages.fetch?.running ?? 0) + foliosAhead;
-  let etaSeconds: number | null = rate > 0 ? Math.ceil((fetchBacklog / rate) * 60) : null;
-  const ocrInFlight =
-    (stages.ocrSubmit?.queued ?? 0) +
-    (stages.ocrSubmit?.running ?? 0) +
-    (stages.ocrPoll?.queued ?? 0) +
-    (stages.ocrPoll?.running ?? 0);
-  if (etaSeconds !== null && ocrInFlight > 0) {
-    etaSeconds += opts.mistralTailSeconds ?? 25 * 60;
-  }
+  const backlog =
+    embedPhase.reduce(
+      (n, key) => n + (stages[key]?.queued ?? 0) + (stages[key]?.running ?? 0),
+      0,
+    ) +
+    (stages.resolve?.queued ?? 0) +
+    (stages.resolve?.running ?? 0) +
+    foliosAhead;
+  const etaSeconds: number | null = rate > 0 ? Math.ceil((backlog / rate) * 60) : null;
 
   const reconciles = docsTotal === sumStatuses(docs);
 
-  // Run-scoped folio tally for the fetch headline. Only meaningful with a runId
-  // (the /progress/:runId path always sets it); the unscoped status CLI gets zeros.
+  // Run-scoped chunk tally for the headline (kept under the `folios` name the app
+  // UI reads). Only meaningful with a runId; the unscoped status CLI gets zeros.
   const folios = opts.runId
     ? await docState.folioCounts(opts.runId)
     : { expected: 0, done: 0, failed: 0 };
@@ -148,7 +180,7 @@ export async function buildProgress(
     docs,
     docsTotal,
     docsFinished: docs.done,
-    stages,
+    stages: { ...stages, ...headline },
     folios,
     foliosAhead,
     fetchRatePerMin: rate,

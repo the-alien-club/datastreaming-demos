@@ -1,59 +1,58 @@
 /**
  * Pure-logic tests for the live ClusterSink helpers + the dataset slug.
  *
- * Citation-critical: every indexed chunk must carry ark + folio (ordre), and the
- * embedding must align with its page by position. No network — just the pure
- * builders and the dataset slug derivation (reused verbatim from V1).
+ * Citation-critical: every indexed chunk must carry openaire_id + its section/page
+ * locator, and the embedding must align with its chunk by position.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { bnfDatasetSlug } from "./vendor/dataset.js";
-import type { DocMeta, PreparedPage } from "../domain/types.js";
-import { assembleMarkdown, buildIndexChunks } from "./cluster.js";
+import { openaireDatasetSlug } from "./vendor/dataset.js";
+import type { OaMeta, PreparedChunk } from "../domain/types.js";
+import { buildIndexChunks } from "./cluster.js";
 
-const meta: DocMeta = {
-  title: "Plan de Paris",
-  creator: "Anon.",
-  date: "1830",
-  docType: "carte",
-  subtype: null,
-  lang: "fre",
-  pageCount: 2,
-  ocrAvailable: false,
+const meta: OaMeta = {
+  title: "A Study of Fakes",
+  abstract: "An abstract.",
+  authors: ["Ada Lovelace"],
+  year: 2020,
+  venue: "Journal of Fakes",
+  publisher: "ACME",
+  type: "publication",
+  doi: "10.1234/fake",
+  bestAccessRight: "OPEN",
+  openAccessColor: "gold",
+  subjects: ["computing"],
 };
 
-const pages: PreparedPage[] = [
-  { ordre: 5, text: "Texte folio 5" },
-  { ordre: 9, text: "Texte folio 9" },
+const chunks: PreparedChunk[] = [
+  { index: 0, text: "A Study of Fakes\n\nAn abstract.", locator: { kind: "abstract" } },
+  { index: 1, text: "Body of page 3", locator: { kind: "page", page: 3 } },
 ];
 
-test("bnfDatasetSlug derives bnf-<projectId>", () => {
-  assert.equal(bnfDatasetSlug("abc123"), "bnf-abc123");
+test("openaireDatasetSlug derives openaire-<projectId>", () => {
+  assert.equal(openaireDatasetSlug("abc123"), "openaire-abc123");
 });
 
-test("assembleMarkdown headers each page with its folio", () => {
-  const md = assembleMarkdown(pages);
-  assert.equal(md, "## Folio 5\n\nTexte folio 5\n\n## Folio 9\n\nTexte folio 9");
-});
-
-test("buildIndexChunks aligns embeddings by position and carries ark + folio", () => {
+test("buildIndexChunks aligns embeddings by position and carries id + section/page", () => {
   const embeddings = [
     [0.1, 0.2],
     [0.3, 0.4],
   ];
-  const chunks = buildIndexChunks("ark:/12148/btv1b8600001", meta, pages, embeddings);
-  assert.equal(chunks.length, 2);
+  const indexed = buildIndexChunks("doi_dedup::abc", meta, chunks, embeddings);
+  assert.equal(indexed.length, 2);
 
-  assert.equal(chunks[0]!.chunk_text, "Texte folio 5");
-  assert.equal(chunks[0]!.chunk_index, 0);
-  assert.deepEqual(chunks[0]!.embedding, [0.1, 0.2]);
-  assert.equal(chunks[0]!.metadata.ark, "ark:/12148/btv1b8600001");
-  assert.equal(chunks[0]!.metadata.ark_slug, "btv1b8600001");
-  assert.equal(chunks[0]!.metadata.folio, 5);
-  assert.equal(chunks[0]!.metadata.doc_type, "carte");
+  assert.equal(indexed[0]!.chunk_text, "A Study of Fakes\n\nAn abstract.");
+  assert.equal(indexed[0]!.chunk_index, 0);
+  assert.deepEqual(indexed[0]!.embedding, [0.1, 0.2]);
+  assert.equal(indexed[0]!.metadata.openaire_id, "doi_dedup::abc");
+  assert.equal(indexed[0]!.metadata.doi, "10.1234/fake");
+  assert.equal(indexed[0]!.metadata.section, "abstract");
+  assert.equal(indexed[0]!.metadata.page, null);
+  assert.equal(indexed[0]!.metadata.year, 2020);
 
-  // Second page → second embedding → folio 9.
-  assert.deepEqual(chunks[1]!.embedding, [0.3, 0.4]);
-  assert.equal(chunks[1]!.metadata.folio, 9);
+  // Second chunk → second embedding → page 3, fulltext section.
+  assert.deepEqual(indexed[1]!.embedding, [0.3, 0.4]);
+  assert.equal(indexed[1]!.metadata.section, "fulltext");
+  assert.equal(indexed[1]!.metadata.page, 3);
 });

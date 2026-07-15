@@ -5,9 +5,10 @@
  * returned runId IS the clusterJobId the app stores and polls.
  *
  * Self-contained on purpose (the dual-undici lesson): v2 re-resolves each doc's
- * metadata itself in the metadata stage, so the only field it trusts from the
- * app's `added[]` is the ARK. `removed[]` is ignored — removal is committed
- * app-side; v2 has no delete path.
+ * metadata itself in the resolve stage, so the only fields it trusts from the app's
+ * `added[]` are the `openaireId` (identity) and the `doi` (a fallback carried
+ * through when the Graph API record has no doi pid). `removed[]` is ignored —
+ * removal is committed app-side; v2 has no delete path.
  */
 import { randomUUID } from "node:crypto";
 
@@ -23,12 +24,18 @@ export interface IngressDeps {
   queue: QueueClient;
 }
 
+/** One doc from the app's `added[]` — only the identity + doi fallback are trusted. */
+export interface ParsedDoc {
+  openaireId: string;
+  doi: string | null;
+}
+
 /** The fields v2 needs from the app's ClusterIngestRequest. */
 export interface ParsedIngestRequest {
   projectId: string;
   targetVersionId: string;
   appJobId: string;
-  arks: string[];
+  ids: ParsedDoc[];
   callbackUrl: string;
   callbackSecret: string;
 }
@@ -68,16 +75,20 @@ export function parseIngestRequest(
   if (!callbackSecret) return { ok: false, error: "callbackSecret is required" };
 
   if (!Array.isArray(b.added)) return { ok: false, error: "added must be an array" };
-  const arks: string[] = [];
+  const ids: ParsedDoc[] = [];
   for (const [i, doc] of b.added.entries()) {
-    const ark = doc && typeof doc === "object" ? asString((doc as Record<string, unknown>).ark) : null;
-    if (!ark) return { ok: false, error: `added[${i}].ark is required` };
-    arks.push(ark);
+    if (!doc || typeof doc !== "object") {
+      return { ok: false, error: `added[${i}] must be an object` };
+    }
+    const rec = doc as Record<string, unknown>;
+    const openaireId = asString(rec.openaireId);
+    if (!openaireId) return { ok: false, error: `added[${i}].openaireId is required` };
+    ids.push({ openaireId, doi: asString(rec.doi) });
   }
 
   return {
     ok: true,
-    value: { projectId, targetVersionId, appJobId, arks, callbackUrl, callbackSecret },
+    value: { projectId, targetVersionId, appJobId, ids, callbackUrl, callbackSecret },
   };
 }
 
@@ -96,10 +107,11 @@ export async function createRunAndSeed(
   req: ParsedIngestRequest,
 ): Promise<IngressResult> {
   const runId = randomUUID();
-  const refs: DocRef[] = req.arks.map((ark) => ({
+  const refs: DocRef[] = req.ids.map((d) => ({
     projectId: req.projectId,
     docJobId: randomUUID(),
-    ark,
+    openaireId: d.openaireId,
+    doi: d.doi,
     runId,
   }));
 
@@ -114,7 +126,7 @@ export async function createRunAndSeed(
   });
 
   for (const ref of refs) await deps.docState.upsertDoc(ref);
-  if (refs.length > 0) await deps.queue.sendMany(Q.metadata, refs);
+  if (refs.length > 0) await deps.queue.sendMany(Q.resolve, refs);
 
   return { runId, totalDocs: refs.length };
 }

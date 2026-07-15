@@ -1,45 +1,28 @@
 /**
- * Live ClusterSink — wraps V1's proven cluster transport (`ClusterHttp`) and
- * dataset helpers (`bnfDatasetSlug` / `bnfDatasetSchema`).
+ * Live ClusterSink — writes a resolved OpenAIRE record into the project's
+ * data-cluster dataset (the RAG store), reusing V1's proven transport
+ * (`ClusterHttp`) and the OpenAIRE dataset helpers.
  *
- * V1's `BnfClusterSink.upsert` took a whole `PreparedDoc` (chunks + markdown)
- * and embedded inside the sink. V2 splits responsibilities: embedding already
- * happened (the embed stage), so the sink receives `pages` + precomputed
- * `embeddings` and just writes them. The cluster-write sequence is otherwise the
- * same proven five steps V1 ran:
+ * The write sequence (idempotent, tombstone-then-insert):
+ *   ensureDataset → get-by-slug, else create (slug = openaire-<projectId>).
+ *   upsert        → (tombstone any stale entry) → create entry (name = doi ??
+ *                   openaireId, slug = sanitized openaireId) → upload the original
+ *                   (doc.md, or the PDF for fulltext) → save processed content →
+ *                   index one chunk per prepared chunk with its precomputed
+ *                   embedding. Per-chunk metadata carries openaire_id + doi + the
+ *                   section/page locator so citations survive.
  *
- *   ensureDataset → get-by-slug, else create (slug = bnf-<projectId>).
- *   upsert        → (tombstone any stale entry) → create entry → upload doc.md
- *                   (original) → save processed content → index one chunk per
- *                   page with its precomputed embedding. Per-chunk metadata
- *                   carries ark + folio (ordre) so citations survive
- *                   ([[ark|label|folio]] deep-links to IIIF).
- *
- * Transport reuse: V1's `ClusterClient` cannot be imported here — its
- * `uploadOriginalFile` builds `new Blob([Buffer])`, which V1's `Bundler`
- * tsconfig tolerates but V2's stricter `NodeNext` lib resolution rejects
- * (`Buffer` ⊄ `BlobPart`, the SharedArrayBuffer-in-union friction). Rather than
- * edit V1 (out of bounds) or `as any` the cast, we reuse the lower transport
- * (`ClusterHttp`, which typechecks cleanly under both configs) and re-express the
- * thin REST calls here with a correctly-typed `Uint8Array` multipart body. The
- * pagination/shape-tolerance logic mirrors V1's `ClusterClient` exactly.
- *
- * One chunk per page is the V2 contract: pages already carry the folio `ordre`,
- * which is the citation key. The chunk metadata mirrors V1's snake_case filter
- * keys (ark, ark_slug, doc_type, sub_type, folio) so the cluster's filter
- * language keeps working.
+ * Transport reuse: V1's `ClusterClient` cannot be imported (its multipart body
+ * builds `new Blob([Buffer])`, which V2's stricter NodeNext lib resolution
+ * rejects). We reuse the lower transport (`ClusterHttp`) and re-express the thin
+ * REST calls here with a correctly-typed `Uint8Array` multipart body.
  */
 import { FormData } from "undici";
 
-import {
-  bnfDatasetSchema,
-  bnfDatasetSlug,
-} from "./vendor/dataset.js";
-// Local (vendored) transport — MUST share worker-v2's undici with the FormData
-// built below; see cluster-http.ts for why importing worker/'s ClusterHttp hangs.
+import { openaireDatasetSchema, openaireDatasetSlug } from "./vendor/dataset.js";
 import { ClusterHttp } from "./cluster-http.js";
-import { arkSlug } from "../domain/keys.js";
-import type { DocMeta, PreparedPage } from "../domain/types.js";
+import { oaSlug } from "../domain/keys.js";
+import type { OaMeta, PreparedChunk } from "../domain/types.js";
 import type { ClusterSink } from "../ports.js";
 
 interface DatasetView {
@@ -70,36 +53,36 @@ export interface LiveClusterSinkOptions {
   http?: ClusterHttp;
 }
 
-/**
- * Assemble a doc's pages into one markdown document, folio-headed. Pure —
- * exported for testing. Each page is prefixed with its folio so the stored
- * `original`/`processed` text stays navigable.
- */
-export function assembleMarkdown(pages: PreparedPage[]): string {
-  return pages.map((p) => `## Folio ${p.ordre}\n\n${p.text.trim()}`).join("\n\n");
+/** The section label for a chunk's locator — the cluster's filter/citation key. */
+function sectionOf(locator: PreparedChunk["locator"]): "abstract" | "metadata" | "fulltext" {
+  if (locator.kind === "abstract") return "abstract";
+  if (locator.kind === "metadata") return "metadata";
+  return "fulltext";
 }
 
 /**
- * Build the per-page index chunks (one chunk per page). Pure — exported for
- * testing. Aligns each page with its embedding by position; the caller
- * guarantees `pages.length === embeddings.length`.
+ * Build the per-chunk index chunks (one per prepared chunk). Pure — exported for
+ * testing. Aligns each chunk with its embedding by position; the caller guarantees
+ * `chunks.length === embeddings.length`.
  */
 export function buildIndexChunks(
-  ark: string,
-  meta: DocMeta,
-  pages: PreparedPage[],
+  openaireId: string,
+  meta: OaMeta,
+  chunks: PreparedChunk[],
   embeddings: number[][],
 ): IndexChunk[] {
-  return pages.map((p, i) => {
+  return chunks.map((c, i) => {
+    const page = c.locator.kind === "page" ? c.locator.page : null;
     const metadata: Record<string, unknown> = {
-      ark,
-      ark_slug: arkSlug(ark),
-      doc_type: meta.docType ?? null,
-      sub_type: meta.subtype ?? null,
-      folio: p.ordre,
+      openaire_id: openaireId,
+      doi: meta.doi,
+      page,
+      section: sectionOf(c.locator),
+      year: meta.year,
+      doc_type: meta.type,
     };
     return {
-      chunk_text: p.text,
+      chunk_text: c.text,
       chunk_index: i,
       embedding: embeddings[i]!,
       metadata,
@@ -115,72 +98,72 @@ export class LiveClusterSink implements ClusterSink {
   }
 
   async ensureDataset(input: { projectId: string }): Promise<{ datasetId: number }> {
-    const slug = bnfDatasetSlug(input.projectId);
+    const slug = openaireDatasetSlug(input.projectId);
     const existing = await this.http.getJsonOrNull<DatasetView>(
       `/api/v1/datasets/slug/${encodeURIComponent(slug)}`,
     );
     if (existing) return { datasetId: existing.id };
     const created = await this.http.postJson<DatasetView>("/api/v1/datasets", {
-      name: `BnF ${input.projectId}`,
+      name: `OpenAIRE ${input.projectId}`,
       slug,
-      description: `BnF corpus dataset for project ${input.projectId}`,
+      description: `OpenAIRE corpus dataset for project ${input.projectId}`,
       dataset_type: "text",
-      schema_definition: bnfDatasetSchema(input.projectId),
+      schema_definition: openaireDatasetSchema(input.projectId),
     });
     return { datasetId: created.id };
   }
 
   async upsert(input: {
     datasetId: number;
-    ark: string;
-    meta: DocMeta;
-    pages: PreparedPage[];
+    openaireId: string;
+    meta: OaMeta;
+    lane: string;
+    chunks: PreparedChunk[];
     embeddings: number[][];
+    original: { filename: string; bytes: Buffer; contentType: string };
+    markdown: string;
+    hasFulltext: boolean;
   }): Promise<{ entryId: number }> {
-    const { datasetId, ark, meta, pages, embeddings } = input;
-    if (pages.length !== embeddings.length) {
-      // A page/vector misalignment would corrupt citations — fail loudly.
+    const { datasetId, openaireId, meta, chunks, embeddings, original, markdown, hasFulltext } =
+      input;
+    if (chunks.length !== embeddings.length) {
       throw new Error(
-        `cluster upsert: ${pages.length} pages but ${embeddings.length} embeddings for ${ark}`,
+        `cluster upsert: ${chunks.length} chunks but ${embeddings.length} embeddings for ${openaireId}`,
       );
     }
 
-    const slug = arkSlug(ark);
-    // Idempotent re-ingest: tombstone a stale entry so a fresh insert lands
-    // cleanly (the cluster DELETE cascades through MinIO + Qdrant + Meilisearch).
+    const slug = oaSlug(openaireId);
     const existing = await this.findEntryBySlug(datasetId, slug);
     if (existing) await this.http.deleteJson(`/api/v1/entries/${existing.id}`);
 
-    const markdown = assembleMarkdown(pages);
     const entry = await this.createEntry({
       dataset_id: datasetId,
-      // The ARK is the entry's identity — short, opaque, unique, always < 255.
-      // BnF titles can run past the backend's 255-char `name` validator (the
-      // batch-sync 422s); the full title is preserved in metadata below.
-      name: ark,
+      // Name = doi ?? openaireId (short, unique, < 255); full title in metadata.
+      name: meta.doi ?? openaireId,
       slug,
-      description: markdown.slice(0, 200),
+      description: (meta.abstract ?? meta.title).slice(0, 200),
       metadata: {
-        ark,
-        arkSlug: slug,
+        openaire_id: openaireId,
+        doi: meta.doi,
         title: meta.title,
-        creator: meta.creator,
-        date: meta.date,
-        docType: meta.docType,
-        subtype: meta.subtype,
-        lang: meta.lang,
-        source: "gallica",
-        pageCount: meta.pageCount,
-        ocrAvailable: meta.ocrAvailable,
+        authors: meta.authors,
+        year: meta.year,
+        venue: meta.venue,
+        publisher: meta.publisher,
+        type: meta.type,
+        best_access_right: meta.bestAccessRight,
+        open_access_color: meta.openAccessColor,
+        has_fulltext: hasFulltext,
+        source: "openaire",
       },
     });
 
-    await this.uploadOriginalFile(entry.id, "doc.md", Buffer.from(markdown, "utf8"));
+    await this.uploadOriginalFile(entry.id, original.filename, original.bytes, original.contentType);
     await this.http.postJson(`/api/v1/entries/${entry.id}/processed`, {
       content: { text: markdown },
     });
     await this.http.postJson(`/api/v1/entries/${entry.id}/chunks`, {
-      chunks: buildIndexChunks(ark, meta, pages, embeddings),
+      chunks: buildIndexChunks(openaireId, meta, chunks, embeddings),
       collection_name: "entry_chunks",
     });
 
@@ -188,9 +171,8 @@ export class LiveClusterSink implements ClusterSink {
   }
 
   /**
-   * Find an entry by (datasetId, slug). The cluster's list endpoint doesn't
-   * honor a `slug` query param — it returns all entries — so we page and filter
-   * client-side, exactly as V1's ClusterClient does (page_size=100, max 50
+   * Find an entry by (datasetId, slug). The cluster's list endpoint doesn't honor a
+   * `slug` query param, so we page and filter client-side (page_size=100, max 50
    * pages). Returns null when not found.
    */
   private async findEntryBySlug(datasetId: number, slug: string): Promise<EntryView | null> {
@@ -217,42 +199,30 @@ export class LiveClusterSink implements ClusterSink {
     description?: string;
     metadata?: Record<string, unknown>;
   }): Promise<EntryView> {
-    const res = await this.http.postJson<CreateEntryResponse | EntryView>(
-      "/api/v1/entries",
-      input,
-    );
+    const res = await this.http.postJson<CreateEntryResponse | EntryView>("/api/v1/entries", input);
     if (res && typeof res === "object" && "entry" in res && res.entry) {
       return res.entry;
     }
-    if (
-      res &&
-      typeof res === "object" &&
-      "id" in res &&
-      typeof (res as EntryView).id === "number"
-    ) {
+    if (res && typeof res === "object" && "id" in res && typeof (res as EntryView).id === "number") {
       return res as EntryView;
     }
-    throw new Error(
-      `createEntry: unexpected response shape: ${JSON.stringify(res).slice(0, 200)}`,
-    );
+    throw new Error(`createEntry: unexpected response shape: ${JSON.stringify(res).slice(0, 200)}`);
   }
 
   /**
-   * Multipart upload of the doc's `original` file. The body is rebuilt per
-   * attempt (undici FormData / its stream is single-use), and the bytes are
-   * wrapped in a `Uint8Array` — a valid `BlobPart` under NodeNext (a raw Buffer
-   * is not, the SharedArrayBuffer-in-union friction).
+   * Multipart upload of the doc's `original` file. The body is rebuilt per attempt
+   * (undici FormData / its stream is single-use), and the bytes are wrapped in a
+   * `Uint8Array` — a valid `BlobPart` under NodeNext.
    */
   private async uploadOriginalFile(
     entryId: number,
     filename: string,
     bytes: Buffer,
+    contentType: string,
   ): Promise<void> {
     const formFactory = (): FormData => {
       const form = new FormData();
-      const blob = new Blob([new Uint8Array(bytes)], {
-        type: "application/octet-stream",
-      });
+      const blob = new Blob([new Uint8Array(bytes)], { type: contentType });
       form.set("file", blob, filename);
       form.set("file_type", "original");
       return form;

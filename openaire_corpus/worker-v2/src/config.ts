@@ -1,9 +1,8 @@
 /**
- * Infra config for the worker-v2 entrypoint — DB, S3, broker, the paid-OCR flag,
- * and the per-stage rate knobs. Required vars THROW at startup if missing (no
- * empty defaults — platform CLAUDE_ERROR_PATTERNS §10). The downstream live
- * clients (vision/mistral/embed/cluster) read their OWN secrets from env, mirroring
- * V1's names, so they are not duplicated here.
+ * Infra config for the worker-v2 entrypoint — DB, S3, and the per-stage rate/
+ * concurrency knobs. Required vars THROW at startup if missing (no empty defaults —
+ * platform CLAUDE_ERROR_PATTERNS §10). The downstream live clients (embed/cluster)
+ * read their OWN secrets from env, so they are not duplicated here.
  */
 function required(name: string): string {
   const v = process.env[name];
@@ -29,43 +28,35 @@ export interface WorkerConfig {
   /** Port the app↔worker HTTP ingress listens on (the app's WORKER_RUNNER_URL). */
   httpPort: number;
   s3: { bucket: string; endpoint: string; region: string; accessKeyId: string; secretAccessKey: string };
-  /** S3 key prefix isolating V2 artifacts from V1's (shared bucket). */
+  /** S3 key prefix isolating V2 artifacts (shared bucket). */
   s3Prefix: string;
-  mistralEnabled: boolean;
-  maxPages: number;
-  maxCanvases: number;
-  /** BnF fetch rate (folios/min) — 300 today; 1000 if the per-IP raise lands. */
-  fetchRatePerMin: number;
-  /** In-flight folio fetches. Must be high enough that fetches-in-progress keep
-   *  the 300/min token bucket drained (≈ rate/60 × per-fetch latency). 12 measured
-   *  ~178/min (latency ~4s); 24 is the floor to approach the cap. */
-  fetchConcurrency: number;
-  /** IIIF manifest rate (per egress IP). */
-  manifestRatePerMin: number;
-  /** IIIF size for VISION-lane images (pct:N — BnF-safe downscale). Full-res
-   *  ("max") images time out the vision API under concurrency; vision only needs
-   *  a description. Mistral OCR keeps full res. */
-  visionImageSize: string;
-  /** Vision-lane DOC concurrency — how many docs the describe stage processes at
-   *  once. */
-  describeConcurrency: number;
-  /** Vision-lane CALL concurrency — the shared cap on total in-flight vision API
-   *  calls across all docs (a doc fans its folios out up to this). The real
-   *  OpenRouter/Holo ceiling; keep under the provider's rate/DDoS limit. */
-  describeCallConcurrency: number;
-  /** Doc-resolution (metadata/OAI) concurrency — bounded downstream by the broker's
-   *  external rate (~120/min); this just keeps that rate fed. */
-  metadataConcurrency: number;
-  /** Data-cluster register (indexing) concurrency — the cluster autoscales, so this
-   *  can be pushed to drain the register backlog. */
-  registerConcurrency: number;
+  /** OpenAIRE Graph API base + optional token. */
+  openaireApiBase: string | undefined;
+  openaireApiToken: string | undefined;
+  /** OpenAIRE resolve rate (products/min) — the ungated public-API politeness cap. */
+  openaireRpm: number;
+  /** Route OPEN docs with a candidate PDF through the fulltext lane (B-M2). */
+  fulltextEnabled: boolean;
+  /** Per-host PDF-fetch politeness rate (requests/min/host). */
+  pdfHostRpm: number;
+  /** Max PDF bytes to download before rejecting `too_large`. */
+  pdfMaxBytes: number;
+  /** Max PDF pages to extract. */
+  pdfMaxPages: number;
+  /** Processing rate (docs/min) used for the read-model ETA. */
+  processRatePerMin: number;
+  /** Doc-resolution concurrency (bounded downstream by openaireRpm). */
+  resolveConcurrency: number;
+  /** PDF-fetch stage concurrency. */
+  fetchPdfConcurrency: number;
+  /** Extract stage concurrency. */
+  extractConcurrency: number;
+  /** Prepare stage concurrency. */
+  prepareConcurrency: number;
   /** Embed (RunPod) concurrency. */
   embedConcurrency: number;
-  /** Mistral OCR batch-submit concurrency (how many docs OCR in parallel). */
-  ocrSubmitConcurrency: number;
-  /** Mistral OCR batch-poll concurrency (cheap GETs). */
-  ocrPollConcurrency: number;
-  failRatio: number;
+  /** Data-cluster register (indexing) concurrency. */
+  registerConcurrency: number;
 }
 
 export function loadConfig(): WorkerConfig {
@@ -80,23 +71,19 @@ export function loadConfig(): WorkerConfig {
       secretAccessKey: required("SCW_S3_SECRET_KEY"),
     },
     s3Prefix: process.env.V2_S3_PREFIX?.trim() || "v2/",
-    mistralEnabled: optionalBool("MISTRAL_OCR_ENABLED", false),
-    maxPages: optionalInt("MAX_OCR_PAGES", 300),
-    maxCanvases: optionalInt("MISTRAL_OCR_MAX_PAGES", 300),
-    fetchRatePerMin: optionalInt("BNF_GLOBAL_RPM", 300),
-    fetchConcurrency: optionalInt("BNF_FETCH_CONCURRENCY", 32),
-    manifestRatePerMin: optionalInt("BNF_MANIFEST_RPM", 42),
-    visionImageSize: process.env.VISION_IMAGE_SIZE?.trim() || "pct:33",
-    describeConcurrency: optionalInt("DESCRIBE_CONCURRENCY", 16),
-    // 64: the vision lane is the bottleneck and the paid OpenRouter key has no
-    // per-key RPM cap — push concurrency hard and let the in-call 429/timeout
-    // backoff (vision.ts) ride the provider's capacity edge. See hardening-pass-2.
-    describeCallConcurrency: optionalInt("DESCRIBE_CALL_CONCURRENCY", 64),
-    metadataConcurrency: optionalInt("METADATA_CONCURRENCY", 16),
-    registerConcurrency: optionalInt("REGISTER_CONCURRENCY", 24),
+    openaireApiBase: process.env.OPENAIRE_API_BASE?.trim() || undefined,
+    openaireApiToken: process.env.OPENAIRE_API_TOKEN?.trim() || undefined,
+    openaireRpm: optionalInt("OPENAIRE_RPM", 60),
+    fulltextEnabled: optionalBool("FULLTEXT_ENABLED", false),
+    pdfHostRpm: optionalInt("PDF_HOST_RPM", 60),
+    pdfMaxBytes: optionalInt("PDF_MAX_BYTES", 50 * 1024 * 1024),
+    pdfMaxPages: optionalInt("PDF_MAX_PAGES", 500),
+    processRatePerMin: optionalInt("PROCESS_RPM", 300),
+    resolveConcurrency: optionalInt("RESOLVE_CONCURRENCY", 6),
+    fetchPdfConcurrency: optionalInt("FETCH_PDF_CONCURRENCY", 8),
+    extractConcurrency: optionalInt("EXTRACT_CONCURRENCY", 4),
+    prepareConcurrency: optionalInt("PREPARE_CONCURRENCY", 8),
     embedConcurrency: optionalInt("EMBED_CONCURRENCY", 8),
-    ocrSubmitConcurrency: optionalInt("OCR_SUBMIT_CONCURRENCY", 12),
-    ocrPollConcurrency: optionalInt("OCR_POLL_CONCURRENCY", 16),
-    failRatio: Number(process.env.DOC_FAIL_RATIO ?? "0.25"),
+    registerConcurrency: optionalInt("REGISTER_CONCURRENCY", 24),
   };
 }

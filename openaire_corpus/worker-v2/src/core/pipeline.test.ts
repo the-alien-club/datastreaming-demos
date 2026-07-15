@@ -7,9 +7,9 @@
  * MemoryBlobStore + memory logger) with tiny concrete stages built by extending
  * PipelineStage:
  *
- *   - a HEAD stage on Q.metadata → Q.fetch that emits one item and records the
- *     ARK it processed;
- *   - a TAIL stage on Q.fetch (no output queue) that records what it received.
+ *   - a HEAD stage on Q.resolve → Q.prepare that emits one item and records the
+ *     id it processed;
+ *   - a TAIL stage on Q.prepare (no output queue) that records what it received.
  *
  * Data flows stage → stage only through the queues, so observing the tail stage's
  * record proves both stages were started and the runner wired them end to end.
@@ -23,44 +23,65 @@ import { Pipeline } from "./pipeline.js";
 import { MemoryQueue } from "./queue-memory.js";
 import { PipelineStage, type StageDeps } from "./stage.js";
 import { Q } from "../domain/queues.js";
-import type { DocRef, FolioItem } from "../domain/types.js";
+import type { DocRef, ResolvedDoc } from "../domain/types.js";
 import type { StageContext, StageOutcome } from "./types.js";
 
 /**
- * HEAD stage: consumes the seeded DocRef off Q.metadata, records its ark, and
- * emits one FolioItem onto Q.fetch. Stands in for the metadata stage.
+ * HEAD stage: consumes the seeded DocRef off Q.resolve, records its id, and emits
+ * one ResolvedDoc onto Q.prepare. Stands in for the resolve stage.
  */
-class HeadStage extends PipelineStage<DocRef, FolioItem> {
+class HeadStage extends PipelineStage<DocRef, ResolvedDoc> {
   readonly name = "head";
-  readonly inputQueue = Q.metadata;
-  override readonly outputQueue = Q.fetch;
+  readonly inputQueue = Q.resolve;
+  override readonly outputQueue = Q.prepare;
   override readonly concurrency = 1;
 
-  /** ARKs seen by process(), in arrival order. */
+  /** ids seen by process(), in arrival order. */
   readonly seen: string[] = [];
 
-  override async process(payload: DocRef, _ctx: StageContext): Promise<StageOutcome<FolioItem>> {
-    this.seen.push(payload.ark);
+  override async process(payload: DocRef, _ctx: StageContext): Promise<StageOutcome<ResolvedDoc>> {
+    this.seen.push(payload.openaireId);
     return {
       kind: "emit",
-      items: [{ docJobId: payload.docJobId, ark: payload.ark, ordre: 1, kind: "alto", lane: "text" }],
+      items: [
+        {
+          projectId: payload.projectId,
+          docJobId: payload.docJobId,
+          openaireId: payload.openaireId,
+          doi: payload.doi,
+          lane: "abstract",
+          meta: {
+            title: "t",
+            abstract: "a",
+            authors: [],
+            year: null,
+            venue: null,
+            publisher: null,
+            type: "publication",
+            doi: payload.doi,
+            bestAccessRight: null,
+            openAccessColor: null,
+            subjects: [],
+          },
+        },
+      ],
     };
   }
 }
 
 /**
- * TAIL stage: consumes FolioItems off Q.fetch and records them. No output queue —
- * it's the terminal stage. Its records prove data flowed all the way through.
+ * TAIL stage: consumes ResolvedDocs off Q.prepare and records them. No output
+ * queue — its records prove data flowed all the way through.
  */
-class TailStage extends PipelineStage<FolioItem, never> {
+class TailStage extends PipelineStage<ResolvedDoc, never> {
   readonly name = "tail";
-  readonly inputQueue = Q.fetch;
+  readonly inputQueue = Q.prepare;
   override readonly concurrency = 1;
 
-  /** Every FolioItem this stage received. */
-  readonly received: FolioItem[] = [];
+  /** Every ResolvedDoc this stage received. */
+  readonly received: ResolvedDoc[] = [];
 
-  override async process(payload: FolioItem, _ctx: StageContext): Promise<StageOutcome<never>> {
+  override async process(payload: ResolvedDoc, _ctx: StageContext): Promise<StageOutcome<never>> {
     this.received.push(payload);
     return { kind: "done" };
   }
@@ -78,7 +99,7 @@ function deps(): {
   return { deps: { queue, blob, log: logger }, queue, lines };
 }
 
-const DOC: DocRef = { projectId: "p1", docJobId: "d1", ark: "ark:/12148/btv1b1" };
+const DOC: DocRef = { projectId: "p1", docJobId: "d1", openaireId: "oa::doc1", doi: null };
 
 test("start() starts every stage — data flows head → tail through the runner", async () => {
   const d = deps();
@@ -89,12 +110,12 @@ test("start() starts every stage — data flows head → tail through the runner
   await pipeline.start();
 
   // Seed the head queue directly, then let the whole pipeline drain.
-  await d.queue.send(Q.metadata, DOC);
+  await d.queue.send(Q.resolve, DOC);
   await d.queue.idle();
 
-  assert.deepEqual(head.seen, [DOC.ark], "head stage started and processed the seeded DocRef");
+  assert.deepEqual(head.seen, [DOC.openaireId], "head stage started and processed the seeded DocRef");
   assert.equal(tail.received.length, 1, "tail stage started and received the emitted item");
-  assert.equal(tail.received[0]?.ark, DOC.ark, "the item that reached the tail carries the same ARK");
+  assert.equal(tail.received[0]?.openaireId, DOC.openaireId, "the item that reached the tail carries the same id");
 
   const startedLog = d.lines.find((l) => l.event === "pipeline_started");
   assert.ok(startedLog, "pipeline_started was logged");
@@ -111,7 +132,7 @@ test("seed() enqueues to Q.metadata — the head stage processes the DocRef", as
   await pipeline.seed([DOC]);
   await d.queue.idle();
 
-  assert.deepEqual(head.seen, [DOC.ark], "seed() landed the DocRef on Q.metadata → head processed it");
+  assert.deepEqual(head.seen, [DOC.openaireId], "seed() landed the DocRef on Q.resolve → head processed it");
   assert.equal(tail.received.length, 1, "and it flowed on to the tail");
 
   const seededLog = d.lines.find((l) => l.event === "pipeline_seeded");
@@ -129,11 +150,11 @@ test("seed([]) is a no-op — nothing enqueued, nothing processed, no throw", as
   await pipeline.seed([]); // must not throw
   await d.queue.idle();
 
-  const counts = await d.queue.counts(Q.metadata);
-  assert.equal(counts.queued, 0, "no item queued on Q.metadata");
-  assert.equal(counts.running, 0, "no item running on Q.metadata");
-  assert.equal(counts.completed, 0, "no item completed on Q.metadata");
-  assert.equal(counts.failed, 0, "no item failed on Q.metadata");
+  const counts = await d.queue.counts(Q.resolve);
+  assert.equal(counts.queued, 0, "no item queued on Q.resolve");
+  assert.equal(counts.running, 0, "no item running on Q.resolve");
+  assert.equal(counts.completed, 0, "no item completed on Q.resolve");
+  assert.equal(counts.failed, 0, "no item failed on Q.resolve");
   assert.deepEqual(head.seen, [], "head stage saw nothing");
 
   const seededLog = d.lines.find((l) => l.event === "pipeline_seeded");
@@ -173,12 +194,12 @@ test("stop() stops the queue — workers cleared, a later send is not processed"
 
   // MemoryQueue.stop() clears all registered workers. A subsequent send therefore
   // has no worker to pick it up — it stays queued and the head stage never sees it.
-  await d.queue.send(Q.metadata, DOC);
+  await d.queue.send(Q.resolve, DOC);
   // Give any (incorrectly surviving) worker a chance to run before asserting.
   await new Promise<void>((resolve) => setTimeout(resolve, 10));
 
   assert.deepEqual(head.seen, [], "no worker processed the post-stop send");
-  const counts = await d.queue.counts(Q.metadata);
+  const counts = await d.queue.counts(Q.resolve);
   assert.equal(counts.queued, 1, "the item is still sitting queued — no worker drained it");
   assert.equal(counts.completed, 0, "nothing completed after stop");
 

@@ -18,21 +18,24 @@ function validBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     targetVersionId: "v2",
     appJobId: "job-1",
     added: [
-      { ark: "ark:/12148/a", title: "A", year: 1900, docType: "texte", subtype: null, lang: "fre", source: "Gallica", iiifManifestUrl: null },
-      { ark: "ark:/12148/b", title: "B", year: 1901, docType: "texte", subtype: null, lang: "fre", source: "Gallica", iiifManifestUrl: null },
+      { openaireId: "oa::a", doi: "10.1/a", title: "A", year: 1900, type: "publication", lang: "en", bestAccessRight: "OPEN", hasAbstract: true },
+      { openaireId: "oa::b", doi: null, title: "B", year: 1901, type: "publication", lang: "en", bestAccessRight: "OPEN", hasAbstract: true },
     ],
-    removed: ["ark:/12148/old"],
+    removed: ["oa::old"],
     callbackUrl: "https://app.example/api/internal/ingest/job-1/progress",
     callbackSecret: "deadbeef",
     ...overrides,
   };
 }
 
-test("parseIngestRequest accepts a well-formed body and keeps only ARKs from added", () => {
+test("parseIngestRequest accepts a well-formed body and keeps only id+doi from added", () => {
   const r = parseIngestRequest(validBody());
   assert.equal(r.ok, true);
   if (!r.ok) return;
-  assert.deepEqual(r.value.arks, ["ark:/12148/a", "ark:/12148/b"]);
+  assert.deepEqual(r.value.ids, [
+    { openaireId: "oa::a", doi: "10.1/a" },
+    { openaireId: "oa::b", doi: null },
+  ]);
   assert.equal(r.value.projectId, "p1");
   assert.equal(r.value.callbackSecret, "deadbeef");
 });
@@ -44,14 +47,14 @@ test("parseIngestRequest rejects missing required fields", () => {
   }
 });
 
-test("parseIngestRequest rejects a non-array added and a doc missing ark", () => {
+test("parseIngestRequest rejects a non-array added and a doc missing openaireId", () => {
   assert.equal(parseIngestRequest(validBody({ added: "nope" })).ok, false);
-  assert.equal(parseIngestRequest(validBody({ added: [{ title: "no ark" }] })).ok, false);
+  assert.equal(parseIngestRequest(validBody({ added: [{ title: "no id" }] })).ok, false);
   assert.equal(parseIngestRequest(null).ok, false);
   assert.equal(parseIngestRequest("string").ok, false);
 });
 
-test("createRunAndSeed creates the run, seeds N metadata messages, returns a runId", async () => {
+test("createRunAndSeed creates the run, seeds N resolve messages, returns a runId", async () => {
   const queue = new MemoryQueue();
   const docState = new MemoryDocState();
   const runStore = new MemoryRunStore();
@@ -72,8 +75,8 @@ test("createRunAndSeed creates the run, seeds N metadata messages, returns a run
   assert.equal(run?.callbackUrl, parsed.value.callbackUrl);
   assert.equal(run?.terminalEmitted, false);
 
-  // Two messages queued onto the metadata bucket (no worker attached → still queued).
-  const counts = await queue.counts(Q.metadata);
+  // Two messages queued onto the resolve bucket (no worker attached → still queued).
+  const counts = await queue.counts(Q.resolve);
   assert.equal(counts.queued, 2);
 
   // Both docs are in the run's scope.
@@ -92,6 +95,6 @@ test("createRunAndSeed with an empty added → zero-doc run, no metadata message
 
   const { runId, totalDocs } = await createRunAndSeed({ runStore, docState, queue }, parsed.value);
   assert.equal(totalDocs, 0);
-  assert.equal((await queue.counts(Q.metadata)).queued, 0);
+  assert.equal((await queue.counts(Q.resolve)).queued, 0);
   assert.equal((await runStore.get(runId))?.totalDocs, 0);
 });

@@ -28,8 +28,8 @@ export interface TerminalStats {
   done: number;
   failed: number;
   skipped: number;
-  /** ONE entry per failed doc — drives per-ark indexError + the retry list. */
-  errors: Array<{ ark: string; stage: string; reason: string }>;
+  /** ONE entry per failed doc — drives per-id indexError + the retry list. */
+  errors: Array<{ id: string; stage: string; reason: string }>;
 }
 
 /** The terminal ClusterProgressEvent (the app contract's two terminal variants). */
@@ -65,7 +65,7 @@ export function buildTerminalEvent(input: {
   const failed = counts.failed;
   const skipped = counts.skipped + counts.excluded;
   const errors = failedDocs.map((d) => ({
-    ark: d.ark,
+    id: d.openaireId,
     stage: d.lane ?? "unknown",
     reason: d.error ?? "échec",
   }));

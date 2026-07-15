@@ -1,25 +1,26 @@
 /**
- * Composition root — wires the ten stages into a Pipeline given the transport,
- * blob store, logger, the BnF client, the four downstream ports, the doc-state
- * store, and the per-stage rate gates. Both the real worker entrypoint and the
- * integration tests build the pipeline through here, so the topology lives in ONE
- * place and tests exercise the exact wiring that ships.
+ * Composition root — wires the pipeline stages given the transport, blob store,
+ * logger, the OpenAIRE client, the two downstream ports (embedder + cluster sink),
+ * the doc-state store, and the resolve rate gate. Both the real worker entrypoint
+ * and the integration tests build the pipeline through here, so the topology lives
+ * in ONE place and tests exercise the exact wiring that ships.
+ *
+ * Topology: resolve → [fulltext: fetchPdf → extract] → prepare → embed → register.
+ * When `fulltextEnabled` is off, resolve routes every doc straight to prepare and
+ * the fetchPdf/extract stages simply never receive work (they still run their
+ * empty worker loops, which is harmless).
  */
 import { Pipeline, type RunnableStage } from "./core/pipeline.js";
 import type { BlobStore, Logger, QueueClient, RateGate } from "./core/types.js";
 import type { StageDeps } from "./core/stage.js";
-import type { BnfClient } from "./bnf/types.js";
+import type { OpenAireClient } from "./openaire/client.js";
 import type { DocStateStore } from "./domain/doc-state.js";
-import type { ClusterSink, Describer, Embedder, OcrEngine } from "./ports.js";
+import type { ClusterSink, Embedder, PdfFetcher, PdfTextExtractor } from "./ports.js";
 
-import { MetadataStage } from "./stages/metadata.js";
-import { ManifestStage } from "./stages/manifest.js";
-import { FetchStage } from "./stages/fetch.js";
-import { MonitorStage } from "./stages/monitor.js";
-import { AssembleStage } from "./stages/assemble.js";
-import { DescribeStage } from "./stages/describe.js";
-import { OcrSubmitStage } from "./stages/ocr-submit.js";
-import { OcrPollStage } from "./stages/ocr-poll.js";
+import { ResolveStage } from "./stages/resolve.js";
+import { FetchPdfStage } from "./stages/fetch-pdf.js";
+import { ExtractStage } from "./stages/extract.js";
+import { PrepareStage } from "./stages/prepare.js";
 import { EmbedStage } from "./stages/embed.js";
 import { RegisterStage } from "./stages/register.js";
 
@@ -27,38 +28,29 @@ export interface PipelineDeps {
   queue: QueueClient;
   blob: BlobStore;
   log: Logger;
-  bnf: BnfClient;
+  openaire: OpenAireClient;
   docState: DocStateStore;
-  describer: Describer;
-  ocr: OcrEngine;
   embedder: Embedder;
   cluster: ClusterSink;
+  /** Full-text ports — required only when fulltext is enabled. */
+  pdfFetcher?: PdfFetcher;
+  pdfExtractor?: PdfTextExtractor;
   /** Optional per-dispatch observability hook (also feeds the read-model). */
   onOutcome?: StageDeps["onOutcome"];
   /** Per-stage rate gates (undefined → unthrottled, e.g. in tests). */
   rates?: {
-    manifest?: RateGate;
-    fetch?: RateGate;
-    describe?: RateGate;
+    resolve?: RateGate;
     embed?: RateGate;
   };
   config?: {
-    mistralEnabled?: boolean;
-    maxPages?: number;
-    maxCanvases?: number;
-    imageSize?: string;
-    visionImageSize?: string;
-    fetchConcurrency?: number;
-    metadataConcurrency?: number;
-    registerConcurrency?: number;
-    describeConcurrency?: number;
-    describeCallConcurrency?: number;
+    fulltextEnabled?: boolean;
+    resolveConcurrency?: number;
+    fetchPdfConcurrency?: number;
+    extractConcurrency?: number;
+    extractMaxPages?: number;
+    prepareConcurrency?: number;
     embedConcurrency?: number;
-    ocrSubmitConcurrency?: number;
-    ocrPollConcurrency?: number;
-    failRatio?: number;
-    ocrMaxPolls?: number;
-    ocrPollDelayMs?: number;
+    registerConcurrency?: number;
   };
 }
 
@@ -69,35 +61,11 @@ export function buildPipeline(deps: PipelineDeps): Pipeline {
   const rates = deps.rates ?? {};
 
   const stages: RunnableStage[] = [
-    new MetadataStage(base, deps.bnf, deps.docState, {
-      mistralEnabled: cfg.mistralEnabled ?? false,
-      ...(cfg.maxPages !== undefined ? { maxPages: cfg.maxPages } : {}),
-      ...(cfg.metadataConcurrency !== undefined ? { concurrency: cfg.metadataConcurrency } : {}),
+    new ResolveStage(base, deps.openaire, deps.docState, rates.resolve, {
+      ...(cfg.fulltextEnabled !== undefined ? { fulltextEnabled: cfg.fulltextEnabled } : {}),
+      ...(cfg.resolveConcurrency !== undefined ? { concurrency: cfg.resolveConcurrency } : {}),
     }),
-    new ManifestStage(base, deps.bnf, deps.docState, rates.manifest, {
-      ...(cfg.maxCanvases !== undefined ? { maxCanvases: cfg.maxCanvases } : {}),
-    }),
-    new FetchStage(base, deps.bnf, rates.fetch, {
-      ...(cfg.imageSize !== undefined ? { imageSize: cfg.imageSize } : {}),
-      ...(cfg.visionImageSize !== undefined ? { visionImageSize: cfg.visionImageSize } : {}),
-      ...(cfg.fetchConcurrency !== undefined ? { concurrency: cfg.fetchConcurrency } : {}),
-    }),
-    new MonitorStage(base, deps.docState, {
-      ...(cfg.failRatio !== undefined ? { failRatio: cfg.failRatio } : {}),
-    }),
-    new AssembleStage(base, deps.docState),
-    new DescribeStage(base, deps.describer, deps.docState, rates.describe, {
-      ...(cfg.describeConcurrency !== undefined ? { concurrency: cfg.describeConcurrency } : {}),
-      ...(cfg.describeCallConcurrency !== undefined ? { callConcurrency: cfg.describeCallConcurrency } : {}),
-    }),
-    new OcrSubmitStage(base, deps.ocr, deps.docState, {
-      ...(cfg.ocrSubmitConcurrency !== undefined ? { concurrency: cfg.ocrSubmitConcurrency } : {}),
-    }),
-    new OcrPollStage(base, deps.ocr, deps.docState, {
-      ...(cfg.ocrMaxPolls !== undefined ? { maxPolls: cfg.ocrMaxPolls } : {}),
-      ...(cfg.ocrPollDelayMs !== undefined ? { pollDelayMs: cfg.ocrPollDelayMs } : {}),
-      ...(cfg.ocrPollConcurrency !== undefined ? { concurrency: cfg.ocrPollConcurrency } : {}),
-    }),
+    new PrepareStage(base, deps.docState),
     new EmbedStage(base, deps.embedder, deps.docState, rates.embed, {
       ...(cfg.embedConcurrency !== undefined ? { concurrency: cfg.embedConcurrency } : {}),
     }),
@@ -105,6 +73,23 @@ export function buildPipeline(deps: PipelineDeps): Pipeline {
       ...(cfg.registerConcurrency !== undefined ? { concurrency: cfg.registerConcurrency } : {}),
     }),
   ];
+
+  // The fulltext lane stages are added only when their ports are supplied. Enabling
+  // fulltext without them is a wiring error (fail loud at composition).
+  if (cfg.fulltextEnabled) {
+    if (!deps.pdfFetcher || !deps.pdfExtractor) {
+      throw new Error("buildPipeline: fulltextEnabled requires pdfFetcher + pdfExtractor");
+    }
+    stages.push(
+      new FetchPdfStage(base, deps.pdfFetcher, deps.docState, {
+        ...(cfg.fetchPdfConcurrency !== undefined ? { concurrency: cfg.fetchPdfConcurrency } : {}),
+      }),
+      new ExtractStage(base, deps.pdfExtractor, deps.docState, {
+        ...(cfg.extractConcurrency !== undefined ? { concurrency: cfg.extractConcurrency } : {}),
+        ...(cfg.extractMaxPages !== undefined ? { maxPages: cfg.extractMaxPages } : {}),
+      }),
+    );
+  }
 
   return new Pipeline(queue, stages, log);
 }

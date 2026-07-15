@@ -46,14 +46,14 @@ test("buildTerminalEvent: partial → stage done with errors[] for each failed d
   const event = buildTerminalEvent({
     totalDocs: 3,
     counts: { ...zeroCounts(), done: 2, failed: 1 },
-    failedDocs: [{ ark: "ark:/12148/bad", lane: "text", error: "page-fail-ratio 3/4" }],
+    failedDocs: [{ openaireId: "oa::bad", lane: "fulltext", error: "extract failed" }],
     chunksWritten: 8,
   });
   assert.equal(event.stage, "done"); // partial still advances the pointer
   if (event.stage !== "done") return;
   assert.equal(event.stats.failed, 1);
   assert.deepEqual(event.stats.errors, [
-    { ark: "ark:/12148/bad", stage: "text", reason: "page-fail-ratio 3/4" },
+    { id: "oa::bad", stage: "fulltext", reason: "extract failed" },
   ]);
 });
 
@@ -62,8 +62,8 @@ test("buildTerminalEvent: every doc failed → stage failed (pointer left behind
     totalDocs: 2,
     counts: { ...zeroCounts(), failed: 2 },
     failedDocs: [
-      { ark: "ark:/12148/a", lane: "vision", error: "manifest 500" },
-      { ark: "ark:/12148/b", lane: null, error: null },
+      { openaireId: "oa::a", lane: "abstract", error: "cluster 500" },
+      { openaireId: "oa::b", lane: null, error: null },
     ],
     chunksWritten: 0,
   });
@@ -104,7 +104,7 @@ function run(overrides: Partial<IngestRun> = {}): IngestRun {
 
 test("emit POSTs a signature the app verifier accepts, then latches", async () => {
   const docState = new MemoryDocState();
-  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", ark: "ark:/12148/a", runId: "run-1" });
+  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", openaireId: "oa::a", runId: "run-1" });
   await docState.setStatus("d1", "done");
   const runStore = new MemoryRunStore();
   await runStore.create(run());
@@ -139,7 +139,7 @@ test("emit POSTs a signature the app verifier accepts, then latches", async () =
 
 test("emit releases the latch and throws when the callback never succeeds", async () => {
   const docState = new MemoryDocState();
-  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", ark: "ark:/12148/a", runId: "run-1" });
+  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", openaireId: "oa::a", runId: "run-1" });
   await docState.setStatus("d1", "done");
   const runStore = new MemoryRunStore();
   await runStore.create(run());

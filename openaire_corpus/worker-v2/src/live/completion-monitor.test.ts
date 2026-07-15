@@ -56,8 +56,8 @@ test("noteOutcome ignores emit-kind outcomes (no work, no emit)", async () => {
 test("a run fires its terminal callback exactly once when all docs are terminal", async () => {
   const { docState, runStore, monitor, posts } = wire();
   await runStore.create(baseRun("r1", 2));
-  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", ark: "ark:/12148/a", runId: "r1" });
-  await docState.upsertDoc({ docJobId: "d2", projectId: "p1", ark: "ark:/12148/b", runId: "r1" });
+  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", openaireId: "oa::a", runId: "r1" });
+  await docState.upsertDoc({ docJobId: "d2", projectId: "p1", openaireId: "oa::b", runId: "r1" });
 
   // First doc done — run still in flight (d2 not terminal) → no emit.
   await docState.setStatus("d1", "done");
@@ -74,7 +74,7 @@ test("a run fires its terminal callback exactly once when all docs are terminal"
   const event = JSON.parse(posts[0]!.body);
   assert.equal(event.stage, "done"); // 1 done > 0 → partial still commits
   assert.equal(event.stats.failed, 1);
-  assert.equal(event.stats.errors[0].ark, "ark:/12148/b");
+  assert.equal(event.stats.errors[0].id, "oa::b");
 
   // A redundant later outcome does not double-fire (latched).
   monitor.noteOutcome({ kind: "done", payload: { docJobId: "d2" } });
@@ -85,7 +85,7 @@ test("a run fires its terminal callback exactly once when all docs are terminal"
 test("checkDoc on a non-terminal doc does no run check (no emit)", async () => {
   const { docState, runStore, monitor, posts } = wire();
   await runStore.create(baseRun("r1", 1));
-  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", ark: "ark:/12148/a", runId: "r1" });
+  await docState.upsertDoc({ docJobId: "d1", projectId: "p1", openaireId: "oa::a", runId: "r1" });
   await docState.setStatus("d1", "ready"); // intermediate, not terminal
   monitor.noteOutcome({ kind: "done", payload: { docJobId: "d1" } });
   await settle();

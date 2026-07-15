@@ -1,37 +1,33 @@
 /**
- * S3 key scheme — deterministic, content-addressed by ARK (+ folio). The presence
- * of a key is the idempotency/resume signal: a stage whose artifact key exists
- * skips its external call. Heavy bytes (manifest/ALTO/image) and the small
- * per-stage outcome pointers both live here under distinct prefixes.
+ * S3 key scheme — deterministic, content-addressed by OpenAIRE id (+ content hash
+ * where the payload varies). The presence of a key is the idempotency/resume
+ * signal: a stage whose artifact key exists skips its external call. Heavy bytes
+ * (PDF) and the small per-stage outcome pointers both live here under distinct
+ * prefixes.
  *
- * `slug` is the ARK body with the "ark:/12148/" prefix stripped and slashes
- * normalised, so keys are flat and filesystem/S3-safe.
+ * `slug` is the OpenAIRE id with the API's `::`/`|` separators normalised so keys
+ * are flat and filesystem/S3-safe (a bare id looks like `doi_dedup___<hash>`).
  */
-export function arkSlug(ark: string): string {
-  return ark.replace(/^ark:\/12148\//, "").replace(/[^a-zA-Z0-9_.-]/g, "_");
+export function oaSlug(openaireId: string): string {
+  return openaireId.replace(/[^a-zA-Z0-9_.-]/g, "_");
 }
 
 export const keys = {
-  /** OAI metadata JSON (docType, ocrAvailable, pageCount, title…). */
-  metadata: (ark: string) => `meta/${arkSlug(ark)}.json`,
-  /** IIIF manifest JSON (canvas list / total pages). */
-  manifest: (ark: string) => `manifest/${arkSlug(ark)}.json`,
-  /** One folio's ALTO XML. */
-  alto: (ark: string, ordre: number) => `alto/${arkSlug(ark)}/f${ordre}.xml`,
-  /** One folio's image bytes. */
-  image: (ark: string, ordre: number) => `image/${arkSlug(ark)}/f${ordre}.jpg`,
-  /** Per-doc assembled text pages (text lane) / OCR pages (mistral) / descriptions (vision). */
-  pages: (ark: string) => `pages/${arkSlug(ark)}.json`,
-  /** Mistral batch handle for a doc (batch_id + custom_id map). */
-  ocrBatch: (ark: string) => `ocr-batch/${arkSlug(ark)}.json`,
-  /** Embeddings for a doc. */
-  embeddings: (ark: string) => `embed/${arkSlug(ark)}.json`,
+  /** Resolved product metadata JSON. */
+  meta: (id: string) => `meta/${oaSlug(id)}.json`,
+  /** The downloaded full-text PDF bytes (fulltext lane only). */
+  pdf: (id: string) => `pdf/${oaSlug(id)}.pdf`,
+  /** Extracted per-page text (content-hashed on the pdf bytes). */
+  pages: (id: string, sha8: string) => `pages/${oaSlug(id)}.${sha8}.json`,
+  /** Prepared index chunks (read back by register). */
+  chunks: (id: string) => `chunks/${oaSlug(id)}.json`,
+  /** Rendered doc markdown (the entry's original/processed artifact). */
+  doc: (id: string) => `doc/${oaSlug(id)}.md`,
+  /** Embeddings for a doc (content-hashed on the chunk set). */
+  embeddings: (id: string, sha8: string) => `embed/${oaSlug(id)}.${sha8}.json`,
   /** Terminal registration receipt — its presence means the doc is fully ingested. */
-  registered: (ark: string) => `registered/${arkSlug(ark)}.json`,
+  registered: (id: string) => `registered/${oaSlug(id)}.json`,
 
   /** Per-stage OUTCOME cache (the small emit/done envelope the base persists). */
-  outcome: (stage: string, ark: string, ordre?: number) =>
-    ordre === undefined
-      ? `outcome/${stage}/${arkSlug(ark)}.json`
-      : `outcome/${stage}/${arkSlug(ark)}/f${ordre}.json`,
+  outcome: (stage: string, id: string) => `outcome/${stage}/${oaSlug(id)}.json`,
 };

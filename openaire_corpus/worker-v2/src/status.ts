@@ -22,7 +22,7 @@ async function main(): Promise<void> {
 
   const report = await buildProgress(docState, queue, {
     ...(projectId ? { projectId } : {}),
-    fetchRatePerMin: cfg.fetchRatePerMin,
+    fetchRatePerMin: cfg.processRatePerMin,
   });
   console.log(JSON.stringify(report, null, 2));
   if (!report.reconciles) {

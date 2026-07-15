@@ -1,13 +1,10 @@
 /**
- * Seed CLI — enqueue documents into the V2 pipeline head (the metadata bucket).
- * Creates a `document_ingest_job_v2` row per ARK and sends a DocRef onto the
- * metadata queue; the running worker (main.ts) picks them up. Kept transport-only
- * so it can run against the same pg-boss + Postgres the worker uses.
+ * Seed CLI — enqueue documents into the V2 pipeline head (the resolve bucket).
+ * Creates a `document_ingest_job_v2` row per OpenAIRE id and sends a DocRef onto
+ * the resolve queue; the running worker (main.ts) picks them up. Kept
+ * transport-only so it can run against the same pg-boss + Postgres the worker uses.
  *
- *   npx tsx src/seed.ts <projectId> <ark...>
- *
- * ARKs for the integration gates are pulled from the local app DB — see
- * RUN.md for the query that samples one ARK per lane (text / vision / mistral).
+ *   npx tsx src/seed.ts <projectId> <openaireId...>
  */
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
@@ -19,9 +16,9 @@ import { Q } from "./domain/queues.js";
 import type { DocRef } from "./domain/types.js";
 
 async function main(): Promise<void> {
-  const [projectId, ...arks] = process.argv.slice(2);
-  if (!projectId || arks.length === 0) {
-    console.error("usage: tsx src/seed.ts <projectId> <ark...>");
+  const [projectId, ...openaireIds] = process.argv.slice(2);
+  if (!projectId || openaireIds.length === 0) {
+    console.error("usage: tsx src/seed.ts <projectId> <openaireId...>");
     process.exit(2);
   }
 
@@ -32,13 +29,18 @@ async function main(): Promise<void> {
   const docState = new PgDocState(pool);
   await docState.migrate();
 
-  const refs: DocRef[] = arks.map((ark) => ({ projectId, docJobId: randomUUID(), ark }));
+  const refs: DocRef[] = openaireIds.map((openaireId) => ({
+    projectId,
+    docJobId: randomUUID(),
+    openaireId,
+    doi: null,
+  }));
   for (const ref of refs) {
     await docState.upsertDoc(ref);
   }
-  await queue.sendMany(Q.metadata, refs);
-  console.log(`seeded ${refs.length} docs into ${Q.metadata} for project ${projectId}`);
-  for (const r of refs) console.log(`  ${r.docJobId}  ${r.ark}`);
+  await queue.sendMany(Q.resolve, refs);
+  console.log(`seeded ${refs.length} docs into ${Q.resolve} for project ${projectId}`);
+  for (const r of refs) console.log(`  ${r.docJobId}  ${r.openaireId}`);
 
   await queue.stop();
   await pool.end();

@@ -44,11 +44,20 @@ async function bootServer(): Promise<{
   };
 }
 
-const ingestBody = (arks: string[]) => ({
+const ingestBody = (ids: string[]) => ({
   projectId: "p1",
   targetVersionId: "v2",
   appJobId: "job-1",
-  added: arks.map((ark) => ({ ark, title: ark, year: null, docType: "texte", subtype: null, lang: "fre", source: "Gallica", iiifManifestUrl: null })),
+  added: ids.map((openaireId) => ({
+    openaireId,
+    doi: null,
+    title: openaireId,
+    year: null,
+    type: "publication",
+    lang: "en",
+    bestAccessRight: "OPEN",
+    hasAbstract: true,
+  })),
   removed: [],
   callbackUrl: "http://127.0.0.1:1/api/internal/ingest/job-1/progress",
   callbackSecret: "s3cr3t",
@@ -71,7 +80,7 @@ test("POST /ingest → { clusterJobId } and a seeded run", async () => {
     const res = await fetch(`${base}/ingest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(ingestBody(["ark:/12148/a", "ark:/12148/b"])),
+      body: JSON.stringify(ingestBody(["oa::a", "oa::b"])),
     });
     assert.equal(res.status, 200);
     const { clusterJobId } = (await res.json()) as { clusterJobId: string };
@@ -79,7 +88,7 @@ test("POST /ingest → { clusterJobId } and a seeded run", async () => {
 
     const run = await deps.runStore.get(clusterJobId);
     assert.equal(run?.totalDocs, 2);
-    assert.equal((await deps.queue.counts(Q.metadata)).queued, 2);
+    assert.equal((await deps.queue.counts(Q.resolve)).queued, 2);
   } finally {
     await close();
   }
@@ -112,7 +121,7 @@ test("GET /progress/:runId returns the read-model; unknown run → 404", async (
     const submit = await fetch(`${base}/ingest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(ingestBody(["ark:/12148/a"])),
+      body: JSON.stringify(ingestBody(["oa::a"])),
     });
     const { clusterJobId } = (await submit.json()) as { clusterJobId: string };
 
@@ -136,7 +145,7 @@ test("POST /ingest/:runId/cancel marks the run canceled; unknown → 404", async
     const submit = await fetch(`${base}/ingest`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(ingestBody(["ark:/12148/a"])),
+      body: JSON.stringify(ingestBody(["oa::a"])),
     });
     const { clusterJobId } = (await submit.json()) as { clusterJobId: string };
 
