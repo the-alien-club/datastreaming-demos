@@ -52,7 +52,7 @@ export function LayoutWorkspaceProjectSwitcher({ projectId }: Props) {
   const active = projects?.find((p) => p.id === projectId)
 
   function projectMeta(p: { corpusSize: number; subtitle: string | null }): string {
-    const count = p.corpusSize.toLocaleString("fr-FR")
+    const count = p.corpusSize.toLocaleString("en-US")
     return p.subtitle ? `${count} · ${p.subtitle}` : count
   }
 

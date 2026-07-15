@@ -38,7 +38,7 @@ function relativeDate(date: Date): string {
     return rtf.format(Math.round(diffSec / 3_600), "hour")
   if (abs < 30 * 86_400)
     return rtf.format(Math.round(diffSec / 86_400), "day")
-  return date.toLocaleDateString("fr-FR", {
+  return date.toLocaleDateString("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",

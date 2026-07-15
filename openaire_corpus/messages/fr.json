@@ -177,7 +177,7 @@
     "summary": {
       "total": "{count, plural, =0 {Aucun document} one {# document} other {# documents}}",
       "documents": "Documents",
-      "arkNotices": "notices ARK",
+      "arkNotices": "notices",
       "period": "Période",
       "undatedSub": "{count} non datés",
       "datedSub": "datés",
@@ -225,7 +225,7 @@
       "pending": "En cours",
       "pendingAriaLabel": "{count} documents en cours de résolution",
       "failed": "Échec",
-      "searchPlaceholder": "Rechercher dans le titre, l'auteur, l'ARK…",
+      "searchPlaceholder": "Rechercher par titre, auteur, DOI…",
       "hint": "— cliquez une catégorie ou une période pour filtrer",
       "activeBadge": "{count} actif",
       "facetTypeTitle": "Par type de document",
@@ -250,7 +250,9 @@
         "nonNumerise": "Non numérisés",
         "nonNumeriseSub": "non ingéré"
       },
-      "facetOaTitle": "Accès ouvert"
+      "facetOaTitle": "Accès ouvert",
+      "citationNetwork": "Réseau de citations",
+      "citationNetworkHint": "citations principales"
     },
     "documents": {
       "empty": "Aucun document. Demandez à l'agent de constituer un corpus.",
@@ -568,7 +570,7 @@
       "noNotes": "Aucune note pour l'instant.",
       "closeTab": "Fermer",
       "artefactHeader": "Artefact de recherche · rédigé par l'agent",
-      "cites": "{count, plural, =0 {aucune référence} one {# référence ARK} other {# références ARK}}",
+      "cites": "{count, plural, =0 {aucune référence} one {# référence} other {# références}}",
       "export": "Exporter en Markdown",
       "loadError": "Impossible de charger la note.",
       "retry": "Réessayer"

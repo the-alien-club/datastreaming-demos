@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useTranslations } from "next-intl"
-import { formatRelativeFr } from "@/lib/format"
+import { formatRelative } from "@/lib/format"
 import type { AppSession } from "@/models/sessions/schema"
 
 interface CardSessionListItemProps {
@@ -25,7 +25,7 @@ export function CardSessionListItem({
   const [renameValue, setRenameValue] = useState(session.title)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const relativeTime = formatRelativeFr(session.updatedAt)
+  const relativeTime = formatRelative(session.updatedAt)
 
   const handleRenameSubmit = () => {
     const trimmed = renameValue.trim()

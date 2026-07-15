@@ -64,7 +64,7 @@ export function CardCorpusFacetBars({
                 {getLabel(code)}
               </span>
               <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                {count.toLocaleString("fr-FR")}
+                {count.toLocaleString("en-US")}
               </span>
             </div>
             <span className="block h-1.5 overflow-hidden rounded-full bg-muted">

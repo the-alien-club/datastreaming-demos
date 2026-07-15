@@ -177,7 +177,7 @@
     "summary": {
       "total": "{count, plural, =0 {No documents} one {# document} other {# documents}}",
       "documents": "Documents",
-      "arkNotices": "ARK records",
+      "arkNotices": "records",
       "period": "Period",
       "undatedSub": "{count} undated",
       "datedSub": "dated",
@@ -225,7 +225,7 @@
       "pending": "Resolving",
       "pendingAriaLabel": "{count} documents resolving",
       "failed": "Failed",
-      "searchPlaceholder": "Search by title, author, ARK…",
+      "searchPlaceholder": "Search by title, author, DOI…",
       "hint": "— click a category or period to filter",
       "activeBadge": "{count} active",
       "facetTypeTitle": "By document type",
@@ -250,7 +250,9 @@
         "nonNumerise": "Not digitized",
         "nonNumeriseSub": "not ingested"
       },
-      "facetOaTitle": "Open access"
+      "facetOaTitle": "Open access",
+      "citationNetwork": "Citation network",
+      "citationNetworkHint": "top citations"
     },
     "documents": {
       "empty": "No documents. Ask the agent to build a corpus.",
@@ -269,7 +271,7 @@
       "resolveFailed": "Resolution failed",
       "filtering": "Updating…",
       "detail": {
-        "eyebrow": "Notice · OpenAIRE",
+        "eyebrow": "Record · OpenAIRE",
         "close": "Close",
         "excerptOcr": "OCR excerpt",
         "arkIdentifier": "ARK identifier",
@@ -510,7 +512,7 @@
     "help": "How does this work?",
     "chat": {
       "subtitle": "Corpus research agent",
-      "intro": "Ask questions about the ingested corpus: the agent searches the indexed passages and cites its sources (ARK + folio).",
+      "intro": "Ask questions about the ingested corpus: the agent searches the indexed passages and cites its sources (DOI + page).",
       "placeholder": "Query the corpus…"
     },
     "intro": {
@@ -524,7 +526,7 @@
         },
         "cite": {
           "title": "Open the sources",
-          "text": "Each citation points to the exact ARK and folio: click to open the document on OpenAIRE (IIIF, OpenAIRE)."
+          "text": "Each citation points to a record and passage: click to open it via its DOI or the OpenAIRE record."
         },
         "carnet": {
           "title": "Build your journal",
@@ -568,7 +570,7 @@
       "noNotes": "No notes yet.",
       "closeTab": "Close",
       "artefactHeader": "Research artifact · written by the agent",
-      "cites": "{count, plural, =0 {no references} one {# ARK reference} other {# ARK references}}",
+      "cites": "{count, plural, =0 {no references} one {# reference} other {# references}}",
       "export": "Export as Markdown",
       "loadError": "Could not load the note.",
       "retry": "Retry"

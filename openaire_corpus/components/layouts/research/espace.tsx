@@ -25,7 +25,7 @@ import {
   downloadMarkdown,
   filenameFromTitle,
 } from "@/lib/notes/export"
-import { formatRelativeFr } from "@/lib/format"
+import { formatRelative } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { NoteListItem } from "@/models/notes/schema"
 import type { ParsedCitation } from "@/lib/citations/syntax"
@@ -381,7 +381,7 @@ function NoteReader({
         </div>
         <h1 className="mb-1 mt-2.5 text-[25px] font-semibold tracking-tight">{note.title}</h1>
         <div className="mb-5 font-mono text-[11.5px] text-muted-foreground">
-          {formatRelativeFr(note.updatedAt)}
+          {formatRelative(note.updatedAt)}
         </div>
         <NoteBody
           body={note.body_md ?? ""}
@@ -532,7 +532,7 @@ function CarnetSection({
       <div className="mb-1 flex items-baseline gap-2.5">
         <span className="font-mono text-xs text-neutral-600">{String(index + 1).padStart(2, "0")}</span>
         <span className="font-mono text-[11px] text-muted-foreground">
-          {note ? formatRelativeFr(note.updatedAt) : ""}
+          {note ? formatRelative(note.updatedAt) : ""}
         </span>
       </div>
       <h2 className="mb-3 text-xl font-semibold">{note?.title ?? fallbackTitle}</h2>

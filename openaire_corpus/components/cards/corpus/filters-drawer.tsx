@@ -23,6 +23,7 @@ import { CardCorpusFacetBars } from "./facet-bars"
 import { CardCorpusPeriodHistogram } from "./period-histogram"
 import { CardCorpusFullTextInput } from "./full-text-input"
 import { CardCorpusActiveFiltersBar } from "./active-filters-bar"
+import { CardCorpusCitationNetwork } from "./citation-network"
 
 // One bordered facet card in the 3-column statistics grid.
 function FacetCard({
@@ -128,7 +129,7 @@ function FacetStatusRow({
       />
       <span className="flex-1 truncate text-xs text-muted-foreground">{label}</span>
       <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-        {count.toLocaleString("fr-FR")}
+        {count.toLocaleString("en-US")}
       </span>
     </div>
   )
@@ -305,7 +306,22 @@ export function CardCorpusFiltersDrawer({
             sessionTitleById={sessionTitleById}
           />
 
-          {/* Facet cards: type / lang / source side-by-side */}
+          {/* Citation-network hero — most-cited records as nodes. */}
+          {corpus.sample.some((d) => (d.citationCount ?? 0) > 0) && (
+            <div className="rounded-md border bg-background p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-foreground">
+                  {t("citationNetwork")}
+                </span>
+                <span className="font-mono text-[10.5px] text-muted-foreground">
+                  {t("citationNetworkHint")}
+                </span>
+              </div>
+              <CardCorpusCitationNetwork sample={corpus.sample} />
+            </div>
+          )}
+
+          {/* Facet cards: type / lang / open access side-by-side */}
           <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
             {(Object.keys(facets.type).length > 0 ||
               pendingCount > 0 ||

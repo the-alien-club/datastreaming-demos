@@ -39,7 +39,7 @@ export function CardProjectTile({ project }: CardProjectTileProps) {
         <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
           <Database className="size-3.5" strokeWidth={1.8} />
           <span className="font-mono font-medium text-foreground">
-            {project.corpusSize.toLocaleString("fr-FR")}
+            {project.corpusSize.toLocaleString("en-US")}
           </span>
           {t("tile.documents")}
         </span>

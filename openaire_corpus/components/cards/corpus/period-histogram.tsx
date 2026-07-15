@@ -76,7 +76,7 @@ export function CardCorpusPeriodHistogram({
                 className="group flex flex-1 flex-col items-center justify-end gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-                  {count.toLocaleString("fr-FR")}
+                  {count.toLocaleString("en-US")}
                 </span>
                 <span
                   className={cn(

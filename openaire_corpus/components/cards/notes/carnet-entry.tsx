@@ -22,7 +22,7 @@ export function CarnetEntry({
   knownNoteIds,
 }: CarnetEntryProps) {
   const date = new Date(note.createdAt)
-  const dateStr = date.toLocaleDateString("fr-FR", {
+  const dateStr = date.toLocaleDateString("en-US", {
     day: "2-digit",
     month: "long",
     year: "numeric",

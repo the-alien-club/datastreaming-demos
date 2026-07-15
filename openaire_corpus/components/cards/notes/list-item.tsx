@@ -7,7 +7,7 @@
 
 import { FileText } from "lucide-react"
 import { useTranslations } from "next-intl"
-import { formatRelativeFr } from "@/lib/format"
+import { formatRelative } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { NoteListItem } from "@/models/notes/schema"
 
@@ -43,7 +43,7 @@ export function CardNoteListItem({ note, isActive, onClick }: CardNoteListItemPr
         <span className="block truncate font-mono text-[9.5px] text-muted-foreground">
           {t("meta", {
             count: note.citationCount,
-            time: formatRelativeFr(note.updatedAt),
+            time: formatRelative(note.updatedAt),
           })}
         </span>
       </span>
