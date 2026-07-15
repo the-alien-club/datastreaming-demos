@@ -1,0 +1,98 @@
+// models/ingest/types.ts
+// Zod input schemas and derived TypeScript types for the ingest model.
+// No `import "server-only"` — the schema is shared by client-side form
+// validation and server-side request parsing.
+import { z } from "zod"
+import type { ClusterQueueProgress } from "@/lib/cluster/contracts"
+import type { IngestJob, IngestStage, IngestStatus } from "./schema"
+
+/**
+ * Client-safe shape of an IngestJob — the only ingest-job type that may cross
+ * the server→client boundary (server-component props or API JSON).
+ *
+ * Two reasons the raw Prisma row can't cross as-is:
+ *   1. `progress` is a Prisma `Decimal`, which React Server Components refuse
+ *      to serialize ("Only plain objects can be passed to Client Components").
+ *      We coerce it to a plain `number | null`.
+ *   2. `callbackSecret` is the per-job HMAC secret the cluster uses to sign
+ *      progress webhooks. It must NEVER reach the browser — it is dropped here.
+ */
+export type IngestJobView = Omit<IngestJob, "progress" | "callbackSecret"> & {
+  progress: number | null
+  // Base/target version seqs for the history "v{base} → v{target}" label. Only
+  // populated where the loader joined the versions (the Ingest history); the
+  // single-job API serializers leave them undefined.
+  baseVersionSeq?: number | null
+  targetVersionSeq?: number
+}
+
+/**
+ * The single-job poll response: the client-safe job view PLUS the worker's live
+ * queue-status read-model (`queue`), or null when there is nothing live to show
+ * (terminal job, no clusterJobId, fake mode, or the worker is unreachable). The
+ * Ingérer page renders the queue-status card from `queue` while the job runs, and
+ * reads `status` for the terminal transition. Returned by GET /api/ingest/[job_id].
+ */
+export type IngestJobStatusView = IngestJobView & {
+  queue: ClusterQueueProgress | null
+}
+
+/**
+ * Convert a Prisma `IngestJob` row into its client-safe {@link IngestJobView}.
+ * Call this at every boundary that hands a job to the client (page props, API
+ * responses). Strips `callbackSecret` and flattens the `Decimal` progress.
+ */
+export function serializeIngestJob(job: IngestJob): IngestJobView {
+  // Destructure the secret out so it cannot leak; the Decimal `progress` is
+  // rebuilt below as a plain number (RSC can't serialize Prisma Decimal).
+  const { callbackSecret: _callbackSecret, progress, ...rest } = job
+  return {
+    ...rest,
+    progress: progress === null ? null : Number(progress),
+  }
+}
+
+/**
+ * Body accepted by POST /api/projects/[id]/ingest.
+ * `targetVersionSeq` is optional — omit to target the current head.
+ */
+export const ingestSubmitSchema = z.object({
+  targetVersionSeq: z.number().int().positive().optional(),
+})
+export type IngestSubmitInput = z.infer<typeof ingestSubmitSchema>
+
+/**
+ * Result of {@link IngestService.submit}. A job was created (or an in-flight one
+ * reused). There is no confirmation gate — every resolved corpus document is
+ * ingestable (abstract at minimum; open-access full text where licensing permits).
+ */
+export type IngestSubmitOutcome = { kind: "job"; job: IngestJob }
+
+/**
+ * Poll response returned by GET /api/ingest/[job_id].
+ * The `stages` array always has three entries in fixed order so the UI renders
+ * all rows even when some are still pending.
+ */
+export type IngestStatusResponse = {
+  status: IngestStatus
+  stage: IngestStage | null
+  progress: number
+  addedCount: number
+  removedCount: number
+  chunksWritten: number
+  etaSeconds: number | null
+  stages: {
+    key: IngestStage
+    status: "pending" | "running" | "done" | "failed"
+    fraction: number
+  }[]
+  error: string | null
+}
+
+/**
+ * Results object passed to IngestService.commit() when the cluster signals done.
+ */
+export type IngestResults = {
+  chunksWritten: number
+  stats: Record<string, unknown>
+}

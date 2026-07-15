@@ -1,0 +1,727 @@
+{
+  "admin": {
+    "usage": {
+      "eyebrow": "Administration",
+      "title": "Utilisation",
+      "lastWeek": "7 derniers jours",
+      "exportCsv": "Exporter en CSV",
+      "stat": {
+        "tokensIn": "Jetons entrants",
+        "tokensOut": "Jetons sortants",
+        "messages": "Messages",
+        "toolCalls": "Appels d'outils"
+      },
+      "projects": "Projets",
+      "name": "Projet",
+      "owner": "Propriétaire",
+      "tokensIn": "Entrants",
+      "tokensOut": "Sortants",
+      "messageCount": "Messages",
+      "tools": "Outils",
+      "toolName": "Outil",
+      "count": "Nombre",
+      "empty": "Aucune donnée pour cette période."
+    }
+  },
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "loading": "Chargement…",
+    "error": "Une erreur est survenue",
+    "tryAgain": "Réessayer",
+    "empty": "Vide",
+    "signIn": "Se connecter",
+    "signUp": "Créer un compte",
+    "signOut": "Se déconnecter",
+    "welcome": "Bienvenue, {name}",
+    "gotIt": "J'ai compris"
+  },
+  "nav": {
+    "constituer": "Constituer",
+    "ingerer": "Ingérer",
+    "rechercher": "Rechercher",
+    "carnet": "Carnet",
+    "workspace": "Espace de travail BnF",
+    "newProject": "Nouveau projet",
+    "switchProject": "Changer de projet",
+    "userMenu": "Menu utilisateur",
+    "language": "Langue"
+  },
+  "health": {
+    "aria": "État des services",
+    "app": "App",
+    "alien": "Alien",
+    "bnf": "BnF",
+    "status": {
+      "green": "opérationnel",
+      "orange": "dégradé",
+      "red": "indisponible"
+    },
+    "tooltip": "{lane} · {status} — {ok} appels réussis, {errors} échecs (5 dernières min)",
+    "tooltipIdle": "{lane} · aucune activité récente",
+    "tooltipUnreachable": "{lane} · indisponible — serveur MCP injoignable"
+  },
+  "askUser": {
+    "pending": "En attente",
+    "preparing": "Préparation…",
+    "answered": "Répondu",
+    "superseded": "Remplacée",
+    "validate": "Valider",
+    "free": "Répondre librement",
+    "freeHint": "Répondez à l'agent dans la zone de message ci-dessous.",
+    "supersededHint": "Une question plus récente a été posée — répondez à celle-ci.",
+    "progress": "{count}/{total} répondu",
+    "answersHeading": "Voici mes réponses :",
+    "questionTab": "Question {index}",
+    "multiHint": "Plusieurs réponses possibles",
+    "cancelHint": "Échap pour répondre librement",
+    "other": "Autre",
+    "otherPlaceholder": "Saisissez votre réponse…"
+  },
+  "auth": {
+    "brand": {
+      "eyebrow": "Alien Intelligence × BnF",
+      "title": "Votre corpus. Vos sources. Votre recherche.",
+      "tagline": "Constituez, ingérez et interrogez les fonds de la Bibliothèque nationale de France, avec un agent qui cite chaque source.",
+      "footer": "Espace de recherche sur corpus"
+    },
+    "signIn": {
+      "title": "Connexion",
+      "emailLabel": "Adresse e-mail",
+      "passwordLabel": "Mot de passe",
+      "submit": "Se connecter",
+      "noAccount": "Pas encore de compte ?",
+      "errorGeneric": "Identifiants invalides",
+      "errorInvalidCredentials": "Identifiants invalides",
+      "forgotPassword": "Mot de passe oublié ?",
+      "submitting": "Connexion en cours…",
+      "ssoButton": "Se connecter avec Alien",
+      "or": "ou"
+    },
+    "signUp": {
+      "title": "Créer un compte",
+      "nameLabel": "Nom",
+      "emailLabel": "Adresse e-mail",
+      "passwordLabel": "Mot de passe",
+      "submit": "Créer le compte",
+      "hasAccount": "Déjà un compte ?",
+      "errorEmailTaken": "Cet e-mail est déjà utilisé",
+      "submitting": "Création du compte…"
+    },
+    "forgotPassword": {
+      "title": "Mot de passe oublié",
+      "body": "Pas encore disponible — contactez votre administrateur."
+    }
+  },
+  "projects": {
+    "eyebrow": "Espace de travail BnF",
+    "title": "Projets",
+    "subtitle": "Vos espaces de recherche",
+    "new": "Nouveau projet",
+    "empty": "Aucun projet pour l'instant.",
+    "emptyHint": "Créez un projet pour commencer à constituer un corpus.",
+    "loadError": "Impossible de charger les projets.",
+    "list": {
+      "openCorpus": "Ouvrir le corpus",
+      "openIngest": "Ingestion",
+      "openResearch": "Recherche"
+    },
+    "tile": {
+      "documents": "documents",
+      "ingested": "Ingéré",
+      "notIngested": "Non ingéré"
+    },
+    "form": {
+      "title": "Nouveau projet",
+      "description": "Donnez un nom à votre espace de recherche.",
+      "name": "Nom du projet",
+      "namePlaceholder": "Exposition Universelle 1889",
+      "subtitle": "Sous-titre (facultatif)",
+      "subtitlePlaceholder": "Presse et controverses",
+      "submit": "Créer le projet",
+      "created": "Projet « {name} » créé"
+    }
+  },
+  "corpus": {
+    "panelTitle": "Votre corpus",
+    "help": "Comment ça marche ?",
+    "export": {
+      "label": "Exporter (CSV)",
+      "pending": "Export…",
+      "hint": "Exporter le corpus affiché au format CSV"
+    },
+    "intro": {
+      "tag": "Étape 1 · Constituer",
+      "title": "Constituez votre corpus",
+      "lead": "Dialoguez avec l'agent pour rassembler des documents de la BnF, puis explorez la composition de votre corpus à droite.",
+      "points": {
+        "chat": {
+          "title": "Dialoguez avec l'agent",
+          "text": "Décrivez le sujet, la période ou les sources souhaitées : l'agent cherche dans les fonds de la BnF et ajoute les documents au corpus."
+        },
+        "panel": {
+          "title": "Comprenez votre corpus",
+          "text": "Le panneau de droite affiche le nombre de documents, leur composition par type, langue et période, et la liste complète."
+        },
+        "ingest": {
+          "title": "Ingérez le corpus",
+          "text": "Quand le corpus vous convient, passez à l'étape « Ingérer » pour l'indexer et lancer la recherche."
+        }
+      }
+    },
+    "summary": {
+      "total": "{count, plural, =0 {Aucun document} one {# document} other {# documents}}",
+      "documents": "Documents",
+      "arkNotices": "notices ARK",
+      "period": "Période",
+      "undatedSub": "{count} non datés",
+      "datedSub": "datés",
+      "types": "Types",
+      "categories": "catégories",
+      "languages": "Langues",
+      "sources": "Sources",
+      "empty": "Aucun document dans le corpus",
+      "pendingSub": "{count} en cours de résolution"
+    },
+    "filters": {
+      "title": "Filtres et statistiques",
+      "byType": "Par type",
+      "byLang": "Par langue",
+      "bySource": "Par source",
+      "byPeriod": "Par période",
+      "expand": "Afficher les filtres",
+      "collapse": "Masquer les filtres",
+      "empty": "Aucune facette à afficher",
+      "active": {
+        "title": "Filtres actifs",
+        "clearAll": "Effacer tous les filtres"
+      },
+      "histogram": {
+        "title": "Distribution chronologique",
+        "undatedTile": "Période non datée ({count})"
+      },
+      "fulltext": {
+        "placeholder": "Rechercher dans le titre, auteur, extrait…",
+        "helper": "Recherche plein-texte sur titre, auteur et extrait OCR"
+      },
+      "decadeLabel": "Décennie {decade}, {count} documents",
+      "histogramAriaLabel": "Distribution chronologique du corpus",
+      "barAriaLabel": "Décennie {decade}, {count} documents",
+      "undatedAriaLabel": "{count} documents non datés",
+      "undated": "Non daté",
+      "pending": "En cours",
+      "pendingAriaLabel": "{count} documents en cours de résolution",
+      "failed": "Échec",
+      "searchPlaceholder": "Rechercher dans le titre, l'auteur, l'ARK…",
+      "hint": "— cliquez une catégorie ou une période pour filtrer",
+      "activeBadge": "{count} actif",
+      "facetTypeTitle": "Par type de document",
+      "facetLangTitle": "Par langue",
+      "facetSourceTitle": "Par source",
+      "facetSessionTitle": "Par session",
+      "chrono": {
+        "title": "Répartition chronologique",
+        "hint": "cliquer pour filtrer par période"
+      },
+      "numerisation": {
+        "title": "Numérisation & océrisation",
+        "hint": "éligibilité à l'ingestion",
+        "digitized": "Numérisés",
+        "ingestable": "Ingérables",
+        "ocr": "Avec couche OCR",
+        "ocrSub": "ingéré en texte",
+        "vision": "Images → analyse visuelle",
+        "visionSub": "décrites par Gemma",
+        "sansTexte": "Sans texte exploitable",
+        "sansTexteSub": "non ingéré",
+        "nonNumerise": "Non numérisés",
+        "nonNumeriseSub": "non ingéré"
+      }
+    },
+    "documents": {
+      "empty": "Aucun document. Demandez à l'agent de constituer un corpus.",
+      "askAgentHint": "Démarrez une conversation à gauche pour commencer.",
+      "openOnBnf": "Voir sur la BnF",
+      "excerptLabel": "Extrait",
+      "arkLabel": "ARK",
+      "authorLabel": "Auteur",
+      "yearLabel": "Année",
+      "pagesLabel": "Pages",
+      "iiifLabel": "Manifest IIIF",
+      "noResults": "Aucun résultat pour ces filtres.",
+      "clearFilters": "Effacer les filtres",
+      "loadMore": "Charger plus",
+      "resolving": "Métadonnées en cours…",
+      "resolveFailed": "Échec de résolution",
+      "filtering": "Mise à jour…",
+      "detail": {
+        "eyebrow": "Notice · BnF",
+        "close": "Fermer",
+        "excerptOcr": "Extrait océrisé",
+        "arkIdentifier": "Identifiant ARK",
+        "consultBnf": "Consulter sur la BnF",
+        "iiifViewer": "Visionneuse IIIF",
+        "iiifViewerSub": "Ouvrir dans le viewer BnF",
+        "gallicaNotice": "Notice Gallica",
+        "gallicaNoticeSub": "Fiche document et fac-similé",
+        "iiifManifest": "Manifeste IIIF",
+        "iiifManifestSub": "manifest.json",
+        "oai": "Notice OAI",
+        "oaiSub": "Dublin Core (oai_dc)",
+        "catalogueRecord": "Notice du catalogue BnF",
+        "catalogueRecordSub": "catalogue.bnf.fr",
+        "remove": "Retirer du corpus",
+        "removing": "Retrait…",
+        "resolvingMeta": "Extraction des métadonnées en cours…",
+        "metaFailed": "L'extraction des métadonnées a échoué.",
+        "retry": "Réessayer",
+        "promoteHint": "La conversion vers le document numérisé Gallica a échoué (API BnF momentanément indisponible). Vous pouvez réessayer.",
+        "promote": "Promouvoir vers le document numérisé",
+        "notOnGallica": "Ce document n'est pas numérisé sur Gallica — notice catalographique uniquement.",
+        "fields": {
+          "type": "Type",
+          "date": "Date",
+          "pages": "Pages",
+          "lang": "Langue",
+          "deposit": "Dépôt",
+          "digitization": "Numérisation",
+          "ocr": "Océrisation",
+          "ingestion": "Ingestion"
+        },
+        "values": {
+          "digitized": "Numérisé",
+          "notDigitized": "Non numérisé",
+          "ocrAvailable": "OCR disponible",
+          "noOcrImage": "Sans OCR (image)",
+          "noOcr": "Sans OCR",
+          "ingestOcr": "OCR · ingéré en texte",
+          "ingestVision": "Image · analyse visuelle (Gemma)",
+          "ingestSansTexte": "Sans texte · non ingéré",
+          "ingestNonNumerise": "Non ingéré",
+          "unknown": "—"
+        }
+      }
+    },
+    "docTypes": {
+      "book": "Livre",
+      "press": "Presse",
+      "image": "Image",
+      "map": "Carte",
+      "manuscript": "Manuscrit",
+      "score": "Partition",
+      "video": "Vidéo",
+      "audio": "Son",
+      "poster": "Affiche",
+      "other": "Autre",
+      "estampe": "Estampe",
+      "enlum": "Enluminure",
+      "charte": "Charte"
+    },
+    "langs": {
+      "fr": "Français",
+      "en": "Anglais",
+      "la": "Latin",
+      "de": "Allemand",
+      "it": "Italien",
+      "es": "Espagnol",
+      "pt": "Portugais",
+      "nl": "Néerlandais",
+      "grc": "Grec ancien",
+      "el": "Grec moderne",
+      "ru": "Russe",
+      "ja": "Japonais",
+      "zh": "Chinois",
+      "ar": "Arabe",
+      "he": "Hébreu"
+    },
+    "sources": {
+      "gallica": "Gallica",
+      "catalogue": "Catalogue BnF",
+      "databnf": "data.bnf.fr",
+      "other": "Autre"
+    },
+    "chat": {
+      "headerTitle": "Conversation",
+      "headerSubtitle": "Agent de constitution du corpus",
+      "systemPromptIntro": "Bonjour, je vous aide à constituer votre corpus à partir des fonds de la BnF. Décrivez le sujet, la période ou les sources qui vous intéressent.",
+      "placeholder": "Affiner le corpus…",
+      "send": "Envoyer",
+      "stop": "Arrêter",
+      "connected": "connecté",
+      "reconnecting": "Reconnexion…",
+      "thinking": "Recherche en cours…",
+      "thinkingActive": "Réflexion en cours",
+      "thinkingDone": "Réflexion",
+      "thinkingSeconds": "{count} s"
+    },
+    "events": {
+      "added": "+{count} documents · v{versionSeq}",
+      "removed": "−{count} documents · v{versionSeq}",
+      "memoryWrite": "Mémoire mise à jour · {section}",
+      "ingestSubmitted": "Ingestion soumise · {status}",
+      "openIngest": "Ouvrir Ingérer"
+    }
+  },
+  "memory": {
+    "box": {
+      "count": "{count, plural, =0 {Aucun élément retenu} one {# élément retenu} other {# éléments retenus}}"
+    },
+    "dialog": {
+      "title": "Mémoire du projet",
+      "persistent": "persistante",
+      "description": "Ce que l'agent retient de ce projet, conservé d'une session à l'autre et relu au début de chaque conversation.",
+      "footnote": "Mise à jour automatique par l'agent · mémoire persistante",
+      "empty": "Aucun élément",
+      "scopeCorpus": "Mémoire du corpus",
+      "scopeResearch": "Mémoire de recherche",
+      "delete": "Supprimer",
+      "deleting": "Suppression…",
+      "deleted": "Élément supprimé"
+    },
+    "origin": {
+      "consigne": "consigne",
+      "deduit": "déduit",
+      "action": "action",
+      "user": "utilisateur"
+    }
+  },
+  "sessions": {
+    "sidebar": {
+      "title": "Sessions",
+      "titleCorpus": "Sessions du corpus",
+      "titleResearch": "Sessions de recherche",
+      "newButton": "Nouvelle session",
+      "empty": "Aucune session"
+    },
+    "list": {
+      "rename": "Renommer",
+      "archive": "Archiver",
+      "archived": "Archivée"
+    }
+  },
+  "tools": {
+    "corpus": {
+      "get_state": "État du corpus",
+      "list": "Liste du corpus",
+      "add": "Ajout au corpus",
+      "remove": "Retrait du corpus",
+      "remove_by_filter": "Retrait par filtre",
+      "stats": "Statistiques",
+      "diff": "Diff de corpus"
+    },
+    "memory": {
+      "read": "Lecture mémoire",
+      "write": "Écriture mémoire"
+    },
+    "rag": {
+      "query": "Recherche sémantique",
+      "keyword_search": "Recherche par mots-clés",
+      "get_text": "Lecture du texte intégral"
+    },
+    "ingest": {
+      "submit": "Soumettre l'ingestion"
+    },
+    "note": {
+      "writing": "Rédaction de la note…",
+      "updating": "Mise à jour de la note…",
+      "appending": "Ajout à la note…",
+      "seconds": "{count} s"
+    },
+    "bnf": {
+      "search_catalogue": "Recherche Catalogue BnF",
+      "search_gallica": "Recherche Gallica",
+      "get_catalogue_record": "Résolution notice BnF",
+      "get_document_info": "Résolution document Gallica",
+      "sparql_query": "Requête SPARQL data.bnf.fr",
+      "find_person": "Recherche d'une personne",
+      "find_work": "Recherche d'une œuvre",
+      "resolve_entity": "Résolution d'entité data.bnf.fr",
+      "get_periodical_issues": "Numéros d'un périodique",
+      "get_document_pages": "Pages du document",
+      "get_document_toc": "Table des matières",
+      "get_page_text": "Texte d'une page",
+      "get_document_text": "Texte du document",
+      "get_manifest": "Manifeste IIIF",
+      "get_image_url": "URL d'image IIIF",
+      "get_image_info": "Dimensions de l'image",
+      "get_page_ocr_boxes": "OCR avec coordonnées"
+    },
+    "parts": {
+      "viaMcp": "via MCP",
+      "running": "En cours",
+      "done": "Terminé",
+      "failed": "Échec",
+      "added": "+{count} documents ajoutés au corpus",
+      "removed": "−{count} documents retirés",
+      "duplicates": "{count} doublons ignorés",
+      "addedUnknown": "Documents ajoutés au corpus",
+      "removedUnknown": "Documents retirés",
+      "adding": "Ajout au corpus…",
+      "removing": "Retrait du corpus…",
+      "removingByFilter": "Analyse du corpus…",
+      "previewMatched": "{count} documents correspondent · aperçu",
+      "emptyFilter": "Filtre vide — aucun retrait",
+      "noMatch": "Aucun document ne correspond"
+    }
+  },
+  "research": {
+    "page": {
+      "title": "Recherche"
+    },
+    "help": "Comment ça marche ?",
+    "chat": {
+      "subtitle": "Agent de recherche sur le corpus",
+      "intro": "Posez vos questions sur le corpus ingéré : l'agent recherche dans les passages indexés et cite ses sources (ARK + folio).",
+      "placeholder": "Interroger le corpus…"
+    },
+    "intro": {
+      "tag": "Étape 3 · Rechercher",
+      "title": "Interrogez votre corpus",
+      "lead": "Dialoguez avec l'agent de recherche, ouvrez les sources citées sur la BnF, et constituez votre carnet de notes.",
+      "points": {
+        "ask": {
+          "title": "Interrogez le corpus",
+          "text": "Posez une question : l'agent recherche dans les passages indexés et répond en citant ses sources."
+        },
+        "cite": {
+          "title": "Ouvrez les sources",
+          "text": "Chaque citation renvoie à l'ARK et au folio exacts : cliquez pour ouvrir le document sur la BnF (IIIF, Gallica)."
+        },
+        "carnet": {
+          "title": "Constituez votre carnet",
+          "text": "L'agent rédige des notes Markdown qui s'accumulent dans le Carnet, exportable d'un bloc."
+        }
+      }
+    },
+    "notIngested": {
+      "title": "Corpus non ingéré",
+      "body": "Le corpus doit être ingéré avant de pouvoir effectuer des recherches. Veuillez lancer l'ingestion.",
+      "openIngest": "Ouvrir l'ingestion"
+    },
+    "espace": {
+      "title": "Espace de recherche",
+      "docs": "{count, number} docs",
+      "disposition": "Disposition",
+      "atelier": "Atelier",
+      "carnet": "Carnet",
+      "emptyReader": "Ouvrez un artefact depuis la liste, ou posez une question pour en générer un.",
+      "openSource": "Assistant de recherche",
+      "openSubtitle": "Interroge le corpus · cite ses sources"
+    },
+    "artefacts": {
+      "title": "Artefacts de recherche",
+      "new": "Nouvelle note",
+      "search": "Rechercher une note…",
+      "empty": "Aucune note pour l'instant.",
+      "noMatch": "Aucun résultat.",
+      "count": "{count, plural, =0 {Aucun artefact} one {# artefact} other {# artefacts}}",
+      "meta": "{count, plural, =0 {aucune réf.} one {# réf.} other {# réf.}} · {time}"
+    },
+    "noteLink": {
+      "open": "Ouvrir la note « {label} »",
+      "missing": "Note introuvable (supprimée ou hors de ce projet)"
+    },
+    "atelier": {
+      "chatTab": "Conversation",
+      "noteTab": "Note",
+      "newNote": "Nouvelle note",
+      "viewInCarnet": "Voir le carnet",
+      "noNotes": "Aucune note pour l'instant.",
+      "closeTab": "Fermer",
+      "artefactHeader": "Artefact de recherche · rédigé par l'agent",
+      "cites": "{count, plural, =0 {aucune référence} one {# référence ARK} other {# références ARK}}",
+      "export": "Exporter en Markdown",
+      "loadError": "Impossible de charger la note.",
+      "retry": "Réessayer"
+    },
+    "carnet": {
+      "title": "Carnet de recherche",
+      "projectEyebrow": "Projet de recherche",
+      "compiledHeader": "Carnet de recherche · {count, plural, =0 {aucune note} one {# note} other {# notes}}",
+      "export": "Exporter en Markdown",
+      "empty": "Aucune note dans ce carnet."
+    },
+    "note": {
+      "titlePlaceholder": "Titre de la note",
+      "bodyPlaceholder": "Rédigez votre note…",
+      "create": "Créer la note"
+    }
+  },
+  "citations": {
+    "panel": {
+      "title": "Source citée",
+      "eyebrow": "Référence · source citée",
+      "folioLabel": "Folio {folio}",
+      "arkLabel": "Identifiant ARK",
+      "consult": "Consulter sur la BnF",
+      "iiifViewer": "Visionneuse IIIF — vue {folio}",
+      "iiifViewerSub": "Ouvrir la page exacte dans le viewer",
+      "gallicaViewer": "Voir sur Gallica",
+      "gallicaViewerSub": "Le document dans la visionneuse Gallica",
+      "usages": "Utilisé dans d'autres notes"
+    }
+  },
+  "notes": {
+    "edit": {
+      "titleLabel": "Titre",
+      "bodyLabel": "Contenu",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…"
+    }
+  },
+  "ingest": {
+    "failures": {
+      "tile": "{count, plural, =0 {Aucun échec} one {# échec} other {# échecs}}"
+    },
+    "summary": {
+      "title": "État d'ingestion",
+      "head": "Version actuelle",
+      "ingested": "Dernière ingestion",
+      "neverIngested": "Jamais ingéré",
+      "delta": "Delta",
+      "added": "{count} à ingérer",
+      "removed": "{count} à retirer",
+      "excluded": "{count, plural, =0 {} one {# document non ingérable exclu} other {# documents non ingérables exclus}}",
+      "paidOcr": "{count, plural, one {# document numérisé sans couche OCR} other {# documents numérisés sans couche OCR}}",
+      "paidOcrCost": "Océrisation à la demande · ≈ {cost} $ pour la plateforme",
+      "paidOcrBudget": "Budget plateforme : {spent} $ / {ceiling} $ utilisés",
+      "paidOcrInclude": "Inclure l'océrisation",
+      "paidOcrIncluded": "Océrisation incluse ✓",
+      "paidOcrOverBudget": "Coût supérieur au budget de la plateforme ({ceiling} $) : océrisation indisponible. Les autres documents seront ingérés normalement.",
+      "submit": "Lancer une ingestion",
+      "submitWithOcr": "Lancer l'ingestion + océrisation",
+      "submitting": "Envoi…"
+    },
+    "paidOcr": {
+      "confirmTitle": "Océrisation à la demande",
+      "confirmBody": "{count, plural, one {# document numérisé sans couche OCR sera transcrit} other {# documents numérisés sans couche OCR seront transcrits}} via Mistral OCR. Ce traitement a un coût pour la plateforme (≈ {cost} $ US) — à utiliser à bon escient. Lancer l'océrisation ?",
+      "confirm": "Confirmer et lancer",
+      "confirming": "Lancement…",
+      "dismiss": "Annuler",
+      "budgetTitle": "Budget OCR dépassé",
+      "budgetBody": "Cette transcription (~{cost} $) dépasserait le budget OCR du projet (déjà dépensé {spent} $ sur un plafond de {ceiling} $).",
+      "close": "Fermer"
+    },
+    "stages": {
+      "extract": "Extraction OCR",
+      "chunk": "Découpage sémantique",
+      "embed": "Embedding",
+      "index": "Indexation"
+    },
+    "stageDesc": {
+      "extract": "Extraction du texte (OCR)",
+      "chunk": "Découpage sémantique des documents",
+      "embed": "Calcul des embeddings",
+      "index": "Indexation dans le cluster RAG"
+    },
+    "pipeline": {
+      "title": "Ingestion en cours",
+      "target": "Cible",
+      "targetValue": "cluster RAG BnF",
+      "overall": "Progression globale",
+      "pending": "En attente",
+      "skipped": "Ignoré",
+      "eta": "Temps restant estimé",
+      "etaComputing": "estimation…",
+      "outcomes": {
+        "ingested": "{count} ingéré·s",
+        "retrying": "{count} en reprise",
+        "skipped": "{count} ignoré·s",
+        "failed": "{count} en échec",
+        "excluded": "{count} non ingérable·s",
+        "removed": "{count} retiré·s"
+      }
+    },
+    "queue": {
+      "title": "Traitement en cours",
+      "finalized": "Documents finalisés",
+      "fetchTitle": "Récupération BnF",
+      "foliosFetched": "{done} / {total} folios récupérés",
+      "etaLabel": "Temps restant",
+      "etaComputing": "estimation…",
+      "groups": {
+        "metadata": "Métadonnées",
+        "images": "Descriptions d'images",
+        "prep": "Préparation IA",
+        "ocr": "OCR Mistral",
+        "index": "Indexation"
+      },
+      "inProgress": "{count} en cours",
+      "waiting": "{count} en file",
+      "ahead": "{count} devant vous (autre traitement)",
+      "idle": "—",
+      "totals": {
+        "done": "{count} terminés",
+        "running": "{count} en cours",
+        "queued": "{count} en file",
+        "failed": "{count} échoués",
+        "skipped": "{count} ignorés"
+      },
+      "reconcileWarning": "totaux incohérents",
+      "noLiveState": "Traitement en cours côté serveur…"
+    },
+    "status": {
+      "queued": "En attente",
+      "running": "En cours",
+      "done": "Terminé",
+      "partial": "Partiel",
+      "failed": "Échec",
+      "canceled": "Annulé"
+    },
+    "history": {
+      "title": "Historique des ingestions",
+      "empty": "Aucune ingestion",
+      "ranFor": "durée {duration}"
+    },
+    "cancel": {
+      "button": "Annuler l'ingestion",
+      "canceling": "Annulation…",
+      "confirmTitle": "Annuler l'ingestion ?",
+      "confirmBody": "Le traitement sera arrêté côté cluster…",
+      "confirm": "Confirmer",
+      "dismiss": "Garder en cours"
+    },
+    "comeBackLater": {
+      "title": "Traitement en cours",
+      "body": "Le traitement continue côté serveur. Vous pouvez fermer la page et revenir plus tard."
+    },
+    "completion": {
+      "title": "Corpus ingéré",
+      "body": "Votre corpus est indexé et prêt à être interrogé. Lancez la recherche pour poser vos questions.",
+      "cta": "Passer à la recherche"
+    },
+    "retry": {
+      "title": "Ingestion incomplète",
+      "body": "Certains documents n'ont pas pu être ingérés. Vous pouvez relancer uniquement les documents en échec.",
+      "button": "Réessayer les documents échoués"
+    }
+  },
+  "models": {
+    "label": "Modèle",
+    "claudeSonnet46": "Claude Sonnet 4.6",
+    "glm52": "GLM 5.2",
+    "gemini35Flash": "Gemini 3.5 Flash",
+    "mistralMedium35": "Mistral Medium 3.5",
+    "qwen37Max": "Qwen3.7 Max",
+    "deepseekV4Pro": "DeepSeek V4 Pro"
+  },
+  "feedback": {
+    "button": "Avis",
+    "dialogTitle": "Votre avis",
+    "editTitle": "Modifier votre avis",
+    "ratingLabel": "Qualité",
+    "rating": {
+      "bad": "Décevant",
+      "ok": "Correct",
+      "great": "Excellent"
+    },
+    "commentLabel": "Commentaire (facultatif)",
+    "commentPlaceholder": "Qu'est-ce qui a bien marché, ou pas ?",
+    "submit": "Envoyer",
+    "submitting": "Envoi…",
+    "success": "Merci pour votre retour",
+    "error": "Échec de l'envoi de l'avis",
+    "cancel": "Annuler"
+  }
+}

@@ -1,0 +1,64 @@
+// app/[locale]/projects/[projectId]/ingerer/page.tsx
+// Server component. Authenticates, resolves the project, fetches the head
+// corpus snapshot, the last ingested version seq, any active ingest job, and
+// recent job history. Passes everything to IngestClient as initial* props.
+// No interactivity — see client.tsx.
+
+import { notFound } from "next/navigation"
+import { requireSessionUser } from "@/lib/auth-helpers"
+import { ProjectQueries } from "@/models/projects/queries"
+import { CorpusQueries } from "@/models/corpus/queries"
+import { IngestQueries } from "@/models/ingest/queries"
+import { IngestService } from "@/models/ingest/service"
+import { serializeIngestJob } from "@/models/ingest/types"
+import { prisma } from "@/lib/db"
+import { IngestClient } from "./client"
+
+type RouteParams = { locale: string; projectId: string }
+
+export default async function IngererPage({
+  params,
+}: {
+  params: Promise<RouteParams>
+}) {
+  const { projectId } = await params
+
+  const user = await requireSessionUser(`/projects/${projectId}/ingerer`)
+
+  const project = await ProjectQueries.get(projectId)
+  if (!project) notFound()
+  if (project.ownerId !== user.id && !project.isPublic) notFound()
+
+  const [head, ingested, deltaPreview, activeJob, recentJobs] =
+    await Promise.all([
+      CorpusQueries.snapshot(projectId, "head"),
+      project.ingestedVersionId
+        ? prisma.corpusVersion.findUnique({
+            where: { id: project.ingestedVersionId },
+            select: { seq: true },
+          })
+        : Promise.resolve(null),
+      IngestService.previewDelta(project),
+      IngestQueries.activeForProject(projectId),
+      IngestQueries.listForProject(projectId, 20),
+    ])
+
+  return (
+    <IngestClient
+      projectId={projectId}
+      initialUser={{ name: user.name ?? undefined, email: user.email }}
+      headVersionSeq={head.versionSeq}
+      ingestedVersionSeq={ingested?.seq ?? null}
+      deltaPreview={{
+        added: deltaPreview.added,
+        removed: deltaPreview.removed,
+      }}
+      activeJobId={activeJob?.id ?? null}
+      initialRecentJobs={recentJobs.map(({ targetVersion, baseVersion, ...job }) => ({
+        ...serializeIngestJob(job),
+        targetVersionSeq: targetVersion.seq,
+        baseVersionSeq: baseVersion?.seq ?? null,
+      }))}
+    />
+  )
+}
