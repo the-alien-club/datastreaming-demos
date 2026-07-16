@@ -14,6 +14,7 @@ import { Pipeline, type RunnableStage } from "./core/pipeline.js";
 import type { BlobStore, Logger, QueueClient, RateGate } from "./core/types.js";
 import type { StageDeps } from "./core/stage.js";
 import type { OpenAireClient } from "./openaire/client.js";
+import type { ScholexClient } from "./openaire/scholex.js";
 import type { DocStateStore } from "./domain/doc-state.js";
 import type { ClusterSink, Embedder, PdfFetcher, PdfTextExtractor } from "./ports.js";
 
@@ -29,6 +30,9 @@ export interface PipelineDeps {
   blob: BlobStore;
   log: Logger;
   openaire: OpenAireClient;
+  /** Optional ScholeXplorer client — enriches resolved docs with citation-link
+   *  counts. Omit to skip enrichment (counts stay null). */
+  scholex?: ScholexClient;
   docState: DocStateStore;
   embedder: Embedder;
   cluster: ClusterSink;
@@ -61,10 +65,17 @@ export function buildPipeline(deps: PipelineDeps): Pipeline {
   const rates = deps.rates ?? {};
 
   const stages: RunnableStage[] = [
-    new ResolveStage(base, deps.openaire, deps.docState, rates.resolve, {
-      ...(cfg.fulltextEnabled !== undefined ? { fulltextEnabled: cfg.fulltextEnabled } : {}),
-      ...(cfg.resolveConcurrency !== undefined ? { concurrency: cfg.resolveConcurrency } : {}),
-    }),
+    new ResolveStage(
+      base,
+      deps.openaire,
+      deps.docState,
+      rates.resolve,
+      {
+        ...(cfg.fulltextEnabled !== undefined ? { fulltextEnabled: cfg.fulltextEnabled } : {}),
+        ...(cfg.resolveConcurrency !== undefined ? { concurrency: cfg.resolveConcurrency } : {}),
+      },
+      deps.scholex,
+    ),
     new PrepareStage(base, deps.docState),
     new EmbedStage(base, deps.embedder, deps.docState, rates.embed, {
       ...(cfg.embedConcurrency !== undefined ? { concurrency: cfg.embedConcurrency } : {}),

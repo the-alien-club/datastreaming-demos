@@ -20,6 +20,7 @@ import type { RateGate, StageContext, StageOutcome } from "../core/types.js";
 import type { OpenAireClient } from "../openaire/client.js";
 import { PermanentOpenAireError } from "../openaire/errors.js";
 import { toMeta } from "../openaire/map.js";
+import { NullScholexClient, type ScholexClient } from "../openaire/scholex.js";
 import { selectPdfCandidates } from "../openaire/select-pdf.js";
 import type { OaProduct } from "../openaire/types.js";
 import type { DocStateStore } from "../domain/doc-state.js";
@@ -55,17 +56,22 @@ export class ResolveStage extends PipelineStage<DocRef, ResolvedDoc> {
 
   private readonly fulltextEnabled: boolean;
 
+  private readonly scholex: ScholexClient;
+
   constructor(
     deps: StageDeps,
     private readonly oa: OpenAireClient,
     private readonly docState: DocStateStore,
     rate: RateGate | undefined,
     opts: ResolveOpts = {},
+    scholex?: ScholexClient,
   ) {
     super(deps);
     this.rate = rate;
     this.fulltextEnabled = opts.fulltextEnabled ?? false;
     this.concurrency = opts.concurrency ?? 6;
+    // Citation-link enrichment is optional; a null client yields null counts.
+    this.scholex = scholex ?? new NullScholexClient();
   }
 
   async process(doc: DocRef, ctx: StageContext): Promise<StageOutcome<ResolvedDoc>> {
@@ -93,6 +99,15 @@ export class ResolveStage extends PipelineStage<DocRef, ResolvedDoc> {
     }
 
     const meta = toMeta(product, doc.doi);
+
+    // Enrich with ScholeXplorer citation-link counts when the product has a DOI.
+    // Best-effort: any failure leaves the counts null and never blocks the doc.
+    if (meta.doi) {
+      const counts = await this.scholex.relationCounts(meta.doi);
+      meta.citedBy = counts.citedBy;
+      meta.references = counts.references;
+    }
+
     const candidates = selectPdfCandidates(product);
     const lane = decideLane(meta, candidates, this.fulltextEnabled);
 

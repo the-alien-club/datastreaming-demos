@@ -20,6 +20,7 @@ import { PgDocState } from "./domain/doc-state-pg.js";
 import { PgRunStore } from "./domain/run-store-pg.js";
 import { HostGate } from "./core/host-gate.js";
 import { LiveOpenAireClient } from "./openaire/client.js";
+import { LiveScholexClient, NullScholexClient } from "./openaire/scholex.js";
 import { LiveEmbedder } from "./live/embedder.js";
 import { LiveClusterSink } from "./live/cluster.js";
 import { LivePdfFetcher } from "./live/pdf-fetcher.js";
@@ -44,6 +45,12 @@ async function main(): Promise<void> {
 
   const resolveRate = new RateLimiter({ ratePerMin: cfg.openaireRpm });
 
+  // ScholeXplorer citation-link enrichment — rate-gated, best-effort. Disabled
+  // via SCHOLEX_ENABLED=false (then counts stay null).
+  const scholex = cfg.scholexEnabled
+    ? new LiveScholexClient({ rate: new RateLimiter({ ratePerMin: cfg.scholexRpm }) })
+    : new NullScholexClient();
+
   // Full-text lane clients — only built when enabled (they own their own net I/O).
   const hostGate = cfg.fulltextEnabled ? new HostGate({ ratePerMin: cfg.pdfHostRpm }) : null;
   const pdfFetcher = hostGate
@@ -65,6 +72,7 @@ async function main(): Promise<void> {
       ...(cfg.openaireApiBase !== undefined ? { baseUrl: cfg.openaireApiBase } : {}),
       ...(cfg.openaireApiToken !== undefined ? { token: cfg.openaireApiToken } : {}),
     }),
+    scholex,
     docState,
     embedder: new LiveEmbedder(),
     cluster: new LiveClusterSink(),

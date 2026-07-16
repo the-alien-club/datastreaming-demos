@@ -31,7 +31,13 @@ export interface OaMeta {
   bestAccessRight: string | null;
   openAccessColor: string | null;
   license?: string | null;
+  /** FOS-cleaned subject labels (see openaire/fos.ts). */
   subjects: string[];
+  /** Raw citation count from the Graph indicators (BipIndicators). Null = unknown. */
+  citationCount?: number | null;
+  /** ScholeXplorer link counts (enrichment; null when unavailable / DOI-less). */
+  citedBy?: number | null;
+  references?: number | null;
 }
 
 /** A candidate full-text PDF url, ranked by select-pdf (B-M2). */

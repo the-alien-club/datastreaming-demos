@@ -35,6 +35,10 @@ export interface WorkerConfig {
   openaireApiToken: string | undefined;
   /** OpenAIRE resolve rate (products/min) — the ungated public-API politeness cap. */
   openaireRpm: number;
+  /** Enrich resolved docs with ScholeXplorer citation-link counts. */
+  scholexEnabled: boolean;
+  /** ScholeXplorer call rate (requests/min) — politeness cap for the /v3/Links API. */
+  scholexRpm: number;
   /** Route OPEN docs with a candidate PDF through the fulltext lane (B-M2). */
   fulltextEnabled: boolean;
   /** Per-host PDF-fetch politeness rate (requests/min/host). */
@@ -74,6 +78,8 @@ export function loadConfig(): WorkerConfig {
     openaireApiBase: process.env.OPENAIRE_API_BASE?.trim() || undefined,
     openaireApiToken: process.env.OPENAIRE_API_TOKEN?.trim() || undefined,
     openaireRpm: optionalInt("OPENAIRE_RPM", 60),
+    scholexEnabled: optionalBool("SCHOLEX_ENABLED", true),
+    scholexRpm: optionalInt("SCHOLEX_RPM", 60),
     fulltextEnabled: optionalBool("FULLTEXT_ENABLED", false),
     pdfHostRpm: optionalInt("PDF_HOST_RPM", 60),
     pdfMaxBytes: optionalInt("PDF_MAX_BYTES", 50 * 1024 * 1024),

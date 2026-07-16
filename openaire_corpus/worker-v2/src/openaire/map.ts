@@ -7,6 +7,7 @@
  * this file only normalises the metadata record every lane carries.
  */
 import type { OaMeta } from "../domain/types.js";
+import { cleanSubjects } from "./fos.js";
 import type { OaProduct } from "./types.js";
 
 /** Extract the DOI from `pids[]` (scheme==="doi"), normalised lower-case, no url. */
@@ -48,12 +49,12 @@ function authorNames(product: OaProduct): string[] {
 }
 
 function subjectValues(product: OaProduct): string[] {
-  const out: string[] = [];
+  const raw: (string | null | undefined)[] = [];
   for (const s of product.subjects ?? []) {
-    const v = s?.subject?.value?.trim();
-    if (v) out.push(v);
+    raw.push(s?.subject?.value);
   }
-  return out;
+  // FOS-clean: "0301 basic medicine" → "basic medicine"; plain keywords pass through.
+  return cleanSubjects(raw);
 }
 
 /** The first non-empty description is the abstract. */
@@ -79,5 +80,9 @@ export function toMeta(product: OaProduct, fallbackDoi: string | null): OaMeta {
     bestAccessRight: product.bestAccessRight?.label?.trim() || null,
     openAccessColor: product.openAccessColor?.trim() || null,
     subjects: subjectValues(product),
+    citationCount:
+      typeof product.indicators?.citationImpact?.citationCount === "number"
+        ? product.indicators.citationImpact.citationCount
+        : null,
   };
 }
