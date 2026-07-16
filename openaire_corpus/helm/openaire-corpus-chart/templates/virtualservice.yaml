@@ -19,15 +19,15 @@
   {{- if not .Values.istio.gateway.create }}
     {{- fail "istio.gateway.create must be true when any host uses gateway: own" }}
   {{- end }}
-  {{- $ownRef = printf "%s/%s-gateway" $ns (include "bnf-demo.fullname" .) }}
+  {{- $ownRef = printf "%s/%s-gateway" $ns (include "openaire-corpus.fullname" .) }}
 {{- end }}
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}-vs
+  name: {{ include "openaire-corpus.fullname" . }}-vs
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
     app.kubernetes.io/component: virtualservice
 spec:
   hosts:
@@ -65,7 +65,7 @@ spec:
       {{- end }}
       route:
         - destination:
-            host: {{ include "bnf-demo.fullname" $ }}.{{ $.Values.namespace }}.svc.cluster.local
+            host: {{ include "openaire-corpus.fullname" $ }}.{{ $.Values.namespace }}.svc.cluster.local
             port:
               number: {{ $.Values.service.port }}
       {{- with $.Values.istio.virtualService.timeout }}

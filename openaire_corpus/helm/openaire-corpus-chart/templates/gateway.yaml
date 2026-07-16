@@ -11,10 +11,10 @@
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}-gateway
+  name: {{ include "openaire-corpus.fullname" . }}-gateway
   namespace: {{ .Values.istio.gatewayNamespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
 spec:
   selector:
@@ -23,7 +23,7 @@ spec:
     # HTTP server for ACME HTTP-01 challenges (no redirect).
     - port:
         number: 80
-        name: http-bnf-demo
+        name: http-openaire-corpus
         protocol: HTTP
       hosts:
         {{- range $ownHosts }}
@@ -35,7 +35,7 @@ spec:
     # HTTPS server with the cert-manager issued certificate (see certificate.yaml).
     - port:
         number: 443
-        name: https-bnf-demo
+        name: https-openaire-corpus
         protocol: HTTPS
       hosts:
         {{- range $ownHosts }}
@@ -43,6 +43,6 @@ spec:
         {{- end }}
       tls:
         mode: SIMPLE
-        credentialName: {{ include "bnf-demo.fullname" . }}-tls
+        credentialName: {{ include "openaire-corpus.fullname" . }}-tls
 {{- end }}
 {{- end }}

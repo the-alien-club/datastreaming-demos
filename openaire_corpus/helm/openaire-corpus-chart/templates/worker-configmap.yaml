@@ -2,100 +2,66 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}-worker-config
+  name: {{ include "openaire-corpus.fullname" . }}-worker-config
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 data:
-  # --- Blob storage ---
-  BLOB_STORE: {{ .Values.worker.config.blobStore | quote }}
+  # --- Worker HTTP API (app → worker job submit) ---
+  WORKER_HTTP_PORT: {{ .Values.worker.service.port | quote }}
+
+  # --- Blob storage (S3) — heavy bytes live off-queue. Keys are secrets. ---
   SCW_S3_BUCKET: {{ .Values.worker.config.s3Bucket | quote }}
   SCW_S3_ENDPOINT_URL: {{ .Values.worker.config.s3Endpoint | quote }}
   SCW_S3_REGION: {{ .Values.worker.config.s3Region | quote }}
+  # Prefix isolating OpenAIRE artifacts in the shared bucket.
+  V2_S3_PREFIX: {{ .Values.worker.config.s3Prefix | quote }}
 
-  # --- Scaleway GenAI / Holo2 (primary vision) ---
-  SCW_GENAI_BASE_URL: {{ .Values.worker.config.genaiBaseUrl | quote }}
-  HOLO_MODEL: {{ .Values.worker.config.holoModel | quote }}
+  # --- OpenAIRE Graph API + ScholeXplorer (public; token optional) ---
+  {{- with .Values.worker.config.openaireApiBase }}
+  OPENAIRE_API_BASE: {{ . | quote }}
+  {{- end }}
+  # Resolve rate (products/min) — the ungated public-API politeness cap.
+  OPENAIRE_RPM: {{ .Values.worker.config.openaireRpm | quote }}
+  # ScholeXplorer citation-link enrichment (cited-by / references counts).
+  SCHOLEX_ENABLED: {{ .Values.worker.config.scholexEnabled | quote }}
+  SCHOLEX_RPM: {{ .Values.worker.config.scholexRpm | quote }}
 
-  # --- Google AI (vision provider) ---
-  GEMINI_VISION_MODEL: {{ .Values.worker.config.geminiVisionModel | quote }}
-  VISION_PRIMARY: {{ .Values.worker.config.visionPrimary | quote }}
-
-  # --- OpenRouter (primary vision provider) ---
-  # The API key is a secret (worker-creds: OPENROUTER_API_KEY).
-  OPENROUTER_VISION_MODEL: {{ .Values.worker.config.openrouterVisionModel | quote }}
-  # Shared in-flight cap on vision API calls across all docs (the describe lane).
-  DESCRIBE_CALL_CONCURRENCY: {{ .Values.worker.config.describeCallConcurrency | quote }}
-  # Doc-level describe concurrency — how many image docs describe at once.
-  DESCRIBE_CONCURRENCY: {{ .Values.worker.config.describeConcurrency | quote }}
-  # Doc-resolution (metadata/OAI) concurrency — fed by the broker's external rate.
-  METADATA_CONCURRENCY: {{ .Values.worker.config.metadataConcurrency | quote }}
-  # Data-cluster register (indexing) concurrency — the cluster autoscales.
-  REGISTER_CONCURRENCY: {{ .Values.worker.config.registerConcurrency | quote }}
-{{- if .Values.worker.config.mistralOcrEnabled }}
-
-  # --- Mistral fallback OCR (`sans_texte` docs) ---
-  # The API key is a secret (worker-creds: MISTRAL_API_KEY).
-  MISTRAL_OCR_ENABLED: {{ .Values.worker.config.mistralOcrEnabled | quote }}
+  # --- Full-text lane ---
+  # true = fetch open-access PDFs and OCR them via Mistral (per-page full text +
+  # inline figure captions + figure image files). false = abstract + metadata only.
+  FULLTEXT_ENABLED: {{ .Values.worker.config.fulltextEnabled | quote }}
+  {{- if .Values.worker.config.fulltextEnabled }}
+  # Mistral OCR — the full-text extractor for OA PDFs. Key is a secret
+  # (worker-creds: MISTRAL_API_KEY).
   MISTRAL_OCR_MODEL: {{ .Values.worker.config.mistralOcrModel | quote }}
-  MISTRAL_OCR_MAX_PAGES: {{ .Values.worker.config.mistralOcrMaxPages | quote }}
-  MISTRAL_OCR_POLL_INTERVAL_MS: {{ .Values.worker.config.mistralOcrPollIntervalMs | quote }}
-  MISTRAL_OCR_BATCH_TIMEOUT_MS: {{ .Values.worker.config.mistralOcrBatchTimeoutMs | quote }}
-{{- end }}
+  # Per-host PDF-fetch politeness rate + size/page ceilings.
+  PDF_HOST_RPM: {{ .Values.worker.config.pdfHostRpm | quote }}
+  PDF_MAX_BYTES: {{ .Values.worker.config.pdfMaxBytes | quote }}
+  PDF_MAX_PAGES: {{ .Values.worker.config.pdfMaxPages | quote }}
+  {{- end }}
 
-  # --- RunPod embedder ---
+  # --- RunPod bge-m3 embedder (key is a secret) ---
   RUNPOD_EMBEDDING_ENDPOINT_ID: {{ .Values.worker.config.runpodEndpointId | quote }}
   RUNPOD_EMBEDDING_MODEL: {{ .Values.worker.config.runpodEmbeddingModel | quote }}
 
-  # --- Data cluster (register) ---
+  # --- Data cluster (register/upsert) — bearer token is a secret. ---
+  # Proxy base = backendApiUrl + /clusters/<id>/proxy. clusterId MUST match the
+  # dataset region the app's DATACLUSTER_MCP_URL points at.
   BACKEND_API_URL: {{ .Values.worker.config.backendApiUrl | quote }}
   CLUSTER_ID: {{ .Values.worker.config.clusterId | quote }}
-{{- if .Values.broker.enabled }}
 
-  # --- BnF broker ---
-  # When set, ALL BnF traffic (OCR/manifest/metadata) goes through the broker —
-  # it owns the OAuth token + shared rate caps. Supersedes the legacy
-  # gallica.bnf.fr relay/direct path. Unset → worker falls back to that path.
-  BNF_BROKER_URL: {{ include "bnf-demo.brokerInternalUrl" . | quote }}
-{{- end }}
-
-  # --- Worker HTTP API ---
-  WORKER_HTTP_PORT: {{ .Values.worker.service.port | quote }}
-  # Callback host allow-list: the worker rejects any callbackUrl whose host
-  # doesn't match this. Must equal the app's WORKER_CALLBACK_BASE_URL.
-  APP_BASE_URL: {{ include "bnf-demo.appInternalUrl" . | quote }}
-
-  # --- Gallica rate limiting ---
-  GALLICA_RPS: {{ .Values.worker.config.gallicaRps | quote }}
-  GALLICA_BURST: {{ .Values.worker.config.gallicaBurst | quote }}
-  GALLICA_GENERAL_RPS: {{ .Values.worker.config.gallicaGeneralRps | quote }}
-  GALLICA_GENERAL_BURST: {{ .Values.worker.config.gallicaGeneralBurst | quote }}
-  VIEWER_OCR_CONCURRENCY: {{ .Values.worker.config.viewerOcrConcurrency | quote }}
-  VIEWER_OCR_DELAY_MS: {{ .Values.worker.config.viewerOcrDelayMs | quote }}
-
-  # --- BnF fetch timeouts ---
-  # Per-folio fetch budget. 135s sits just ABOVE the broker's 120s upstream timeout
-  # so the broker's classifiable timeout fires first (not an opaque worker abort).
-  BNF_PAGE_TIMEOUT_MS: {{ .Values.worker.config.bnfPageTimeoutMs | quote }}
-  BNF_META_TIMEOUT_MS: {{ .Values.worker.config.bnfMetaTimeoutMs | quote }}
-
-  # --- Ingest reliability ---
-  INGEST_JOB_EXPIRE_SECONDS: {{ .Values.worker.config.ingestJobExpireSeconds | quote }}
-  INGEST_RETRY_LIMIT: {{ .Values.worker.config.ingestRetryLimit | quote }}
-  INGEST_RETRY_DELAY_SECONDS: {{ .Values.worker.config.ingestRetryDelaySeconds | quote }}
-  MAX_OCR_PAGES: {{ .Values.worker.config.maxOcrPages | quote }}
-  MAX_IMAGE_CANVASES: {{ .Values.worker.config.maxImageCanvases | quote }}
-  IMAGE_CONCURRENCY: {{ .Values.worker.config.imageConcurrency | quote }}
-  # The worker's OWN fetch rate gate — must equal the broker's globalRpm or the
-  # worker self-throttles below the provisioned quota (worker-v2 reads BNF_GLOBAL_RPM).
-  BNF_GLOBAL_RPM: {{ .Values.worker.config.bnfGlobalRpm | quote }}
-  # Process-global broker-fetch concurrency — the worker's single in-flight cap,
-  # held below the doc loop so the broker's rate bucket stays continuously fed.
-  BNF_FETCH_CONCURRENCY: {{ .Values.worker.config.bnfFetchConcurrency | quote }}
-  WORKER_CONCURRENCY: {{ .Values.worker.config.workerConcurrency | quote }}
-  # Deprecated/no-op on the gated path; kept for rollback safety.
-  BNF_ALTO_CONCURRENCY: {{ .Values.worker.config.bnfAltoConcurrency | quote }}
+  # --- Per-stage concurrency (bounded downstream by openaireRpm / cluster) ---
+  RESOLVE_CONCURRENCY: {{ .Values.worker.config.resolveConcurrency | quote }}
+  FETCH_PDF_CONCURRENCY: {{ .Values.worker.config.fetchPdfConcurrency | quote }}
+  EXTRACT_CONCURRENCY: {{ .Values.worker.config.extractConcurrency | quote }}
+  PREPARE_CONCURRENCY: {{ .Values.worker.config.prepareConcurrency | quote }}
+  EMBED_CONCURRENCY: {{ .Values.worker.config.embedConcurrency | quote }}
+  # Data-cluster register (indexing) concurrency — the cluster autoscales.
+  REGISTER_CONCURRENCY: {{ .Values.worker.config.registerConcurrency | quote }}
+  # Processing rate (docs/min) used for the read-model ETA.
+  PROCESS_RPM: {{ .Values.worker.config.processRpm | quote }}
 {{- end }}

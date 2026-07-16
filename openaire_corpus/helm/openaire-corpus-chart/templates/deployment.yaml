@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}
+  name: {{ include "openaire-corpus.fullname" . }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "bnf-demo.selectorLabels" . | nindent 6 }}
+      {{- include "openaire-corpus.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: app
   template:
     metadata:
@@ -21,7 +21,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "bnf-demo.selectorLabels" . | nindent 8 }}
+        {{- include "openaire-corpus.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -40,21 +40,21 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "bnf-demo.fullname" . }}-config
+                name: {{ include "openaire-corpus.fullname" . }}-config
             - secretRef:
-                name: {{ include "bnf-demo.fullname" . }}-app
+                name: {{ include "openaire-corpus.fullname" . }}-app
             - secretRef:
-                name: {{ include "bnf-demo.fullname" . }}-app-creds
+                name: {{ include "openaire-corpus.fullname" . }}-app-creds
             {{- if .Values.config.authentikBaseUrl }}
             # Alien Auth (Authentik) SSO client id/secret — see externalsecret.yaml.
             - secretRef:
-                name: {{ include "bnf-demo.fullname" . }}-authentik
+                name: {{ include "openaire-corpus.fullname" . }}-authentik
             {{- end }}
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "bnf-demo.fullname" . }}-postgres
+                  name: {{ include "openaire-corpus.fullname" . }}-postgres
                   key: DATABASE_URL
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}

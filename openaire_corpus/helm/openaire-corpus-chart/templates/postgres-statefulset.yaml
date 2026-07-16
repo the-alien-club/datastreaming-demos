@@ -2,22 +2,22 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}-postgres
+  name: {{ include "openaire-corpus.fullname" . }}-postgres
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
-  serviceName: {{ include "bnf-demo.fullname" . }}-postgres
+  serviceName: {{ include "openaire-corpus.fullname" . }}-postgres
   replicas: 1
   selector:
     matchLabels:
-      {{- include "bnf-demo.selectorLabels" . | nindent 6 }}
+      {{- include "openaire-corpus.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        {{- include "bnf-demo.selectorLabels" . | nindent 8 }}
+        {{- include "openaire-corpus.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
       securityContext:
@@ -35,17 +35,17 @@ spec:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "bnf-demo.fullname" . }}-postgres
+                  name: {{ include "openaire-corpus.fullname" . }}-postgres
                   key: POSTGRES_DB
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "bnf-demo.fullname" . }}-postgres
+                  name: {{ include "openaire-corpus.fullname" . }}-postgres
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "bnf-demo.fullname" . }}-postgres
+                  name: {{ include "openaire-corpus.fullname" . }}-postgres
                   key: POSTGRES_PASSWORD
             # Subdirectory so lost+found on the PVC root doesn't break initdb.
             - name: PGDATA

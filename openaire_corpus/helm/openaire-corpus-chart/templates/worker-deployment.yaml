@@ -8,23 +8,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}-worker
+  name: {{ include "openaire-corpus.fullname" . }}-worker
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
 spec:
   replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
-      {{- include "bnf-demo.selectorLabels" . | nindent 6 }}
+      {{- include "openaire-corpus.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: worker
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/worker-configmap.yaml") . | sha256sum }}
       labels:
-        {{- include "bnf-demo.selectorLabels" . | nindent 8 }}
+        {{- include "openaire-corpus.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: worker
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -53,7 +53,7 @@ spec:
             # calls getpwuid(1000), fails, and reports "no attempt" before ever
             # connecting. Passing -U skips that lookup entirely.
             - |
-              until pg_isready -h {{ include "bnf-demo.fullname" . }}-postgres.{{ .Values.namespace }}.svc.cluster.local -p {{ .Values.postgres.port }} -U {{ .Values.postgres.username }}; do
+              until pg_isready -h {{ include "openaire-corpus.fullname" . }}-postgres.{{ .Values.namespace }}.svc.cluster.local -p {{ .Values.postgres.port }} -U {{ .Values.postgres.username }}; do
                 echo "[wait-for-postgres] not ready, retrying in 2s..."
                 sleep 2
               done
@@ -69,15 +69,15 @@ spec:
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: {{ include "bnf-demo.fullname" . }}-worker-config
+                name: {{ include "openaire-corpus.fullname" . }}-worker-config
             - secretRef:
-                name: {{ include "bnf-demo.fullname" . }}-worker-creds
+                name: {{ include "openaire-corpus.fullname" . }}-worker-creds
           env:
             # Same Postgres as the app — the worker owns its own pg-boss schema.
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "bnf-demo.fullname" . }}-postgres
+                  name: {{ include "openaire-corpus.fullname" . }}-postgres
                   key: DATABASE_URL
           livenessProbe:
             httpGet:

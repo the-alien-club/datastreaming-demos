@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 #
-# BnF Corpus Research — Next.js app image.
+# OpenAIRE Literature Research — Next.js app image.
 #
 # Build context is just this repo — all deps (including @alien/chat-sdk, which
 # resolves to the published @alien_intelligence/chat-sdk via the npm alias in
 # package.json) come from the npm registry, so CI needs no access to the
 # monorepo's tooling/ directory.
 #
-#   docker build -t rg.fr-par.scw.cloud/ns-data-streaming/bnf-demo:<tag> .
+#   docker build -t rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus:<tag> .
 #
 # See helm/DEPLOY.md for the full release loop.
 

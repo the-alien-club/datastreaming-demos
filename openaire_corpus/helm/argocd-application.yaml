@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: bnf-demo-prod
+  name: openaire-corpus-prod
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -11,14 +11,14 @@ spec:
   source:
     repoURL: https://github.com/the-alien-club/datastreaming-demos.git
     targetRevision: main
-    path: bnf/helm/bnf-demo-chart
+    path: openaire_corpus/helm/openaire-corpus-chart
     helm:
       valueFiles:
         - values.yaml
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: bnf
+    namespace: openaire
 
   # ArgoCD's `helm template` runs without cluster access, so the chart's
   # lookup-based password/secret preservation does not work — every sync would
@@ -30,12 +30,12 @@ spec:
   ignoreDifferences:
     - group: ""
       kind: Secret
-      name: bnf-demo-prod-postgres
+      name: openaire-corpus-prod-postgres
       jsonPointers:
         - /data
     - group: ""
       kind: Secret
-      name: bnf-demo-prod-app
+      name: openaire-corpus-prod-app
       jsonPointers:
         - /data
 

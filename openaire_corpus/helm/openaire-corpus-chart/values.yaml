@@ -1,14 +1,14 @@
-namespace: bnf
+namespace: openaire
 
 # ===========================================================================
-# App (Next.js) — the Constituer / Ingérer / Rechercher workspace.
+# App (Next.js) — the Corpus / Ingest / Research workspace.
 # ===========================================================================
 replicaCount: 1
 
 image:
-  repository: rg.fr-par.scw.cloud/ns-data-streaming/bnf-demo
+  repository: rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus
   pullPolicy: Always
-  tag: "0.11.0"
+  tag: "0.1.0"
 
 imagePullSecrets: []
 
@@ -49,20 +49,22 @@ config:
   # Public hostname the app is served on. BETTER_AUTH_URL and APP_URL both use
   # it; APP_URL is the base for cluster-callback URLs (overridden in-cluster by
   # WORKER_CALLBACK_BASE_URL, set automatically — see configmap.yaml).
-  publicUrl: https://bnf.demo.alien.club
+  publicUrl: https://openaire.demo.alien.club
 
   # Ingest path + research RAG path. "real" routes ingestion to the bundled
   # worker (WORKER_RUNNER_URL) and RAG to the data-cluster MCP. "fake" uses the
   # in-process fixtures (no worker, no network) — handy for a UI-only deploy.
   clusterMode: real
 
-  # BnF MCP — corpus building (Constituer). URL is public; token is a secret.
-  # Pointed at the ALPHA MCP for now (2026-06-24).
-  bnfMcpUrl: https://bnf.mcp.alpha.alien.club/mcp
+  # OpenAIRE MCP — corpus building (Corpus step). URL is public; token is a
+  # secret (openaireMcpTokenProperty). Hosted mcp-openaire (openaire_kg_* /
+  # openaire_sx_* tools).
+  openaireMcpUrl: https://mcp.alien.club/mcp
 
-  # Data-cluster MCP — research RAG (Rechercher), required when clusterMode=real.
-  # The research agent's rag_query tool queries this over dataset `bnf-<projectId>`.
-  dataclusterMcpUrl: https://mcp-test-bnf-corpus-1781899491112.mcp.alpha.alien.club/mcp
+  # Data-cluster MCP — research RAG (Research step), required when clusterMode=real.
+  # The research agent's rag_query tool queries this over dataset `openaire-<projectId>`.
+  # This is the multi-cluster aggregator endpoint (composite ids, stateless).
+  dataclusterMcpUrl: https://mcp.alien.club/mcp?config=cfg_GBLcpF0QcE-G
 
   # Langfuse observability — OPTIONAL. Set publicKey here + secretKey in the
   # ExternalSecret to enable per-turn tracing. Leave blank → tracing off.
@@ -71,14 +73,14 @@ config:
 
   # Alien Auth (Authentik) SSO. Base URL + app slug are non-secret (here); the
   # client id/secret are pulled from Scaleway via the ExternalSecret below.
-  # Shared with the alien-agents demo (same Authentik application). The OAuth
-  # callback `https://bnf.demo.alien.club/api/auth/oauth2/callback/authentik`
+  # Shared with the other demos (same Authentik application). The OAuth callback
+  # `https://openaire.demo.alien.club/api/auth/oauth2/callback/authentik`
   # must be registered on that application or Authentik rejects the flow.
   authentikBaseUrl: https://auth.alien.club
   authentikAppSlug: datastreaming
 
   # Service name reported to SigNoz. Keep stable across deploys.
-  otelServiceName: "bnf-demo-prod"
+  otelServiceName: "openaire-corpus-prod"
 
   # Agent provider — which gateway drives the `claude` agent mode.
   # "anthropic" (default) calls Anthropic with ANTHROPIC_API_KEY; "openrouter"
@@ -89,13 +91,15 @@ config:
   agentProvider: openrouter
 
 # ===========================================================================
-# Ingest worker — the major difference from the other demos.
+# Ingest worker (worker-v2) — the major difference from a plain web app.
 #
-# A long-running consumer: it pulls doc-ingest jobs from a pg-boss queue (in
-# the bundled Postgres), runs prepare → embed → register against Gallica /
-# Scaleway GenAI / RunPod / the data cluster, and serves an HTTP submit API on
-# :7777 that the app calls (WORKER_RUNNER_URL). pg-boss row-locks make it safe
-# to scale horizontally (worker.replicaCount > 1) — they share one queue.
+# A long-running consumer: it pulls doc-ingest jobs from a pg-boss queue (in the
+# bundled Postgres) and runs the per-doc pipeline
+#   resolve → [fetch-pdf → extract] → prepare → embed → register
+# against the OpenAIRE Graph API / Mistral OCR / RunPod / the data cluster, and
+# serves an HTTP submit API on :7777 that the app calls (WORKER_RUNNER_URL).
+# pg-boss row-locks make it safe to scale horizontally (worker.replicaCount > 1)
+# — they share one queue.
 #
 # Active only when config.clusterMode=real. In fake mode set worker.enabled=false.
 # ===========================================================================
@@ -104,128 +108,69 @@ worker:
   replicaCount: 1
 
   image:
-    repository: rg.fr-par.scw.cloud/ns-data-streaming/bnf-demo-worker
+    repository: rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus-worker
     pullPolicy: Always
-    tag: "0.10.1"
+    tag: "0.1.0"
 
   service:
     type: ClusterIP
     port: 7777
 
   config:
-    # Blob storage — "s3" (Scaleway Object Storage) for real, "local" for debug.
-    blobStore: s3
+    # --- Blob storage (S3) — heavy bytes live off-queue ---
     s3Bucket: bnf-corpus-demo
     s3Endpoint: https://s3.fr-par.scw.cloud
     s3Region: fr-par
+    # OpenAIRE artifacts sit under a dedicated prefix so they never collide with
+    # other tenants in the shared bucket.
+    s3Prefix: "openaire/"
 
-    # Scaleway Generative API — primary vision (Holo2). Key is a secret.
-    genaiBaseUrl: https://api.scaleway.ai/77c152cc-4d27-4d9b-a449-143df07bcaad/v1
-    holoModel: holo2-30b-a3b
+    # --- OpenAIRE Graph API + ScholeXplorer (public; token optional) ---
+    # openaireApiBase left unset → the client's default (api.openaire.eu/graph/v1).
+    openaireApiBase: ""
+    # Resolve rate (products/min) — the ungated public-API politeness cap.
+    openaireRpm: "60"
+    # ScholeXplorer citation-link enrichment (cited-by / references counts).
+    scholexEnabled: "true"
+    scholexRpm: "60"
 
-    # Google AI — vision provider (primary or fallback per visionPrimary). Key is a secret.
-    geminiVisionModel: gemma-4-31b-it
-    visionPrimary: holo
-
-    # OpenRouter — the PRIMARY vision provider (Holo/Gemini are fallbacks). The paid
-    # key has no per-key RPM cap, so throughput is bounded only by upstream provider
-    # capacity → push concurrency and let the in-call 429/timeout backoff ride the
-    # edge. gemini-2.5-flash is FAST (not a reasoning model) — the previous
-    # gemma-4-31b-it made describe the pipeline bottleneck (30s+/image). Key is a
-    # secret (openrouterApiKeyProperty).
-    openrouterVisionModel: google/gemini-2.5-flash
-    # Shared cap on in-flight vision API calls across all docs (a doc fans its folios
-    # out up to this). Raised 24→64 in hardening-pass-2.
-    describeCallConcurrency: "64"
-    # DOC-level describe concurrency — how many image docs the describe stage runs at
-    # once. Raised 16→32: once fetch hit the 1000/min quota, describe became the slow
-    # lane; OpenRouter has no per-key RPM cap so more parallel docs is safe (bounded
-    # by describeCallConcurrency across all of them).
-    describeConcurrency: "32"
-    # Doc-resolution (metadata/OAI) concurrency. Bounded downstream by the broker's
-    # external rate (~120/min); 16 keeps that rate fed (was 6).
-    metadataConcurrency: "16"
-    # Data-cluster register (indexing) concurrency. The cluster autoscales, so push
-    # it to drain the register backlog (was 4).
-    registerConcurrency: "24"
-
-    # Mistral fallback OCR — transcribes `sans_texte` docs (digitized text, no BnF
-    # OCR layer) the librarian opts into. ON: the app already gates the spend
-    # (per-ingestion confirmation + the $50/project budget), so any sans_texte doc
-    # that reaches the worker is cleared to pay. Key is a secret (mistralApiKeyProperty).
-    mistralOcrEnabled: "true"
+    # --- Full-text lane ---
+    # true = fetch open-access PDFs and OCR them via Mistral (per-page full text +
+    # inline figure captions + figure image files). false = abstract + metadata only.
+    fulltextEnabled: "true"
     mistralOcrModel: mistral-ocr-latest
-    mistralOcrMaxPages: "300"
-    mistralOcrPollIntervalMs: "5000"
-    # Wall-clock ceiling on one batch — MUST stay under ingestJobExpireSeconds.
-    mistralOcrBatchTimeoutMs: "1800000"
+    # Per-host PDF-fetch politeness rate (requests/min/host) + size/page ceilings.
+    pdfHostRpm: "60"
+    pdfMaxBytes: "52428800"
+    pdfMaxPages: "500"
 
-    # RunPod bge-m3 embedder. Key is a secret.
+    # --- RunPod bge-m3 embedder (key is a secret) ---
     runpodEndpointId: pngrbp0y1aj28i
     runpodEmbeddingModel: BAAI/bge-m3
 
-    # Data cluster (register/upsert). Proxy base = backendApiUrl + /clusters/<id>/proxy.
-    # bearer token is a secret. clusterId MUST match the dataset region the app's
-    # DATACLUSTER_MCP_URL points at.
-    backendApiUrl: https://api.alpha.alien.club
-    clusterId: "158"
+    # --- Data cluster (register/upsert). bearer token is a secret. ---
+    # Proxy base = backendApiUrl + /clusters/<id>/proxy. clusterId MUST match the
+    # dataset region the app's DATACLUSTER_MCP_URL points at (cluster 111 on prod).
+    backendApiUrl: https://api.alien.club
+    clusterId: "111"
 
-    # Gallica politeness / rate-limit knobs (see worker/.env.example).
-    gallicaRps: "0.083"
-    gallicaBurst: "5"
-    gallicaGeneralRps: "8"
-    gallicaGeneralBurst: "16"
-    viewerOcrConcurrency: "10"
-    viewerOcrDelayMs: "40"
-
-    # Ingest reliability — slow-but-completes (a long OCR book at 5 req/min is
-    # legitimately tens of minutes; keep pg-boss patient instead of expire-looping).
-    ingestJobExpireSeconds: "14400"
-    ingestRetryLimit: "5"
-    ingestRetryDelaySeconds: "120"
-    # Per-folio fetch timeout (ms). 135s sits just ABOVE the broker's 120s upstream
-    # timeout so the broker's own classifiable timeout fires first, instead of the
-    # worker aborting the broker mid-flight (which logged opaque "operation was
-    # aborted"). Under load BnF is slow to serve images; 15s was far too tight.
-    bnfPageTimeoutMs: "135000"
-    # Metadata (OAI) is fast; a shorter budget is fine.
-    bnfMetaTimeoutMs: "45000"
-    maxOcrPages: "1000"
-    maxImageCanvases: "40"
-    imageConcurrency: "3"
-    # bnfFetchConcurrency: the worker's single in-flight cap for ALL broker traffic
-    # (ALTO/OAI/manifest/images), held below the doc loop so it stays full during
-    # embed/index — keeping the broker's 300/min bucket continuously fed. The broker
-    # remains the RATE authority; 12 holds sustained 300/min with freeze≈0/shed≈0.
-    #   3000/min flip = TWO values, no code change: broker.config.globalRpm: "3000"
-    #   + bnfFetchConcurrency: "48", then helm upgrade and verify via /calls.csv.
-    # 2026-06-26: BnF raised the partner quota to 1000/min (Ludovic) — broker
-    # globalRpm + this both at the new ceiling; concurrency sized to feed it
-    # (~latency × rate/60). The worker's own rate gate must match (bnfGlobalRpm)
-    # or it self-throttles below the broker.
-    bnfGlobalRpm: "1000"
-    bnfFetchConcurrency: "128"
-    # In-flight doc-jobs. This is the knob that keeps the fetch gate FED: each job
-    # runs fetch→embed→index serially in its slot, so at 4 the docs moved as a
-    # synchronized cohort — fetch bursts to the 300 cap, then all 4 embed/index
-    # together (remote RunPod+cluster I/O, ~2-3 min) with fetch idle → sawtooth,
-    # ~108/min effective (~36% of cap). Raised to 16 to desynchronize the convoy:
-    # while some docs embed/index, others fetch, so the gate stays fed → sustained
-    # ~300/min. CANNOT over-fetch BnF — bnfFetchConcurrency still caps fetches at
-    # 12 regardless. Bound is worker RAM (docs × pages in memory); watch RSS.
-    workerConcurrency: "16"
-    # bnfAltoConcurrency — deprecated/no-op on the gated path (fan-out follows the
-    # gate). Left set to avoid breakage; remove in a later cleanup.
-    bnfAltoConcurrency: "2"
+    # --- Per-stage concurrency ---
+    resolveConcurrency: "6"
+    fetchPdfConcurrency: "8"
+    extractConcurrency: "4"
+    prepareConcurrency: "8"
+    embedConcurrency: "8"
+    # Data-cluster register (indexing) concurrency — the cluster autoscales.
+    registerConcurrency: "24"
+    # Processing rate (docs/min) used for the read-model ETA.
+    processRpm: "300"
 
   resources:
     requests:
       cpu: 250m
-      # At bnfFetchConcurrency=128 the fetch stage holds up to 128 image Buffers at
-      # once (full-res "max" cartes ~10MB) + the vision base64 describe lane. 2Gi
-      # OOMKilled. RAM is cheap and the nodes have ~30Gi — provision generously so
-      # a full 255-doc run at 128-wide never approaches the ceiling, rather than
-      # trimming concurrency to save memory.
+      # Full-text runs hold PDF bytes + OCR page images in memory; provision
+      # generously (RAM is cheap; nodes have ~30Gi) rather than trimming
+      # concurrency to save memory.
       memory: 2Gi
     limits:
       cpu: "2"
@@ -235,59 +180,6 @@ worker:
   # mid-OCR). Must comfortably exceed a single doc's prepare time, not the full
   # job ceiling.
   terminationGracePeriodSeconds: 120
-
-# ===========================================================================
-# BnF broker — the single egress chokepoint for ALL BnF traffic (app metadata
-# resolver + ingest worker). Owns the OAuth token (BnF KEY/SECRET live ONLY
-# here) and enforces the shared rate caps. When enabled, BNF_BROKER_URL is wired
-# into both the app and the worker; both fall back to their direct/relay path if
-# it's ever disabled.
-#
-# ⚠️ The broker runs as EXACTLY ONE replica (hard-pinned in the Deployment, not
-# configurable here): its rate buckets + token are in-memory per pod, and the
-# per-IP manifest cap requires a single egress IP. Do not try to scale it.
-# ===========================================================================
-broker:
-  enabled: true
-
-  image:
-    repository: rg.fr-par.scw.cloud/ns-data-streaming/bnf-demo-broker
-    pullPolicy: Always
-    tag: "0.9.0"
-
-  service:
-    type: ClusterIP
-    port: 8792
-
-  config:
-    # OAuth client_credentials token endpoint + authenticated partner-API base.
-    # apiBaseUrl MUST be openapiproext.bnf.fr (the token'd host). openapi.bnf.fr
-    # is the public no-token IIIF mirror (anonymous-per-IP pool, no quota).
-    oauthTokenUrl: https://apimauthproext.bnf.fr/oauth2/token
-    apiBaseUrl: https://openapiproext.bnf.fr
-
-    # Rate caps (requests/min) — bump here, redeploy the broker only (no
-    # app/worker rebuild). global=1000: the REAL provisioned quota (Ludovic raised
-    # it 300→1000 on 2026-06-26). The worker's own gate (worker.config.bnfGlobalRpm)
-    # must match or it self-throttles below this. manifest raised 12→40/min/IP by BnF.
-    globalRpm: "1000"
-    manifestRpm: "40"
-    externalRpm: "120"
-
-    # Per-attempt upstream timeout to BnF (ms). 120s, not 30s: under ingest load
-    # BnF is slow to serve folio images, and a tight abort was the bulk of the
-    # transient fetch failures (each abort re-burns the shared quota on retry). The
-    # worker's broker-call timeout (BNF_PAGE_TIMEOUT_MS=135s) sits just above this
-    # so the broker's own classifiable timeout wins over an opaque worker abort.
-    upstreamTimeoutMs: "120000"
-
-  resources:
-    requests:
-      cpu: 50m
-      memory: 96Mi
-    limits:
-      cpu: 500m
-      memory: 256Mi
 
 # ===========================================================================
 # Bundled Postgres — single replica, PVC-backed, no replication. Shared by the
@@ -300,8 +192,8 @@ postgres:
     repository: postgres
     tag: "16-alpine"
     pullPolicy: IfNotPresent
-  database: bnf_demo
-  username: bnf_demo
+  database: openaire_corpus
+  username: openaire_corpus
   # Password generated once and preserved across upgrades (see postgres-secret.yaml).
   port: 5432
   persistence:
@@ -318,14 +210,14 @@ postgres:
       memory: 1Gi
 
 # ===========================================================================
-# Istio ingress. bnf.demo.alien.club is a dedicated subdomain served at root
-# (no basePath / URI rewrite), so the chart provisions its OWN Gateway +
-# cert-manager Certificate. Requires DNS bnf.demo.alien.club → istio ingress
+# Istio ingress. openaire.demo.alien.club is a dedicated subdomain served at
+# root (no basePath / URI rewrite), so the chart provisions its OWN Gateway +
+# cert-manager Certificate. Requires DNS openaire.demo.alien.club → istio ingress
 # and the `letsencrypt` ClusterIssuer.
 # ===========================================================================
 istio:
   hosts:
-    - host: bnf.demo.alien.club
+    - host: openaire.demo.alien.club
       path: /
       gateway: own
 
@@ -362,11 +254,12 @@ istio:
 # ===========================================================================
 secrets:
   # Name of the Scaleway Secret Manager secret holding every credential below.
-  scalewaySecretName: bnf-demo-prod
+  scalewaySecretName: openaire-corpus-prod
 
   # --- App credentials ---
   anthropicApiKeyProperty: ANTHROPIC_API_KEY
-  bnfMcpTokenProperty: BNF_MCP_TOKEN
+  # OpenAIRE MCP token — corpus building.
+  openaireMcpTokenProperty: OPENAIRE_MCP_TOKEN
   # data-cluster bearer (RAG via datacluster MCP); shared with the worker.
   clusterBearerTokenProperty: CLUSTER_BEARER_TOKEN
   # Optional — only consumed if config.langfusePublicKey is set.
@@ -376,26 +269,19 @@ secrets:
 
   # --- Alien Auth (Authentik) SSO credentials ---
   # AUTHENTIK_CLIENT_ID / AUTHENTIK_CLIENT_SECRET live in a SHARED Scaleway
-  # secret (`authentik-prod`), NOT the per-demo `bnf-demo-prod` secret — the
-  # same OAuth application is reused across all demos (openaire, agents, bnf).
-  # Pulled into a dedicated ExternalSecret and projected via envFrom only when
-  # config.authentikBaseUrl is set. Mirrors the openaire-chart pattern.
+  # secret (`authentik-prod`), NOT the per-demo secret — the same OAuth
+  # application is reused across all demos (openaire, agents, bnf). Pulled into a
+  # dedicated ExternalSecret and projected via envFrom only when
+  # config.authentikBaseUrl is set.
   authentikScalewaySecretName: authentik-prod
 
   # --- Worker credentials ---
   scwS3AccessKeyProperty: SCW_S3_ACCESS_KEY
   scwS3SecretKeyProperty: SCW_S3_SECRET_KEY
-  scwApiKeyProperty: SCW_API_KEY
-  googleAiApiKeyProperty: GOOGLE_AI_API_KEY
   runpodApiKeyProperty: RUNPOD_API_KEY
-  # Mistral fallback OCR for `sans_texte` docs (worker only). Held by the worker.
+  # Mistral OCR — the full-text extractor for OA PDFs (worker only). Only pulled
+  # when worker.config.fulltextEnabled.
   mistralApiKeyProperty: MISTRAL_API_KEY
-
-  # --- BnF broker credentials (OAuth client_credentials) ---
-  # The BnF KEY/SECRET live ONLY behind the broker. Both properties must exist
-  # on the `bnf-demo-prod` Scaleway secret.
-  bnfClientKeyProperty: BNF_CLIENT_KEY
-  bnfClientSecretProperty: BNF_CLIENT_SECRET
 
 podAnnotations:
   # OTel Node.js auto-instrumentation sidecar (Instrumentation CR in signoz ns).

@@ -1,12 +1,11 @@
-# Worker V2 container — the staged-bucket ingest pipeline + the app↔worker HTTP
-# ingress. Build context = this directory (bnf/worker-v2/).
+# OpenAIRE ingest worker (worker-v2) container — the staged-bucket ingest
+# pipeline + the app↔worker HTTP ingress. Build context = this directory
+# (openaire_corpus/worker-v2/).
 #
 # One process runs everything: every stage's pg-boss consumer loop, the HTTP
 # ingress (POST /ingest, GET /progress/:runId, cancel, health) on WORKER_HTTP_PORT,
 # and the terminal commit callback. It exits only on SIGTERM (graceful drain);
 # Docker's `restart: unless-stopped` supervises it — no pm2, no systemd inside.
-#
-# This REPLACES the V1 worker (bnf/worker). The two share no code; V1 is retired.
 
 FROM node:24-alpine AS deps
 WORKDIR /app

@@ -1,17 +1,18 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "bnf-demo.fullname" . }}-config
+  name: {{ include "openaire-corpus.fullname" . }}-config
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "bnf-demo.labels" . | nindent 4 }}
+    {{- include "openaire-corpus.labels" . | nindent 4 }}
   annotations:
     argocd.argoproj.io/sync-wave: "-2"
 data:
   BETTER_AUTH_URL: {{ .Values.config.publicUrl | quote }}
   APP_URL: {{ .Values.config.publicUrl | quote }}
   CLUSTER_MODE: {{ .Values.config.clusterMode | quote }}
-  BNF_MCP_URL: {{ .Values.config.bnfMcpUrl | quote }}
+  # OpenAIRE MCP — corpus building (Corpus step). URL is public; token is a secret.
+  OPENAIRE_MCP_URL: {{ .Values.config.openaireMcpUrl | quote }}
   DATACLUSTER_MCP_URL: {{ .Values.config.dataclusterMcpUrl | quote }}
   OTEL_SERVICE_NAME: {{ .Values.config.otelServiceName | quote }}
   {{- with .Values.config.agentProvider }}
@@ -19,21 +20,14 @@ data:
   # via the -app-creds ExternalSecret.
   AGENT_PROVIDER: {{ . | quote }}
   {{- end }}
-  {{- if .Values.broker.enabled }}
-  # Single egress chokepoint for BnF metadata resolution (lib/bnf/direct.ts).
-  # When set, the resolver routes ALL its BnF calls through the broker instead of
-  # the IPv4-direct/relay path. Corpus building is always real BnF, so this is
-  # wired independently of CLUSTER_MODE.
-  BNF_BROKER_URL: {{ include "bnf-demo.brokerInternalUrl" . | quote }}
-  {{- end }}
   {{- if eq .Values.config.clusterMode "real" }}
   # App → worker job submit (lib/cluster/client.ts).
-  WORKER_RUNNER_URL: {{ include "bnf-demo.workerInternalUrl" . | quote }}
-  # Host the worker posts ingest-progress callbacks to. Point it at the app's
-  # in-cluster Service so callbacks stay inside the mesh instead of hairpinning
-  # out through Istio on the public URL. Must match the worker's APP_BASE_URL
-  # (its callback host allow-list) — both derive from the same helper.
-  WORKER_CALLBACK_BASE_URL: {{ include "bnf-demo.appInternalUrl" . | quote }}
+  WORKER_RUNNER_URL: {{ include "openaire-corpus.workerInternalUrl" . | quote }}
+  # Host the worker posts its HMAC-signed terminal callback to. Point it at the
+  # app's in-cluster Service so callbacks stay inside the mesh instead of
+  # hairpinning out through Istio on the public URL. The app hands the worker
+  # this URL + a per-job secret at submit time (no shared allow-list env).
+  WORKER_CALLBACK_BASE_URL: {{ include "openaire-corpus.appInternalUrl" . | quote }}
   {{- end }}
   {{- with .Values.config.langfusePublicKey }}
   LANGFUSE_PUBLIC_KEY: {{ . | quote }}
