@@ -51,12 +51,12 @@ export const AGENT_TOOLS = {
   // These are NOT registered via defineTool — they come from the MCP server.
   // Listed here so the prompt-builder and the SSE event labels can reference
   // them by a typed key rather than a magic string. Names verified live against
-  // the hosted mcp-openaire (openaire_kg_* / openaire_sx_*).
-  openaireSearchProducts: "openaire__openaire_kg_search_research_products",
-  openaireGetProduct:     "openaire__openaire_kg_get_research_product",
-  openaireSearchProjects: "openaire__openaire_kg_search_projects",
-  openaireResearchLinks:  "openaire__openaire_kg_get_research_links",
-  openaireScholexLinks:   "openaire__openaire_sx_search_links",
+  // the hosted mcp-openaire at openaire.mcp.alien.club (2026-07-16).
+  openaireSearchProducts: "openaire__openaire_search_research_products",
+  openaireGetProduct:     "openaire__openaire_get_research_product_details",
+  openaireSearchProjects: "openaire__openaire_search_projects",
+  openaireResearchLinks:  "openaire__openaire_get_research_links",
+  openaireCitationNetwork: "openaire__openaire_get_citation_network",
 } as const
 
 export type AgentToolName = (typeof AGENT_TOOLS)[keyof typeof AGENT_TOOLS]

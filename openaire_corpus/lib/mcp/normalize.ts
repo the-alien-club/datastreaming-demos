@@ -10,10 +10,7 @@
 //
 // See: playbook/mcp-client.md
 
-import type {
-  OaInstance,
-  OaResearchProduct,
-} from "@/lib/openaire/types"
+import type { OaAuthor, OaResearchProduct } from "@/lib/openaire/types"
 import {
   mapInstanceType,
   mapLang,
@@ -77,89 +74,36 @@ function yearFromDate(date: string | null | undefined): number | null {
   return m ? Number(m[1]) : null
 }
 
-/** Preferred DOI: first `doi`-scheme pid, normalized to bare form. */
+/** Bare DOI from the flattened `doi` field. */
 function pickDoi(p: OaResearchProduct): string | null {
-  for (const pid of p.pids ?? []) {
-    if (pid?.scheme?.toLowerCase() === "doi") {
-      const doi = normalizeDoi(pid.value)
-      if (doi) return doi
-    }
-  }
+  return normalizeDoi(p.doi)
+}
+
+/** Read a language code from either the flat string or the `{code}` object. */
+function pickLang(p: OaResearchProduct): string | null {
+  if (typeof p.language === "string") return mapLang(p.language)
+  if (p.language && typeof p.language === "object") return mapLang(p.language.code)
   return null
 }
 
-/** True when ANY instance is refereed (peer-reviewed). Null when no instance
- *  carries a refereed flag at all (unknown, not "false"). */
-function derivePeerReviewed(instances: OaInstance[] | null | undefined): boolean | null {
-  let sawFlag = false
-  for (const inst of instances ?? []) {
-    if (inst?.refereed == null) continue
-    sawFlag = true
-    if (inst.refereed === "peerReviewed") return true
-  }
-  return sawFlag ? false : null
-}
-
-/** The finer display kind ("article", "preprint", …) from the richest instance,
- *  or null when no instance type maps. */
-function deriveInstanceType(instances: OaInstance[] | null | undefined): string | null {
-  for (const inst of instances ?? []) {
-    const mapped = mapInstanceType(inst?.type)
-    if (mapped) return mapped
-  }
-  return null
+/** Display author string: first author's name, "et al." beyond two. */
+function deriveAuthor(authors: OaAuthor[] | null | undefined): string | null {
+  const named = (authors ?? []).filter((a) => firstNonEmpty(a?.name))
+  if (named.length === 0) return null
+  const first = firstNonEmpty(named[0].name)
+  if (!first) return null
+  if (named.length === 1) return first
+  if (named.length === 2) return `${first}, ${firstNonEmpty(named[1].name)}`
+  return `${first}, et al.`
 }
 
 /**
- * Best open-access full-text candidate URL for the UI, mined from OPEN
- * instances. This is a display convenience only — the ingest worker re-derives
- * and ranks its own candidate list. Prefers a repository-hosted OPEN url, then
- * any OPEN url; returns null when nothing is open.
+ * Derive bestAccessRight when the flattened product omits it: any OA colour or
+ * the green flag implies OPEN; otherwise unknown (null — never "closed").
  */
-function pickFulltextUrl(instances: OaInstance[] | null | undefined): string | null {
-  let firstOpen: string | null = null
-  for (const inst of instances ?? []) {
-    const label = inst?.accessRight?.label?.toUpperCase()
-    if (label !== "OPEN") continue
-    for (const url of inst.urls ?? []) {
-      if (typeof url !== "string" || url.trim() === "") continue
-      if (firstOpen == null) firstOpen = url
-      // Prefer a non-doi.org url (usually the actual repository/PDF landing).
-      if (!/doi\.org/.test(url)) return url
-    }
-  }
-  return firstOpen
-}
-
-/** hostedBy landing page of the first instance carrying a url — the "Source /
- *  repository" surface. */
-function pickSourceRepoUrl(instances: OaInstance[] | null | undefined): string | null {
-  for (const inst of instances ?? []) {
-    const first = inst?.urls?.find((u) => typeof u === "string" && u.trim() !== "")
-    if (first) return first
-  }
+function deriveAccessRight(p: OaResearchProduct): string | null {
+  if (firstNonEmpty(p.open_access_color) || p.is_green === true) return "OPEN"
   return null
-}
-
-/** Primary funder short name, best-effort from the projects relation. */
-function pickFunder(p: OaResearchProduct): string | null {
-  for (const proj of p.projects ?? []) {
-    const short = firstNonEmpty(proj?.funder?.shortName, proj?.funder?.name)
-    if (short) return short
-  }
-  return null
-}
-
-/** Display author string: first author's fullName, "+ N others" appended. */
-function deriveAuthor(p: OaResearchProduct): string | null {
-  const authors = (p.authors ?? []).filter((a) => firstNonEmpty(a?.fullName))
-  if (authors.length === 0) return null
-  const sorted = [...authors].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
-  const first = firstNonEmpty(sorted[0].fullName)
-  if (!first) return null
-  if (sorted.length === 1) return first
-  if (sorted.length === 2) return `${first}, ${firstNonEmpty(sorted[1].fullName)}`
-  return `${first}, et al.`
 }
 
 // ---------------------------------------------------------------------------
@@ -167,9 +111,9 @@ function deriveAuthor(p: OaResearchProduct): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize a single OpenAIRE research product into our NormalizedDocument.
- * Returns null when the product has no usable id or no title — the resolver
- * treats that as a failed attempt.
+ * Normalize a single OpenAIRE research product (hosted-MCP flattened shape) into
+ * our NormalizedDocument. Returns null when the product has no usable id or no
+ * title — the resolver treats that as a failed attempt.
  */
 export function normalizeDocument(
   p: OaResearchProduct,
@@ -178,39 +122,45 @@ export function normalizeDocument(
   if (rawId === "") return null
   const openaireId = stripEntityPrefix(rawId)
 
-  const title = firstNonEmpty(p.mainTitle)
+  const title = firstNonEmpty(p.title)
   if (title === null) return null
 
   const docType = mapProductType(p.type)
-  const instances = p.instances ?? []
-
-  const abstract = firstNonEmpty(...(p.descriptions ?? []))
-  const impact = p.indicators?.citationImpact ?? null
+  const metrics = p.metrics ?? null
+  const citationCount =
+    typeof metrics?.citation_count === "number"
+      ? metrics.citation_count
+      : typeof p.citations === "number"
+        ? p.citations
+        : null
 
   return {
     openaireId,
     doi: pickDoi(p),
     title,
-    author: deriveAuthor(p),
-    year: yearFromDate(p.publicationDate),
-    dateLabel: firstNonEmpty(p.publicationDate),
+    author: deriveAuthor(p.authors),
+    year: yearFromDate(p.publication_date),
+    dateLabel: firstNonEmpty(p.publication_date),
     docType,
-    instanceType: deriveInstanceType(instances) ?? docType,
-    lang: mapLang(p.language?.code),
+    instanceType: mapInstanceType(p.instance_type) ?? docType,
+    lang: pickLang(p),
     publisher: firstNonEmpty(p.publisher),
-    venue: firstNonEmpty(p.container?.name),
-    abstract,
-    openAccessColor: firstNonEmpty(p.openAccessColor),
-    isGreen: typeof p.isGreen === "boolean" ? p.isGreen : null,
-    bestAccessRight: firstNonEmpty(p.bestAccessRight?.label),
-    peerReviewed: derivePeerReviewed(instances),
-    citationCount:
-      typeof impact?.citationCount === "number" ? impact.citationCount : null,
-    influenceClass: firstNonEmpty(impact?.influenceClass),
-    fulltextUrl: pickFulltextUrl(instances),
-    sourceRepoUrl:
-      firstNonEmpty(p.codeRepositoryUrl) ?? pickSourceRepoUrl(instances),
-    funder: pickFunder(p),
+    venue: firstNonEmpty(p.journal),
+    abstract: firstNonEmpty(p.abstract),
+    openAccessColor: firstNonEmpty(p.open_access_color),
+    isGreen: typeof p.is_green === "boolean" ? p.is_green : null,
+    bestAccessRight: deriveAccessRight(p),
+    peerReviewed: typeof p.peer_reviewed === "boolean" ? p.peer_reviewed : null,
+    citationCount,
+    influenceClass: firstNonEmpty(metrics?.influence_class),
+    // The details endpoint returns only the doi.org resolver url; real OA PDF
+    // selection happens in the worker. Leave the UI hint null unless the url is
+    // clearly not the DOI resolver.
+    fulltextUrl:
+      p.url && !/doi\.org/.test(p.url) ? firstNonEmpty(p.url) : null,
+    sourceRepoUrl: firstNonEmpty(p.hosted_by?.[0]) ?? firstNonEmpty(p.url),
+    // Funder is not in the flattened details response; left null (unknown).
+    funder: null,
     rawMetadata: p,
   }
 }

@@ -1,20 +1,21 @@
 import "server-only"
 // lib/openaire/client.ts
-// Direct HTTP client for the hosted OpenAIRE MCP (mcp-openaire, mcp-base).
+// Direct HTTP client for the hosted OpenAIRE MCP (mcp-openaire, mcp-base) at
+// openaire.mcp.alien.club.
 //
-// Streamable-HTTP / JSON-RPC 2.0, same transport as the data-cluster MCP. It
-// backs the background metadata resolver (lib/documents/resolver.ts) and the
-// corpus_add DOI/id canonicalization. Two tools are used:
-//   - openaire_kg_get_research_product  → dereference one product by OpenAIRE id
-//   - openaire_kg_search_research_products → resolve a DOI (or batch of ids) to
-//     the canonical product(s)
+// Streamable-HTTP / JSON-RPC 2.0, same transport as the data-cluster MCP — and,
+// like it, STATEFUL: `initialize` returns an `Mcp-Session-Id` header every
+// subsequent request must echo. It backs the background metadata resolver
+// (lib/documents/resolver.ts) and the corpus_add DOI/id canonicalization. One
+// tool does both jobs:
+//   - openaire_get_research_product_details {identifier} — dereference a product
+//     by EITHER a DOI or an OpenAIRE id (verified live: identifier accepts both).
 //
 // Auth: opaque service Bearer token (OPENAIRE_MCP_TOKEN). The mcp-base layer
-// fronts the public Graph API.
-//
-// The MCP wraps tool payloads twice: JSON-RPC `result.content[0].text` holds a
-// JSON string, which itself is the mcp-base envelope `{ success, data|error }`.
-// For get: data is the product. For search: data is `{ header, results[] }`.
+// fronts the OpenAIRE Graph and returns a flattened product (see
+// lib/openaire/types.ts). The MCP wraps payloads twice: JSON-RPC
+// `result.content[0].text` holds a JSON string, itself the mcp-base envelope
+// `{ success, data|error }` — `data` is the product.
 
 import {
   MCP_CLIENT_NAME,
@@ -54,11 +55,6 @@ interface McpEnvelope<T> {
   success: boolean
   data?: T
   error?: string
-}
-
-interface SearchData {
-  header?: { numFound?: number }
-  results?: OaResearchProduct[]
 }
 
 interface JsonRpcOk {
@@ -114,15 +110,21 @@ export class OpenaireClient {
     )
   }
 
-  /** Fetch one research product by bare OpenAIRE id. Throws on failure. */
-  async getResearchProduct(id: string): Promise<OaResearchProduct> {
+  /**
+   * Fetch one research product by identifier — an OpenAIRE id OR a bare DOI
+   * (the hosted `openaire_get_research_product_details` accepts both). Throws on
+   * failure.
+   */
+  async getResearchProduct(identifier: string): Promise<OaResearchProduct> {
     const env = await this.callTool<McpEnvelope<OaResearchProduct>>(
-      "openaire_kg_get_research_product",
-      { id },
+      "openaire_get_research_product_details",
+      { identifier },
     )
-    const data = this.unwrap(env, "openaire_kg_get_research_product")
+    const data = this.unwrap(env, "openaire_get_research_product_details")
     if (!data || typeof data.id !== "string") {
-      throw new McpError(`openaire_kg_get_research_product returned no product for ${id}`)
+      throw new McpError(
+        `openaire_get_research_product_details returned no product for ${identifier}`,
+      )
     }
     return data
   }
@@ -130,18 +132,21 @@ export class OpenaireClient {
   /**
    * Resolve a DOI to its canonical OpenAIRE id (bare). Returns null when the DOI
    * is unknown to the Graph. Used by corpus_add to canonicalize a DOI input
-   * before inserting the stub row.
+   * before inserting the stub row. `get_research_product_details` dereferences a
+   * DOI directly, so a single call yields the canonical id.
    */
   async resolveDoi(doi: string): Promise<string | null> {
     const bare = normalizeDoi(doi)
     if (!bare) return null
-    const env = await this.callTool<McpEnvelope<SearchData>>(
-      "openaire_kg_search_research_products",
-      { pid: [bare], pageSize: 1 },
-    )
-    const data = this.unwrap(env, "openaire_kg_search_research_products")
-    const first = data.results?.[0]
-    return first && typeof first.id === "string" ? stripEntityPrefix(first.id) : null
+    try {
+      const product = await this.getResearchProduct(bare)
+      return stripEntityPrefix(product.id)
+    } catch (err) {
+      // A DOI unknown to the Graph surfaces as not-found — treat as unresolved
+      // rather than a hard error (corpus_add reports it in `unresolved`).
+      if (err instanceof McpNotFoundError) return null
+      throw err
+    }
   }
 
   // -------------------------------------------------------------------------
