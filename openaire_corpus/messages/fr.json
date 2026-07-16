@@ -56,7 +56,7 @@
     "aria": "État des services",
     "app": "App",
     "alien": "Alien",
-    "bnf": "OpenAIRE",
+    "openaire": "OpenAIRE",
     "status": {
       "green": "opérationnel",
       "orange": "dégradé",

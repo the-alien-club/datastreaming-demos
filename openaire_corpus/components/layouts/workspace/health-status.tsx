@@ -1,7 +1,7 @@
 "use client"
 
 // components/layouts/workspace/health-status.tsx
-// WorkspaceHealthStatus — the three-lane (App · Alien · BnF) health indicator
+// WorkspaceHealthStatus — the three-lane (App · Alien · OpenAIRE) health indicator
 // in the workspace header, replacing the old static "MCP" dot. Each lane shows
 // a colored dot (green / orange / red) derived from tool-call outcomes over the
 // last HEALTH_WINDOW_MS, polled via useHealth(). A per-lane tooltip spells out
@@ -18,10 +18,10 @@ const DOT_CLASS: Record<HealthStatus, string> = {
   red: "bg-destructive shadow-[0_0_8px_var(--destructive)]",
 }
 
-const LANES: { lane: HealthLane; labelKey: "app" | "alien" | "bnf" }[] = [
+const LANES: { lane: HealthLane; labelKey: "app" | "alien" | "openaire" }[] = [
   { lane: "app", labelKey: "app" },
   { lane: "alien", labelKey: "alien" },
-  { lane: "bnf", labelKey: "bnf" },
+  { lane: "openaire", labelKey: "openaire" },
 ]
 
 function LaneDot({

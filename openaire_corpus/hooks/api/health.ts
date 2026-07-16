@@ -3,7 +3,7 @@
  * TanStack Query hook for the workspace health indicator.
  *
  * useHealth — polls GET /api/health every HEALTH_POLL_MS and returns the
- * per-lane (app / alien / bnf) status snapshot the header renders.
+ * per-lane (app / alien / openaire) status snapshot the header renders.
  *
  * HTTP calls use apiFetch (basePath-aware); raw fetch() is forbidden.
  * See playbook/hooks.md.

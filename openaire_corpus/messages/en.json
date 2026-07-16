@@ -56,7 +56,7 @@
     "aria": "Service health",
     "app": "App",
     "alien": "Alien",
-    "bnf": "OpenAIRE",
+    "openaire": "OpenAIRE",
     "status": {
       "green": "operational",
       "orange": "degraded",

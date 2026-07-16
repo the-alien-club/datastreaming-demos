@@ -48,7 +48,7 @@ export class HealthQueries {
     const tallies: Record<HealthLane, LaneTally> = {
       app: { ok: 0, error: 0 },
       alien: { ok: 0, error: 0 },
-      bnf: { ok: 0, error: 0 },
+      openaire: { ok: 0, error: 0 },
     }
 
     for (const row of rows) {
@@ -66,7 +66,7 @@ export class HealthQueries {
     return {
       app: { ...tallies.app, status: laneStatus(tallies.app) },
       alien: { ...tallies.alien, status: laneStatus(tallies.alien) },
-      bnf: { ...tallies.bnf, status: laneStatus(tallies.bnf) },
+      openaire: { ...tallies.openaire, status: laneStatus(tallies.openaire) },
       windowMs: HEALTH_WINDOW_MS,
     }
   }

@@ -9,9 +9,9 @@ import Anthropic from "@anthropic-ai/sdk"
 import { env } from "@/lib/env"
 import { SESSION_TITLE_MODEL } from "@/lib/constants"
 
-const TITLE_SYSTEM_PROMPT = `Tu nommes une session de recherche à partir de la première question d'un chercheur.
-Réponds UNIQUEMENT par un titre court en français — 2 à 6 mots, sans guillemets, sans ponctuation finale, sans préfixe.
-Le titre doit capturer le sujet de la question, pas la reformuler intégralement.`
+const TITLE_SYSTEM_PROMPT = `You name a research session from a researcher's first question.
+Reply with ONLY a short title in English — 2 to 6 words, no quotes, no trailing punctuation, no prefix.
+The title should capture the topic of the question, not restate it in full.`
 
 /** A short title is a handful of tokens — cap tightly. */
 const TITLE_MAX_TOKENS = 32
@@ -23,7 +23,7 @@ const TITLE_MAX_LENGTH = 100
 const FIRST_MESSAGE_MAX_CHARS = 2_000
 
 /**
- * Generate a short French title for a session from its first user message.
+ * Generate a short English title for a session from its first user message.
  * Returns the trimmed title, or `null` when the message is empty or the model
  * returns nothing usable. Throws on a transport/API failure — callers decide
  * whether that's fatal (it isn't, for auto-naming).

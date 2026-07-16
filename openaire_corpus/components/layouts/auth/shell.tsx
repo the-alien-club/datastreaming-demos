@@ -1,5 +1,5 @@
 // components/layouts/auth/shell.tsx
-// LayoutAuthShell — the dark Alien × BnF split layout shared by sign-in, sign-up
+// LayoutAuthShell — the dark Alien × OpenAIRE split layout shared by sign-in, sign-up
 // and forgot-password. Left: a brand panel (glyph + co-brand + value-prop copy),
 // hidden on small screens. Right: the form (children), always centered. The DS
 // voice rules apply to the copy: sentence case, possessive triad, no emoji.
@@ -25,12 +25,12 @@ export function LayoutAuthShell({ children }: { children: ReactNode }) {
           />
           <div className="h-6 w-px bg-border" aria-hidden />
           <Image
-            src="/brand/bnf-logo-w.png"
-            alt="BnF — Bibliothèque nationale de France"
-            width={960}
-            height={359}
+            src="/brand/openaire-logo-w.svg"
+            alt="OpenAIRE — Open Science"
+            width={168}
+            height={30}
             priority
-            className="h-5.5 w-auto opacity-90"
+            className="h-5 w-auto opacity-90"
           />
         </div>
 

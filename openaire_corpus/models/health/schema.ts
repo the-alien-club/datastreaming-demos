@@ -4,22 +4,22 @@
 //
 // The indicator answers a simple operational question for the librarian: are
 // the three moving parts behind the agent healthy right now?
-//   • app   — this Next.js app's own tools (corpus, notes, memory, ingest, doc)
-//   • alien — the Alien data-cluster RAG (the rag_* tools relay to it)
-//   • bnf   — the BnF, relayed through the (Alien-hosted) BnF MCP server
+//   • app      — this Next.js app's own tools (corpus, notes, memory, ingest, doc)
+//   • alien    — the Alien data-cluster RAG (the rag_* tools relay to it)
+//   • openaire — the OpenAIRE Graph, relayed through the (Alien-hosted) OpenAIRE MCP server
 //
 // Health is derived purely from tool-call outcomes persisted in `tool_call`
-// over a sliding window (see HEALTH_WINDOW_MS). There is no active probe: a BnF
-// MCP that fails to load emits no tool calls, so its lane simply stays green
-// (per product decision — "if the MCP is down, assume the BnF is green"). The
-// lanes flare only on REAL relayed failures (429/401/403/500, cluster errors,
+// over a sliding window (see HEALTH_WINDOW_MS). There is no active probe: an
+// OpenAIRE MCP that fails to load emits no tool calls, so its lane simply stays
+// green (per product decision — "if the MCP is down, assume OpenAIRE is green").
+// The lanes flare only on REAL relayed failures (429/401/403/500, cluster errors,
 // internal exceptions) the agent actually hit.
 
 /** A lane's health. green = no failures; orange = mixed; red = only failures. */
 export type HealthStatus = "green" | "orange" | "red"
 
 /** The three lanes the indicator surfaces. */
-export type HealthLane = "app" | "alien" | "bnf"
+export type HealthLane = "app" | "alien" | "openaire"
 
 /** Per-lane success/failure tallies within the window. */
 export type LaneTally = { ok: number; error: number }
@@ -38,7 +38,7 @@ export type LaneHealth = LaneTally & {
 export type HealthSnapshot = {
   app: LaneHealth
   alien: LaneHealth
-  bnf: LaneHealth
+  openaire: LaneHealth
   /** The window width (ms) the tallies cover — echoed so the client can label
    *  "over the last 5 min" without hard-coding it. */
   windowMs: number
@@ -47,7 +47,7 @@ export type HealthSnapshot = {
 /**
  * Classify a persisted tool call into a health lane from its name + MCP origin.
  *
- *   • bnf   — MCP tools relayed by the "bnf" server (source="mcp", server="bnf")
+ *   • openaire — MCP tools relayed by the "openaire" server (source="mcp", server="openaire")
  *   • alien — the data-cluster RAG tools (rag_query / rag_keyword_search /
  *             rag_get_text) — app-defined wrappers that call the cluster, so
  *             their failure means the cluster (Alien) is unhealthy
@@ -63,7 +63,7 @@ export function classifyHealthLane(call: {
   serverName: string | null
 }): HealthLane | null {
   if (call.source === "mcp") {
-    return call.serverName === "bnf" ? "bnf" : null
+    return call.serverName === "openaire" ? "openaire" : null
   }
   if (call.tool.startsWith("rag_")) return "alien"
   if (

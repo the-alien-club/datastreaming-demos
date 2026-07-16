@@ -1,7 +1,7 @@
 /**
  * GET /api/health
  *
- * Returns the workspace health snapshot — per-lane (app / alien / bnf) status
+ * Returns the workspace health snapshot — per-lane (app / alien / openaire) status
  * derived from tool-call outcomes over the last HEALTH_WINDOW_MS. Drives the
  * tri-status indicator in the workspace header (polled every HEALTH_POLL_MS).
  *
