@@ -123,9 +123,18 @@ export class LiveClusterSink implements ClusterSink {
     original: { filename: string; bytes: Buffer; contentType: string };
     markdown: string;
     hasFulltext: boolean;
+    figures?: Array<{
+      id: string;
+      page: number;
+      caption: string;
+      filename: string;
+      bytes: Buffer;
+      contentType: string;
+    }>;
   }): Promise<{ entryId: number }> {
     const { datasetId, openaireId, meta, chunks, embeddings, original, markdown, hasFulltext } =
       input;
+    const figures = input.figures ?? [];
     if (chunks.length !== embeddings.length) {
       throw new Error(
         `cluster upsert: ${chunks.length} chunks but ${embeddings.length} embeddings for ${openaireId}`,
@@ -158,6 +167,14 @@ export class LiveClusterSink implements ClusterSink {
         cited_by: meta.citedBy ?? null,
         references: meta.references ?? null,
         has_fulltext: hasFulltext,
+        // Figure manifest → the app resolves `![[openaireId|caption|figureId]]` by
+        // matching `id` here, then downloads `file` (a `processed` entry file).
+        figures: figures.map((f) => ({
+          id: f.id,
+          caption: f.caption,
+          page: f.page,
+          file: f.filename,
+        })),
         source: "openaire",
       },
     });
@@ -170,6 +187,14 @@ export class LiveClusterSink implements ClusterSink {
       chunks: buildIndexChunks(openaireId, meta, chunks, embeddings),
       collection_name: "entry_chunks",
     });
+
+    // Attach each figure as a `processed` entry file (the file_type the cluster
+    // reserves for pipeline outputs / figures) → processed.additional_files. MUST
+    // run AFTER POST /processed: saving the processed CONTENT rebuilds the
+    // `processed` manifest section and would otherwise wipe these uploads.
+    for (const f of figures) {
+      await this.uploadProcessedFile(entry.id, f.filename, f.bytes, f.contentType);
+    }
 
     return { entryId: entry.id };
   }
@@ -213,22 +238,43 @@ export class LiveClusterSink implements ClusterSink {
     throw new Error(`createEntry: unexpected response shape: ${JSON.stringify(res).slice(0, 200)}`);
   }
 
-  /**
-   * Multipart upload of the doc's `original` file. The body is rebuilt per attempt
-   * (undici FormData / its stream is single-use), and the bytes are wrapped in a
-   * `Uint8Array` — a valid `BlobPart` under NodeNext.
-   */
+  /** Attach the doc's `original` file (doc.md, or the PDF for fulltext) to an entry. */
   private async uploadOriginalFile(
     entryId: number,
     filename: string,
     bytes: Buffer,
     contentType: string,
   ): Promise<void> {
+    await this.uploadFile(entryId, filename, bytes, contentType, "original");
+  }
+
+  /** Attach a `processed` file (a figure image / pipeline output) to an entry. */
+  private async uploadProcessedFile(
+    entryId: number,
+    filename: string,
+    bytes: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    await this.uploadFile(entryId, filename, bytes, contentType, "processed");
+  }
+
+  /**
+   * Multipart upload of a file. The body is rebuilt per attempt (undici FormData /
+   * its stream is single-use), and the bytes are wrapped in a `Uint8Array` — a
+   * valid `BlobPart` under NodeNext.
+   */
+  private async uploadFile(
+    entryId: number,
+    filename: string,
+    bytes: Buffer,
+    contentType: string,
+    fileType: "original" | "processed",
+  ): Promise<void> {
     const formFactory = (): FormData => {
       const form = new FormData();
       const blob = new Blob([new Uint8Array(bytes)], { type: contentType });
       form.set("file", blob, filename);
-      form.set("file_type", "original");
+      form.set("file_type", fileType);
       return form;
     };
     await this.http.postForm(`/api/v1/entries/${entryId}/upload`, formFactory);

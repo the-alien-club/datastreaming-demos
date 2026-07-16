@@ -60,6 +60,7 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
     const original = hasFulltext
       ? await this.pdfOriginal(doc.openaireId, markdown)
       : mdOriginal(markdown);
+    const figures = await this.loadFigures(doc);
 
     try {
       const { datasetId } = await this.cluster.ensureDataset({ projectId: doc.projectId });
@@ -73,6 +74,7 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
         original,
         markdown,
         hasFulltext,
+        ...(figures.length > 0 ? { figures } : {}),
       });
       await this.blob.putJson(keys.registered(doc.openaireId), { datasetId, entryId } satisfies Receipt);
       // Record chunks-written so the read-model reconciles (chunks tally).
@@ -91,6 +93,36 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
       }
       throw e;
     }
+  }
+
+  /** Load each figure's bytes from S3 into the upload payload. A figure whose bytes
+   *  vanished is skipped (best-effort — a missing figure never blocks the doc). */
+  private async loadFigures(
+    doc: EmbeddedDoc,
+  ): Promise<
+    Array<{ id: string; page: number; caption: string; filename: string; bytes: Buffer; contentType: string }>
+  > {
+    const out: Array<{
+      id: string;
+      page: number;
+      caption: string;
+      filename: string;
+      bytes: Buffer;
+      contentType: string;
+    }> = [];
+    for (const f of doc.figures ?? []) {
+      const bytes = await this.blob.getBytes(keys.figure(doc.openaireId, f.id, f.ext));
+      if (!bytes) continue;
+      out.push({
+        id: f.id,
+        page: f.page,
+        caption: f.caption,
+        filename: `fig-${f.id}.${f.ext}`,
+        bytes,
+        contentType: f.contentType,
+      });
+    }
+    return out;
   }
 
   /** The fulltext original is the PDF when present; fall back to the markdown. */

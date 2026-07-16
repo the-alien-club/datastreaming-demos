@@ -24,7 +24,7 @@ import { LiveScholexClient, NullScholexClient } from "./openaire/scholex.js";
 import { LiveEmbedder } from "./live/embedder.js";
 import { LiveClusterSink } from "./live/cluster.js";
 import { LivePdfFetcher } from "./live/pdf-fetcher.js";
-import { LivePdfExtractor } from "./live/pdf-extractor.js";
+import { MistralOcrExtractor } from "./live/mistral-ocr.js";
 import { TerminalEmitter } from "./live/progress-callback.js";
 import { CompletionMonitor } from "./live/completion-monitor.js";
 import { startServer } from "./server.js";
@@ -56,7 +56,9 @@ async function main(): Promise<void> {
   const pdfFetcher = hostGate
     ? new LivePdfFetcher({ hostGate, maxBytes: cfg.pdfMaxBytes })
     : undefined;
-  const pdfExtractor = cfg.fulltextEnabled ? new LivePdfExtractor() : undefined;
+  // Full-text extraction via Mistral OCR (built only when fulltext is on — it
+  // reads MISTRAL_API_KEY lazily, so abstract-only runs never need the key).
+  const pdfExtractor = cfg.fulltextEnabled ? new MistralOcrExtractor() : undefined;
 
   // The terminal commit callback + the run-completion detector. The detector is
   // wired to the pipeline's onOutcome seam (below), so a doc reaching a terminal

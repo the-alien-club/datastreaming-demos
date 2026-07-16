@@ -80,28 +80,33 @@ export class LivePdfFetcher implements PdfFetcher {
       return { ok: false, failure: "timeout" };
     }
 
+    // Absorb any async body 'error' (e.g. UND_ERR_ABORTED when the timeout signal
+    // aborts mid-stream). Without a listener Node treats it as fatal; the for-await
+    // / discardBody paths still surface the failure themselves.
+    res.body.on("error", () => {});
+
     const status = res.statusCode;
     if (status === 401 || status === 402 || status === 403) {
-      await drain(res.body);
+      discardBody(res.body);
       return { ok: false, failure: "paywalled", detail: `status ${status}` };
     }
     if (status === 404 || status === 410) {
-      await drain(res.body);
+      discardBody(res.body);
       return { ok: false, failure: "not_found", detail: `status ${status}` };
     }
     if (status === 429 || status === 503) {
-      await drain(res.body);
+      discardBody(res.body);
       // Treat as timeout so the caller's retry loop backs off + retries.
       return { ok: false, failure: "timeout", detail: `status ${status}` };
     }
     if (status < 200 || status >= 300) {
-      await drain(res.body);
+      discardBody(res.body);
       return { ok: false, failure: "not_found", detail: `status ${status}` };
     }
 
     const contentType = String(res.headers["content-type"] ?? "").toLowerCase();
     if (contentType.includes("text/html")) {
-      await drain(res.body);
+      discardBody(res.body);
       return { ok: false, failure: "html_not_pdf", detail: contentType };
     }
 
@@ -113,7 +118,7 @@ export class LivePdfFetcher implements PdfFetcher {
         const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
         size += buf.length;
         if (size > this.maxBytes) {
-          res.body.destroy();
+          discardBody(res.body);
           return { ok: false, failure: "too_large", detail: `> ${this.maxBytes} bytes` };
         }
         chunks.push(buf);
@@ -135,8 +140,17 @@ export class LivePdfFetcher implements PdfFetcher {
   }
 }
 
-async function drain(body: { destroy: () => void }): Promise<void> {
+/**
+ * Discard a response body without crashing the process. An aborted/reset undici
+ * body emits its `UND_ERR_ABORTED` on the stream's ASYNC 'error' event — a plain
+ * try/catch around `destroy()` cannot catch it, and with no listener Node treats
+ * it as a fatal uncaught error (observed live: the worker exited on a timed-out
+ * PDF fetch). Attaching a no-op 'error' listener before destroying absorbs it.
+ * Fire-and-forget: callers are already returning a failure result.
+ */
+function discardBody(body: { on(ev: "error", cb: () => void): unknown; destroy: () => void }): void {
   try {
+    body.on("error", () => {});
     body.destroy();
   } catch {
     // best-effort

@@ -12,7 +12,6 @@ import { MemoryQueue } from "./core/queue-memory.js";
 import { MemoryBlobStore } from "./core/blob.js";
 import { createMemoryLogger } from "./core/logger.js";
 import { MemoryDocState } from "./domain/doc-state-memory.js";
-import type { DocRef } from "./domain/types.js";
 import {
   FakeOpenAireClient,
   FakeClusterSink,

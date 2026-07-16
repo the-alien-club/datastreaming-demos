@@ -23,6 +23,9 @@ export const keys = {
   chunks: (id: string) => `chunks/${oaSlug(id)}.json`,
   /** Rendered doc markdown (the entry's original/processed artifact). */
   doc: (id: string) => `doc/${oaSlug(id)}.md`,
+  /** A figure image extracted from the PDF (fulltext lane). `figId` = "f1"…,
+   *  `ext` = "jpeg"|"png". Written by extract, read + uploaded by register. */
+  figure: (id: string, figId: string, ext: string) => `figures/${oaSlug(id)}/${figId}.${ext}`,
   /** Embeddings for a doc (content-hashed on the chunk set). */
   embeddings: (id: string, sha8: string) => `embed/${oaSlug(id)}.${sha8}.json`,
   /** Terminal registration receipt — its presence means the doc is fully ingested. */

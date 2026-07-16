@@ -32,9 +32,31 @@ export interface PdfFetcher {
   fetch(input: { url: string; host: string }): Promise<PdfFetchResult>;
 }
 
-/** Extracts per-page text from PDF bytes. Throws on a corrupt/unreadable PDF. */
+/** A figure extracted from a PDF (Mistral OCR image crop). Bytes ride in-process
+ *  from the extractor to the extract stage, which persists them to S3; only a
+ *  lightweight descriptor (domain FigureRef) travels the queue afterwards. */
+export interface ExtractedFigure {
+  /** Stable per-doc id in reading order — "f1", "f2", … The citation key half of
+   *  `![[openaireId|caption|figureId]]`. */
+  id: string;
+  /** 1-based PDF page the figure appears on. */
+  page: number;
+  /** Decoded image bytes. */
+  bytes: Buffer;
+  /** MIME type ("image/jpeg" | "image/png"). */
+  contentType: string;
+  /** Caption/description (Mistral `image_annotation` when present, else ""). The
+   *  surrounding caption prose also stays in the page markdown, so search is
+   *  unaffected when this is empty. */
+  caption: string;
+}
+
+/** Extracts per-page text (+ figures) from PDF bytes. Throws on an unreadable PDF. */
 export interface PdfTextExtractor {
-  extract(bytes: Buffer, opts: { maxPages: number }): Promise<{ pages: string[] }>;
+  extract(
+    bytes: Buffer,
+    opts: { maxPages: number },
+  ): Promise<{ pages: string[]; figures: ExtractedFigure[] }>;
 }
 
 /** RunPod (or any) embedder — vectors for a doc's chunk texts. */
@@ -59,5 +81,16 @@ export interface ClusterSink {
     /** Markdown rendering of the doc, stored as `processed` content. */
     markdown: string;
     hasFulltext: boolean;
+    /** Figure images to attach to the entry (fulltext lane). Each is uploaded as a
+     *  `processed` file named `filename`; the id/caption/page are recorded in the
+     *  entry metadata's `figures[]` so the app can resolve `![[…|…|figureId]]`. */
+    figures?: Array<{
+      id: string;
+      page: number;
+      caption: string;
+      filename: string;
+      bytes: Buffer;
+      contentType: string;
+    }>;
   }): Promise<{ entryId: number }>;
 }

@@ -21,7 +21,10 @@ function isTextRun(item: unknown): item is TextRun {
 }
 
 export class LivePdfExtractor implements PdfTextExtractor {
-  async extract(bytes: Buffer, opts: { maxPages: number }): Promise<{ pages: string[] }> {
+  async extract(
+    bytes: Buffer,
+    opts: { maxPages: number },
+  ): Promise<{ pages: string[]; figures: [] }> {
     // pdfjs wants a Uint8Array it can transfer; copy so we don't detach the caller's Buffer.
     const data = new Uint8Array(bytes);
     const doc = await getDocument({
@@ -45,7 +48,8 @@ export class LivePdfExtractor implements PdfTextExtractor {
         pages.push(text);
         page.cleanup();
       }
-      return { pages };
+      // pdfjs text-layer extraction yields no figure crops (Mistral OCR does).
+      return { pages, figures: [] };
     } finally {
       await doc.destroy();
     }

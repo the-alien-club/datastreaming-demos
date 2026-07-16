@@ -47,6 +47,19 @@ export interface PdfCandidate {
   license: string | null;
 }
 
+/** A figure extracted from the full-text PDF (Mistral OCR crop). The lightweight
+ *  descriptor that rides the queue — the image bytes live in S3 at
+ *  keys.figure(openaireId, id), written by the extract stage and read by register. */
+export interface FigureRef {
+  /** Stable per-doc id ("f1"…) — the figure half of `![[openaireId|caption|figureId]]`. */
+  id: string;
+  page: number;
+  contentType: string;
+  caption: string;
+  /** File extension for the data-cluster filename (e.g. "jpeg", "png"). */
+  ext: string;
+}
+
 /** Resolve → prepare (abstract/metadata) or resolve → fetchPdf (fulltext). */
 export interface ResolvedDoc extends DocRef {
   lane: Lane;
@@ -56,6 +69,8 @@ export interface ResolvedDoc extends DocRef {
   /** Extracted per-page text (fulltext lane, set by the extract stage — B-M2).
    *  When present, prepare builds page chunks from these instead of the abstract. */
   pageTexts?: string[];
+  /** Figures extracted from the PDF (fulltext lane). Bytes in S3; register uploads. */
+  figures?: FigureRef[];
 }
 
 /** Where a chunk came from — the citation locator. */
@@ -75,6 +90,8 @@ export interface PreparedDoc extends DocRef {
   lane: Lane;
   meta: OaMeta;
   chunks: PreparedChunk[];
+  /** Figures to upload at register (fulltext lane). Bytes in S3, keyed by id. */
+  figures?: FigureRef[];
 }
 
 /** A doc whose chunks are embedded — feeds register. */
@@ -84,4 +101,6 @@ export interface EmbeddedDoc extends DocRef {
   /** S3 key where the embeddings landed (heavy → not inlined). */
   embeddingsKey: string;
   chunkCount: number;
+  /** Figures to upload at register (fulltext lane). Bytes in S3, keyed by id. */
+  figures?: FigureRef[];
 }

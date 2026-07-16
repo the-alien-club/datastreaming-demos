@@ -10,6 +10,7 @@ import type { OaProduct } from "../openaire/types.js";
 import type {
   ClusterSink,
   Embedder,
+  ExtractedFigure,
   PdfFetchResult,
   PdfFetcher,
   PdfTextExtractor,
@@ -104,12 +105,21 @@ export class FakePdfFetcher implements PdfFetcher {
   }
 }
 
-/** Returns a fixed set of page texts (or throws to simulate a corrupt PDF). */
+/** Returns a fixed set of page texts + optional figures (or throws to simulate a
+ *  corrupt PDF). */
 export class FakePdfExtractor implements PdfTextExtractor {
-  constructor(private readonly opts: { pages?: string[]; throwErr?: boolean } = {}) {}
-  async extract(_bytes: Buffer, opts: { maxPages: number }): Promise<{ pages: string[] }> {
+  constructor(
+    private readonly opts: { pages?: string[]; figures?: ExtractedFigure[]; throwErr?: boolean } = {},
+  ) {}
+  async extract(
+    _bytes: Buffer,
+    opts: { maxPages: number },
+  ): Promise<{ pages: string[]; figures: ExtractedFigure[] }> {
     if (this.opts.throwErr) throw new Error("corrupt pdf");
-    return { pages: (this.opts.pages ?? []).slice(0, opts.maxPages) };
+    return {
+      pages: (this.opts.pages ?? []).slice(0, opts.maxPages),
+      figures: this.opts.figures ?? [],
+    };
   }
 }
 

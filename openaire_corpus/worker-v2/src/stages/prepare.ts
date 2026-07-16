@@ -179,6 +179,7 @@ export class PrepareStage extends PipelineStage<ResolvedDoc, PreparedDoc> {
       lane: doc.lane,
       meta: doc.meta,
       chunks,
+      ...(doc.figures && doc.figures.length > 0 ? { figures: doc.figures } : {}),
     };
     return { kind: "emit", items: [prepared] };
   }
