@@ -17,11 +17,12 @@ interface Note {
 }
 
 interface LayoutCarnetProps {
+  projectId: string
   notes: Note[]
   onCitationClick: (c: ParsedCitation) => void
 }
 
-export function LayoutCarnet({ notes, onCitationClick }: LayoutCarnetProps) {
+export function LayoutCarnet({ projectId, notes, onCitationClick }: LayoutCarnetProps) {
   const t = useTranslations("research.carnet")
 
   // Ids present in this carnet — a note-link pill greys out when its target is
@@ -70,6 +71,7 @@ export function LayoutCarnet({ notes, onCitationClick }: LayoutCarnetProps) {
               {notes.map((note, i) => (
                 <div key={note.id}>
                   <CarnetEntry
+                    projectId={projectId}
                     note={note}
                     onCitationClick={onCitationClick}
                     onNoteLinkClick={scrollToEntry}

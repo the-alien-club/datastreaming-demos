@@ -1,4 +1,4 @@
-// app/[locale]/projects/[projectId]/constituer/page.tsx
+// app/[locale]/projects/[projectId]/corpus/page.tsx
 // Server component. Authenticates, resolves the project, fetches the head
 // corpus snapshot, ensures a default corpus session exists, fetches the
 // sessions list, and hands everything to CorpusClient as initial* props.
@@ -24,7 +24,7 @@ export default async function ConstituerPage({
 }) {
   const { locale, projectId } = await params
 
-  const user = await requireSessionUser(`/projects/${projectId}/constituer`)
+  const user = await requireSessionUser(`/projects/${projectId}/corpus`)
 
   const project = await ProjectQueries.get(projectId)
   if (!project || project.ownerId !== user.id) notFound()

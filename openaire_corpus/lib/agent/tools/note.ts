@@ -1,5 +1,5 @@
 /**
- * Note tool definitions for the BnF research agent.
+ * Note tool definitions for the OpenAIRE research agent.
  *
  * Five tools covering the research note lifecycle:
  *   - note_list   — list all notes for the project (most-recent first)
@@ -12,8 +12,12 @@
  * note_create / note_update / note_append publish a `note_event` via `ctx.emit`
  * so connected SSE clients receive real-time feedback without polling.
  *
- * Citation syntax: [[<ark>|<short label>|<folio>]] — the folio is mandatory
- * for deep-linking into the BnF IIIF viewer. The agent must not fabricate one.
+ * Citation syntax: [[<openaireId>|<short label>|<locator>]] — the locator is
+ * OPTIONAL (`p<N>` for a full-text page, or `abstract`); omit it to cite the work
+ * as a whole. The agent must not fabricate an openaireId or locator.
+ *
+ * Figure embed: ![[<openaireId>|<caption>|<figureId>]] — shows a figure extracted
+ * from the document's full text. Get figureIds from rag_list_figures; never invent one.
  *
  * Note-link syntax: [[note:<note_id>|<label>]] — an INTERNAL cross-reference to
  * another note in this project. Renders as a clickable pill that opens the
@@ -85,10 +89,10 @@ export const noteCreateTool = defineTool<
   description:
     "Create a new Markdown research note. " +
     "Structure the body with ## / ### sections, bullet lists, and inline citations. " +
-    "Citation syntax: [[<ark>|<short label>|<folio>]] — folio is mandatory; " +
-    "if you do not have a folio from rag_query, cite in prose only. " +
-    "Embed a folio image with ![[<ark>|<caption>|<folio>]] (the same syntax with a leading !) " +
-    "to show a page — the image is fetched from Gallica by ark+folio, no link needed. " +
+    "Citation syntax: [[<openaireId>|<short label>|<locator>]] — locator is OPTIONAL " +
+    "(`p<N>` for a full-text page, or `abstract`); omit it to cite the work as a whole. " +
+    "Embed a figure with ![[<openaireId>|<caption>|<figureId>]] (the same syntax with a leading !) " +
+    "to show a figure from the paper — get figureIds from rag_list_figures, no link needed. " +
     "Link to another note with [[note:<note_id>|<label>]] (ids from note_list/note_get) — " +
     "the pill opens that note. " +
     "Call note_list first to avoid near-duplicates.",
@@ -104,8 +108,8 @@ export const noteCreateTool = defineTool<
       .min(1)
       .max(200_000)
       .describe(
-        "The note body in Markdown. Use [[ark|label|folio]] for inline citations, " +
-          "![[ark|caption|folio]] to embed a folio image, and [[note:<id>|<label>]] to link " +
+        "The note body in Markdown. Use [[openaireId|label|locator]] for inline citations, " +
+          "![[openaireId|caption|figureId]] to embed a figure, and [[note:<id>|<label>]] to link " +
           "another note.",
       ),
   }),
@@ -144,7 +148,7 @@ export const noteUpdateTool = defineTool<
     "The previous body is automatically snapshotted to NoteVersion before mutation. " +
     "Omit a field to leave it unchanged. " +
     "Use this to extend a note with new findings rather than creating a near-duplicate. " +
-    "Body supports [[ark|label|folio]] citations, ![[ark|caption|folio]] image embeds, and " +
+    "Body supports [[openaireId|label|locator]] citations, ![[openaireId|caption|figureId]] figure embeds, and " +
     "[[note:<id>|<label>]] links to other notes.",
   inputSchema: z.object({
     id: z.string().uuid().describe("The note's UUID."),
@@ -160,8 +164,8 @@ export const noteUpdateTool = defineTool<
       .max(200_000)
       .optional()
       .describe(
-        "New body in Markdown, if replacing it. Use [[ark|label|folio]] citations and " +
-          "![[ark|caption|folio]] image embeds.",
+        "New body in Markdown, if replacing it. Use [[openaireId|label|locator]] citations and " +
+          "![[openaireId|caption|figureId]] figure embeds.",
       ),
   }),
   handler: async (input, ctx) => {
@@ -197,7 +201,7 @@ export const noteAppendTool = defineTool<
     "passage, so it is much faster and far cheaper than rewriting the entire note. " +
     "The new text is placed after a blank line; the prior body is snapshotted to " +
     "NoteVersion and citations are re-parsed over the whole note. " +
-    "Use [[<ark>|<short label>|<folio>]] citations, ![[<ark>|<caption>|<folio>]] image embeds, " +
+    "Use [[<openaireId>|<short label>|<locator>]] citations, ![[<openaireId>|<caption>|<figureId>]] figure embeds, " +
     "and [[note:<id>|<label>]] links to other notes. " +
     "Use note_update only for surgical edits to existing text (fixing or removing).",
   inputSchema: z.object({
@@ -209,8 +213,8 @@ export const noteAppendTool = defineTool<
       .max(200_000)
       .describe(
         "Markdown to append at the end of the note. Include your own ## / ### headings; " +
-          "it is added after a blank line. Use [[ark|label|folio]] citations, " +
-          "![[ark|caption|folio]] image embeds, and [[note:<id>|<label>]] note links.",
+          "it is added after a blank line. Use [[openaireId|label|locator]] citations, " +
+          "![[openaireId|caption|figureId]] figure embeds, and [[note:<id>|<label>]] note links.",
       ),
   }),
   handler: async (input, ctx) => {

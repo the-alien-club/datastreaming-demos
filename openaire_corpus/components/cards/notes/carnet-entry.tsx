@@ -4,6 +4,7 @@ import { NoteBody } from "./note-body"
 import type { ParsedCitation } from "@/lib/citations/syntax"
 
 interface CarnetEntryProps {
+  projectId: string
   note: {
     id: string
     title: string
@@ -16,6 +17,7 @@ interface CarnetEntryProps {
 }
 
 export function CarnetEntry({
+  projectId,
   note,
   onCitationClick,
   onNoteLinkClick,
@@ -34,6 +36,7 @@ export function CarnetEntry({
       <p className="text-xs text-muted-foreground mb-4">{dateStr}</p>
       <NoteBody
         body={note.body_md ?? ""}
+        projectId={projectId}
         onCitationClick={onCitationClick}
         onNoteLinkClick={onNoteLinkClick}
         knownNoteIds={knownNoteIds}

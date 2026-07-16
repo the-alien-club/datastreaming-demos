@@ -31,6 +31,7 @@ export const AGENT_TOOLS = {
   ragQuery:         "rag_query",
   ragKeywordSearch: "rag_keyword_search",
   ragGetText:       "rag_get_text",
+  ragListFigures:   "rag_list_figures",
 
   // --- Note tools -------------------------------------------------------------
   noteList:   "note_list",

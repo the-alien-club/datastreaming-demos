@@ -14,7 +14,7 @@ import { useIngestStatus } from "@/hooks/api/ingest"
 interface Props {
   status: string
   jobId?: string | null
-  /** e.g. "/fr/projects/<id>/ingerer" — built by the chat layout from locale + projectId */
+  /** e.g. "/en/projects/<id>/ingest" — built by the chat layout from locale + projectId */
   projectLocaleHref?: string
 }
 

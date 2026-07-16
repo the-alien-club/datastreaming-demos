@@ -542,6 +542,11 @@
     "espace": {
       "title": "Espace de recherche",
       "docs": "{count, number} docs",
+      "evidence": {
+        "title": "Sources et preuves",
+        "count": "{count, plural, one {# passage} other {# passages}}",
+        "openRecord": "ouvrir la notice →"
+      },
       "disposition": "Disposition",
       "atelier": "Atelier",
       "carnet": "Carnet",
@@ -630,73 +635,21 @@
       "added": "{count} à ingérer",
       "removed": "{count} à retirer",
       "excluded": "{count, plural, =0 {} one {# document non ingérable exclu} other {# documents non ingérables exclus}}",
-      "paidOcr": "{count, plural, one {# document numérisé sans couche OCR} other {# documents numérisés sans couche OCR}}",
-      "paidOcrCost": "Océrisation à la demande · ≈ {cost} $ pour la plateforme",
-      "paidOcrBudget": "Budget plateforme : {spent} $ / {ceiling} $ utilisés",
-      "paidOcrInclude": "Inclure l'océrisation",
-      "paidOcrIncluded": "Océrisation incluse ✓",
-      "paidOcrOverBudget": "Coût supérieur au budget de la plateforme ({ceiling} $) : océrisation indisponible. Les autres documents seront ingérés normalement.",
       "submit": "Lancer une ingestion",
-      "submitWithOcr": "Lancer l'ingestion + océrisation",
       "submitting": "Envoi…"
-    },
-    "paidOcr": {
-      "confirmTitle": "Océrisation à la demande",
-      "confirmBody": "{count, plural, one {# document numérisé sans couche OCR sera transcrit} other {# documents numérisés sans couche OCR seront transcrits}} via Mistral OCR. Ce traitement a un coût pour la plateforme (≈ {cost} $ US) — à utiliser à bon escient. Lancer l'océrisation ?",
-      "confirm": "Confirmer et lancer",
-      "confirming": "Lancement…",
-      "dismiss": "Annuler",
-      "budgetTitle": "Budget OCR dépassé",
-      "budgetBody": "Cette transcription (~{cost} $) dépasserait le budget OCR du projet (déjà dépensé {spent} $ sur un plafond de {ceiling} $).",
-      "close": "Fermer"
-    },
-    "stages": {
-      "extract": "Extraction OCR",
-      "chunk": "Découpage sémantique",
-      "embed": "Embedding",
-      "index": "Indexation"
-    },
-    "stageDesc": {
-      "extract": "Extraction du texte (OCR)",
-      "chunk": "Découpage sémantique des documents",
-      "embed": "Calcul des embeddings",
-      "index": "Indexation dans le cluster RAG"
-    },
-    "pipeline": {
-      "title": "Ingestion en cours",
-      "target": "Cible",
-      "targetValue": "cluster RAG OpenAIRE",
-      "overall": "Progression globale",
-      "pending": "En attente",
-      "skipped": "Ignoré",
-      "eta": "Temps restant estimé",
-      "etaComputing": "estimation…",
-      "outcomes": {
-        "ingested": "{count} ingéré·s",
-        "retrying": "{count} en reprise",
-        "skipped": "{count} ignoré·s",
-        "failed": "{count} en échec",
-        "excluded": "{count} non ingérable·s",
-        "removed": "{count} retiré·s"
-      }
     },
     "queue": {
       "title": "Traitement en cours",
       "finalized": "Documents finalisés",
-      "fetchTitle": "Récupération OpenAIRE",
-      "foliosFetched": "{done} / {total} folios récupérés",
       "etaLabel": "Temps restant",
       "etaComputing": "estimation…",
       "groups": {
-        "metadata": "Métadonnées",
-        "images": "Descriptions d'images",
-        "prep": "Préparation IA",
-        "ocr": "OCR Mistral",
-        "index": "Indexation"
+        "dedup": "Déduplication",
+        "embedding": "Vectorisation",
+        "indexing": "Indexation"
       },
       "inProgress": "{count} en cours",
       "waiting": "{count} en file",
-      "ahead": "{count} devant vous (autre traitement)",
       "idle": "—",
       "totals": {
         "done": "{count} terminés",

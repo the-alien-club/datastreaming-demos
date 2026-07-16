@@ -7,8 +7,10 @@ import rehypeSanitize from "rehype-sanitize"
 import {
   parseCitations,
   parseNoteLinks,
+  parseFigureEmbeds,
   CITATION_REGEX,
   NOTELINK_REGEX,
+  FIGURE_EMBED_REGEX,
 } from "@/lib/citations/syntax"
 import type { ParsedCitation } from "@/lib/citations/syntax"
 import { CitationPill } from "./citation-pill"
@@ -19,9 +21,12 @@ import { NoteLinkPill } from "./note-link-pill"
 // through untouched; the `a` component below swaps them for the real pill.
 const CITE_HREF_PREFIX = "#cite-"
 const NOTE_HREF_PREFIX = "#note-"
+const IMG_HREF_PREFIX = "#img-"
 
 interface NoteBodyProps {
   body: string
+  /** Project id — builds the figure image-proxy URL for `![[…|…|figureId]]` embeds. */
+  projectId: string
   onCitationClick: (c: ParsedCitation) => void
   /** Open another note from a `[[note:<id>|<label>]]` cross-reference. When
    *  omitted, note links render as non-navigating pills. */
@@ -109,26 +114,31 @@ const MD_COMPONENTS: Components = {
 
 export function NoteBody({
   body,
+  projectId,
   onCitationClick,
   onNoteLinkClick,
   knownNoteIds,
 }: NoteBodyProps) {
-  // Text citations and note links in left-to-right order. The rewrite below
-  // numbers its `#cite-<n>` / `#note-<n>` carriers in the same order, so index n
-  // maps straight back to the matching parsed token. The two regexes are disjoint
-  // on the original tokens (citation needs a `::` id; note link needs `note:`).
+  // Text citations, note links and figure embeds in left-to-right order. The
+  // rewrite below numbers its `#cite-<n>` / `#note-<n>` / `#img-<n>` carriers in
+  // the same order, so index n maps straight back to the matching parsed token.
+  // The regexes are disjoint on the original tokens (citation: `::` id, no `!`
+  // prefix; note link: `note:`; figure: `!` prefix + `fN` id).
   const citations = useMemo(() => parseCitations(body), [body])
   const noteLinks = useMemo(() => parseNoteLinks(body), [body])
+  const figures = useMemo(() => parseFigureEmbeds(body), [body])
 
-  // Rewrite citation/note-link tokens into inline markdown on the RAW body,
-  // BEFORE parsing. Citations become `[n](#cite-n)`, note links `[n](#note-n)` —
-  // both stay in their phrasing context instead of breaking block flow. Must run
-  // pre-parse: once markdown is parsed, `[[…]]` is ambiguous and no longer
-  // survives as plain text a post-parse plugin could match.
+  // Rewrite tokens into inline markdown links on the RAW body, BEFORE parsing.
+  // Figure embeds run FIRST so their `![[…]]` is consumed before the citation
+  // pass (whose `(?<!!)` would otherwise leave the `![` stranded). Each becomes a
+  // `[label](#kind-n)` carrier that survives urlTransform + sanitize (protocol-less
+  // fragment); the `a` component below swaps it for the real element.
   const markdown = useMemo(() => {
     let cite = 0
     let note = 0
+    let img = 0
     return body
+      .replace(FIGURE_EMBED_REGEX, () => `[fig](${IMG_HREF_PREFIX}${img++})`)
       .replace(CITATION_REGEX, () => `[${cite}](${CITE_HREF_PREFIX}${cite++})`)
       .replace(NOTELINK_REGEX, () => `[${note}](${NOTE_HREF_PREFIX}${note++})`)
   }, [body])
@@ -141,6 +151,55 @@ export function NoteBody({
           const citation = citations[Number(href.slice(CITE_HREF_PREFIX.length))]
           if (citation) {
             return <CitationPill citation={citation} onClick={onCitationClick} />
+          }
+        }
+        if (href?.startsWith(IMG_HREF_PREFIX)) {
+          const fig = figures[Number(href.slice(IMG_HREF_PREFIX.length))]
+          if (fig) {
+            const src = `/api/projects/${projectId}/figures/${encodeURIComponent(
+              fig.openaireId,
+            )}/${fig.figureId}`
+            // Clicking the figure opens its source (like a citation) — the figure
+            // belongs to a corpus document, so synthesize a citation from the embed
+            // and route it through onCitationClick (opens the source side-sheet).
+            const openSource = () =>
+              onCitationClick({
+                openaireId: fig.openaireId,
+                label: fig.caption || "Figure",
+                locator: null,
+                raw: fig.raw,
+                index: fig.index,
+                length: fig.length,
+              })
+            // Inline <span> wrapper (not <figure>) so it stays valid inside the
+            // paragraph <p> react-markdown puts phrasing content in.
+            return (
+              <span className="my-3 block">
+                <button
+                  type="button"
+                  onClick={openSource}
+                  title={fig.caption || "Open source"}
+                  className="block cursor-pointer rounded-md border border-border bg-white transition hover:border-brand-teal/50"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={fig.caption || "Figure"}
+                    loading="lazy"
+                    className="max-h-96 w-auto rounded-md"
+                  />
+                </button>
+                {fig.caption && (
+                  <button
+                    type="button"
+                    onClick={openSource}
+                    className="mt-1 block cursor-pointer text-left text-xs italic text-muted-foreground hover:text-foreground"
+                  >
+                    {fig.caption}
+                  </button>
+                )}
+              </span>
+            )
           }
         }
         if (href?.startsWith(NOTE_HREF_PREFIX)) {
@@ -174,7 +233,7 @@ export function NoteBody({
         )
       },
     }),
-    [citations, noteLinks, knownNoteIds, onCitationClick, onNoteLinkClick],
+    [citations, noteLinks, figures, projectId, knownNoteIds, onCitationClick, onNoteLinkClick],
   )
 
   return (

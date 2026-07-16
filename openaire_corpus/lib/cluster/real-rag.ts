@@ -3,10 +3,11 @@ import "server-only"
 // Real RAG implementation for CLUSTER_MODE=real.
 //
 // Queries the data-cluster MCP (datacluster_vector_search_chunks) over the
-// project's dataset and maps chunk hits to the app's RagPassage shape (ARK +
-// folio + snippet + score), so the research agent can cite by ARK + folio.
+// project's dataset and maps chunk hits to the app's RagPassage shape
+// (openaireId + doi + locator + snippet + score), so the research agent can
+// cite by OpenAIRE id + locator.
 //
-// Dataset resolution: each project owns one cluster dataset, slug `bnf-<id>`.
+// Dataset resolution: each project owns one cluster dataset, slug `openaire-<id>`.
 // The numeric id is cached on `Project.clusterDatasetId`; the first query
 // resolves it by listing datasets and matching the slug, then persists it.
 //
@@ -17,7 +18,6 @@ import {
   DATACLUSTER_LIST_PAGE_SIZE,
   RAG_DEFAULT_K,
 } from "@/lib/constants"
-import { prisma } from "@/lib/db"
 import {
   DataclusterMcpClient,
   DataclusterMcpNotFoundError,
@@ -43,39 +43,27 @@ const MAX_DATASET_PAGES = 50
 const MODEL_VERSION = "datacluster-mcp"
 
 /**
- * Resolve the project's numeric cluster dataset id, persisting it on first use.
- *
- * Reads `Project.clusterDatasetId` first; on a miss, pages through the cluster's
- * dataset list matching slug `bnf-<projectId>`, writes the id back to the
- * project, and returns it.
+ * Resolve the project's composite dataset id ("cluster:dataset") by matching the
+ * slug `openaire-<projectId>` in the cluster's dataset list. The composite id is
+ * the handle every downstream aggregator call (vector/keyword search, entry
+ * reads) needs. Not cached in `Project.clusterDatasetId` (that column is a numeric
+ * cluster-local id; the aggregator id is a string), so it resolves per call — one
+ * cheap list roundtrip.
  *
  * Throws DataclusterMcpNotFoundError if the project has no dataset in the
- * cluster — an inconsistency, since the rag_query tool only calls us after an
- * ingestion has been committed.
+ * cluster — an inconsistency, since rag tools only run after a committed ingestion.
  */
-async function resolveDatasetId(
+async function resolveDatasetComposite(
   projectId: string,
   client: DataclusterMcpClient,
-): Promise<number> {
-  const project = await prisma.project.findUniqueOrThrow({
-    where: { id: projectId },
-    select: { clusterDatasetId: true },
-  })
-  if (project.clusterDatasetId !== null) return project.clusterDatasetId
-
+): Promise<string> {
   const slug = `${DATACLUSTER_DATASET_SLUG_PREFIX}${projectId}`
 
   for (let page = 0; page < MAX_DATASET_PAGES; page++) {
     const offset = page * DATACLUSTER_LIST_PAGE_SIZE
     const datasets = await client.listDatasets(DATACLUSTER_LIST_PAGE_SIZE, offset)
     const match = datasets.find((d) => d.slug === slug)
-    if (match) {
-      await prisma.project.update({
-        where: { id: projectId },
-        data: { clusterDatasetId: match.id },
-      })
-      return match.id
-    }
+    if (match) return match.composite_id
     // Short page → no more datasets to walk.
     if (datasets.length < DATACLUSTER_LIST_PAGE_SIZE) break
   }
@@ -87,18 +75,31 @@ async function resolveDatasetId(
 }
 
 /**
+ * Derive a citation locator from a chunk's section + page. "abstract" for the
+ * abstract chunk, "p<N>" for a full-text PDF page, null otherwise (metadata
+ * chunks, or a full-text chunk with no page). Never invented.
+ */
+function deriveLocator(section: unknown, page: unknown): string | null {
+  if (section === "abstract") return "abstract"
+  if (typeof page === "number" && Number.isFinite(page)) return `p${page}`
+  return null
+}
+
+/**
  * Map a cluster chunk to a RagPassage. Returns null when the chunk carries no
- * ARK — it cannot serve as a citation source, so it is dropped (never cited
- * without an ARK; never an invented one). Folio is preserved when present and
- * left null otherwise (single-image documents may have no folio).
+ * OpenAIRE id — it cannot serve as a citation source, so it is dropped (never
+ * cited without an id; never an invented one). The locator is derived from the
+ * chunk's section/page and left null when absent.
  */
 function chunkToPassage(chunk: DataclusterChunk): RagPassage | null {
-  const { ark, folio, char_start, char_end, entry_id } = chunk.metadata
-  if (typeof ark !== "string" || ark.length === 0) return null
+  const { openaire_id, doi, section, page, char_start, char_end, entry_id, year } =
+    chunk.metadata
+  if (typeof openaire_id !== "string" || openaire_id.length === 0) return null
 
   return {
-    ark,
-    folio: typeof folio === "number" ? folio : null,
+    openaireId: openaire_id,
+    doi: typeof doi === "string" && doi.length > 0 ? doi : null,
+    locator: deriveLocator(section, page),
     snippet: chunk.chunk_text,
     score: chunk.score,
     charRange: [
@@ -106,34 +107,37 @@ function chunkToPassage(chunk: DataclusterChunk): RagPassage | null {
       typeof char_end === "number" ? char_end : 0,
     ],
     entryId: typeof entry_id === "number" ? entry_id : null,
+    ...(typeof year === "number" ? { year } : {}),
   }
 }
 
 /**
  * Translate the app's facet filters to keyword_search `metadata_filters`
- * (exact match on the dataset schema fields docType / lang / source).
+ * (exact match on the dataset schema fields type / open_access_color / source).
  */
 function toMetadataFilters(
   filters: RagKeywordRequest["filters"],
 ): Record<string, string> | undefined {
   if (!filters) return undefined
   const out: Record<string, string> = {}
-  if (filters.type) out.docType = filters.type
-  if (filters.subtype) out.subtype = filters.subtype
-  if (filters.lang) out.lang = filters.lang
+  if (filters.type) out.type = filters.type
+  if (filters.openAccessColor) out.open_access_color = filters.openAccessColor
   if (filters.source) out.source = filters.source
   return Object.keys(out).length > 0 ? out : undefined
 }
 
-/** Map a keyword hit to the app shape; drop hits with no ARK (uncitable). */
+/** Map a keyword hit to the app shape; drop hits with no OpenAIRE id (uncitable). */
 function keywordHitToRag(hit: DataclusterKeywordHit): RagKeywordHit | null {
-  const ark = hit.metadata?.ark
-  if (typeof ark !== "string" || ark.length === 0) return null
+  const openaireId = hit.metadata?.openaire_id
+  if (typeof openaireId !== "string" || openaireId.length === 0) return null
+  const doi = hit.metadata?.doi
+  const year = hit.metadata?.year
   return {
-    ark,
+    openaireId,
+    doi: typeof doi === "string" && doi.length > 0 ? doi : null,
     entryId: hit.entry_id,
     title: typeof hit.metadata?.title === "string" ? hit.metadata.title : null,
-    date: typeof hit.metadata?.date === "string" ? hit.metadata.date : null,
+    year: typeof year === "number" ? year : null,
     score: hit.score,
     snippets: (hit.snippets ?? []).map((s) => s.text),
   }
@@ -142,16 +146,15 @@ function keywordHitToRag(hit: DataclusterKeywordHit): RagKeywordHit | null {
 export const RealRagRunner = {
   async query(req: RagQueryRequest): Promise<RagQueryResponse> {
     const client = new DataclusterMcpClient()
-    const datasetId = await resolveDatasetId(req.projectId, client)
+    const datasetComposite = await resolveDatasetComposite(req.projectId, client)
 
-    // NB: `req.filters` (type/lang/source/year) are NOT pushed down — the
-    // cluster's vector search only filters by dataset_ids / entry_ids /
-    // score_threshold. Same limitation as FakeRagRunner; the agent narrows
+    // NB: `req.filters` (type/oa/year) are NOT pushed down — vector search only
+    // filters by dataset_ids / entry_ids / score_threshold. The agent narrows
     // scope through the query text instead.
     const data = await client.vectorSearchChunks({
       query: req.query,
       limit: req.k ?? RAG_DEFAULT_K,
-      datasetIds: [datasetId],
+      datasetIds: [datasetComposite],
     })
 
     const passages = data.results
@@ -167,12 +170,12 @@ export const RealRagRunner = {
 
   async keywordSearch(req: RagKeywordRequest): Promise<RagKeywordResponse> {
     const client = new DataclusterMcpClient()
-    const datasetId = await resolveDatasetId(req.projectId, client)
+    const datasetComposite = await resolveDatasetComposite(req.projectId, client)
 
     const data = await client.keywordSearch({
       query: req.query,
       limit: req.limit,
-      datasetIds: [datasetId],
+      datasetIds: [datasetComposite],
       metadataFilters: toMetadataFilters(req.filters),
     })
 
@@ -184,12 +187,14 @@ export const RealRagRunner = {
   },
 
   async getEntryContent(req: RagEntryContentRequest): Promise<RagEntryContent> {
-    // NB: get_entry_content is keyed by entry_id only (no dataset scope on the
-    // wire). The agent only ever receives entry ids from this project's
-    // dataset-scoped searches, so it cannot reach another project's entries.
+    // The aggregator keys entry reads by the composite id "cluster:dataset:entry".
+    // The entryId the agent holds is the registry entry id from a search result;
+    // rebuild the composite from this project's dataset composite so it stays
+    // scoped to the project (it cannot reach another project's entries).
     const client = new DataclusterMcpClient()
+    const datasetComposite = await resolveDatasetComposite(req.projectId, client)
     const data = await client.getEntryContent({
-      entryId: req.entryId,
+      compositeId: `${datasetComposite}:${req.entryId}`,
       charOffset: req.charOffset,
       charLimit: req.charLimit,
     })

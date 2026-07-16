@@ -11,7 +11,7 @@ import "server-only"
 // It powers REAL RAG for the research agent (CLUSTER_MODE=real). The only two
 // tools the app needs are exposed here:
 //   - listDatasets()          → resolve a project's dataset (slug `bnf-<id>`);
-//   - vectorSearchChunks(...)  → semantic search returning ARK+folio chunks.
+//   - vectorSearchChunks(...)  → semantic search returning openaire_id/section chunks.
 //
 // Auth: opaque service Bearer token (CLUSTER_BEARER_TOKEN). The mcp-base layer
 // relays it upstream as the OAuth access token.
@@ -110,10 +110,9 @@ export interface DataclusterDataset {
   name: string
   slug: string
   entry_count: number
-}
-
-interface ListDatasetsData {
-  datasets: DataclusterDataset[]
+  /** Aggregator composite id "cluster:dataset" — the handle for cross-cluster
+   *  tool calls (dataset_ids / entry composites). */
+  composite_id: string
 }
 
 /** One chunk hit from `datacluster_vector_search_chunks`. */
@@ -122,15 +121,20 @@ export interface DataclusterChunk {
   score: number
   chunk_text: string
   metadata: {
-    ark?: string
-    folio?: number
+    openaire_id?: string
+    doi?: string | null
+    /** "abstract" | "metadata" | "fulltext" — the chunk's section. */
+    section?: string
+    /** 1-based PDF page for a fulltext chunk; null/absent otherwise. */
+    page?: number | null
     char_start?: number
     char_end?: number
     entry_id?: number
     dataset_id?: number
     chunk_index?: number
-    docType?: string
-    subtype?: string
+    /** OpenAIRE product type, denormalised onto the chunk. */
+    doc_type?: string
+    year?: number
     [key: string]: unknown
   }
 }
@@ -145,8 +149,10 @@ export interface VectorSearchChunksInput {
   limit?: number
   offset?: number
   scoreThreshold?: number
-  datasetIds?: number[]
-  entryIds?: number[]
+  /** Composite dataset ids ("cluster:dataset"). */
+  datasetIds?: string[]
+  /** Composite entry ids ("cluster:dataset:entry"). */
+  entryIds?: string[]
 }
 
 /** One snippet inside a keyword-search hit. */
@@ -162,12 +168,12 @@ export interface DataclusterKeywordHit {
   score: number
   snippets?: DataclusterSnippet[]
   metadata?: {
-    ark?: string
+    openaire_id?: string
+    doi?: string | null
     title?: string
-    date?: string
-    docType?: string
-    subtype?: string
-    lang?: string
+    year?: number
+    type?: string
+    open_access_color?: string
     source?: string
     [key: string]: unknown
   }
@@ -182,8 +188,9 @@ export interface KeywordSearchInput {
   query: string
   limit?: number
   offset?: number
-  datasetIds?: number[]
-  /** Exact-match filters on the dataset metadata schema (docType/lang/source/…). */
+  /** Composite dataset ids ("cluster:dataset"). */
+  datasetIds?: string[]
+  /** Exact-match filters on the dataset metadata schema (type/open_access_color/source/…). */
   metadataFilters?: Record<string, string | number | string[]>
 }
 
@@ -199,7 +206,8 @@ export interface DataclusterEntryContent {
 }
 
 export interface GetEntryContentInput {
-  entryId: number
+  /** Composite entry id ("cluster:dataset:entry"). */
+  compositeId: string
   charOffset?: number
   charLimit?: number
 }
@@ -253,22 +261,34 @@ export class DataclusterMcpClient {
    * resolve a project's dataset id by slug — see RealRagRunner.
    */
   async listDatasets(limit: number, offset: number): Promise<DataclusterDataset[]> {
-    const envelope = await this.callTool<DataclusterEnvelope<ListDatasetsData>>(
+    const envelope = await this.callTool<DataclusterEnvelope<unknown>>(
       "datacluster_list_datasets",
-      { limit, offset, include_schema: false, response_format: "json" },
+      { limit, offset, include_schema: false },
     )
-    const data = this.unwrap(envelope, "datacluster_list_datasets")
-    if (!Array.isArray(data.datasets)) {
-      throw new DataclusterMcpError(
-        "datacluster_list_datasets returned no datasets array",
-      )
-    }
-    return data.datasets
+    const raw = this.flatten<Record<string, unknown>>(
+      this.unwrap(envelope, "datacluster_list_datasets"),
+      "datasets",
+    )
+    return raw.map((d) => ({
+      id: typeof d.dataset_id === "number" ? d.dataset_id : Number(d.id),
+      name: typeof d.name === "string" ? d.name : "",
+      slug: typeof d.slug === "string" ? d.slug : "",
+      entry_count:
+        typeof d.entryCount === "number"
+          ? d.entryCount
+          : typeof d.entry_count === "number"
+            ? d.entry_count
+            : 0,
+      composite_id:
+        typeof d.composite_id === "string"
+          ? d.composite_id
+          : `${String(d.cluster_id)}:${String(d.dataset_id ?? d.id)}`,
+    }))
   }
 
   /**
    * Semantic similarity search over chunks. Returns chunk-level hits with
-   * ARK/folio in `metadata`. Filters: datasetIds, entryIds, scoreThreshold.
+   * openaire_id/section in `metadata`. Filters: datasetIds, entryIds, scoreThreshold.
    */
   async vectorSearchChunks(
     input: VectorSearchChunksInput,
@@ -280,23 +300,52 @@ export class DataclusterMcpClient {
     if (input.datasetIds !== undefined) args.dataset_ids = input.datasetIds
     if (input.entryIds !== undefined) args.entry_ids = input.entryIds
 
-    const envelope = await this.callTool<DataclusterEnvelope<VectorSearchData>>(
+    const envelope = await this.callTool<DataclusterEnvelope<unknown>>(
       "datacluster_vector_search_chunks",
       args,
     )
-    const data = this.unwrap(envelope, "datacluster_vector_search_chunks")
-    if (!Array.isArray(data.results)) {
-      throw new DataclusterMcpError(
-        "datacluster_vector_search_chunks returned no results array",
-      )
+    const raw = this.flatten<Record<string, unknown>>(
+      this.unwrap(envelope, "datacluster_vector_search_chunks"),
+      "results",
+    )
+    const results = raw.map((c) => this.mapChunk(c))
+    return { results, total: results.length }
+  }
+
+  /** Normalise an aggregator chunk (composite ids, `chunkText`) to DataclusterChunk.
+   *  The registry entry_id (top-level) is surfaced onto metadata.entry_id so the
+   *  RAG layer can rebuild the composite entry id for full-text reads. */
+  private mapChunk(c: Record<string, unknown>): DataclusterChunk {
+    const meta = (c.metadata && typeof c.metadata === "object" ? c.metadata : {}) as Record<
+      string,
+      unknown
+    >
+    return {
+      id: typeof c.id === "string" ? c.id : String(c.id ?? ""),
+      score: typeof c.score === "number" ? c.score : 0,
+      chunk_text:
+        typeof c.chunkText === "string"
+          ? c.chunkText
+          : typeof c.chunk_text === "string"
+            ? c.chunk_text
+            : "",
+      metadata: {
+        ...meta,
+        // Registry entry id (aggregator top-level) wins over the cluster-local one.
+        entry_id:
+          typeof c.entry_id === "number"
+            ? c.entry_id
+            : typeof meta.entry_id === "number"
+              ? meta.entry_id
+              : undefined,
+      },
     }
-    return data
   }
 
   /**
    * Full-text keyword search (MeiliSearch). Returns entry-level hits with
-   * snippets and per-entry metadata (ARK, title, …). Supports exact-match
-   * `metadataFilters` on the dataset schema (docType / lang / source / …).
+   * snippets and per-entry metadata (openaire_id, title, …). Supports exact-match
+   * `metadataFilters` on the dataset schema (type / open_access_color / source / …).
    */
   async keywordSearch(input: KeywordSearchInput): Promise<KeywordSearchData> {
     const args: Record<string, unknown> = {
@@ -310,17 +359,33 @@ export class DataclusterMcpClient {
       args.metadata_filters = input.metadataFilters
     }
 
-    const envelope = await this.callTool<DataclusterEnvelope<KeywordSearchData>>(
+    const envelope = await this.callTool<DataclusterEnvelope<unknown>>(
       "datacluster_keyword_search",
       args,
     )
-    const data = this.unwrap(envelope, "datacluster_keyword_search")
-    if (!Array.isArray(data.results)) {
-      throw new DataclusterMcpError(
-        "datacluster_keyword_search returned no results array",
-      )
-    }
-    return data
+    const raw = this.flatten<Record<string, unknown>>(
+      this.unwrap(envelope, "datacluster_keyword_search"),
+      "results",
+    )
+    const results: DataclusterKeywordHit[] = raw.map((h) => {
+      const meta = (h.metadata && typeof h.metadata === "object" ? h.metadata : {}) as Record<
+        string,
+        unknown
+      >
+      const rawSnips = Array.isArray(h.snippets) ? h.snippets : []
+      return {
+        entry_id: typeof h.entry_id === "number" ? h.entry_id : 0,
+        dataset_id: typeof h.dataset_id === "number" ? h.dataset_id : 0,
+        score: typeof h.score === "number" ? h.score : 0,
+        snippets: rawSnips.map((s) =>
+          typeof s === "string"
+            ? { field: "text", text: s }
+            : { field: String((s as Record<string, unknown>)?.field ?? "text"), text: String((s as Record<string, unknown>)?.text ?? "") },
+        ),
+        metadata: meta,
+      }
+    })
+    return { results, pagination: { total: results.length } }
   }
 
   /**
@@ -330,21 +395,29 @@ export class DataclusterMcpClient {
   async getEntryContent(
     input: GetEntryContentInput,
   ): Promise<DataclusterEntryContent> {
-    const args: Record<string, unknown> = { entry_id: input.entryId }
+    const args: Record<string, unknown> = { composite_id: input.compositeId }
     if (input.charOffset !== undefined) args.char_offset = input.charOffset
     if (input.charLimit !== undefined) args.char_limit = input.charLimit
 
-    const envelope = await this.callTool<DataclusterEnvelope<DataclusterEntryContent>>(
+    const envelope = await this.callTool<DataclusterEnvelope<unknown>>(
       "datacluster_get_entry_content",
       args,
     )
-    const data = this.unwrap(envelope, "datacluster_get_entry_content")
+    const data = this.contentObject(this.unwrap(envelope, "datacluster_get_entry_content"))
     if (typeof data.text !== "string") {
       throw new DataclusterMcpError(
         "datacluster_get_entry_content returned no text",
       )
     }
-    return data
+    return {
+      entry_id: typeof data.entry_id === "number" ? data.entry_id : 0,
+      text: data.text,
+      char_offset: typeof data.char_offset === "number" ? data.char_offset : 0,
+      char_limit: typeof data.char_limit === "number" ? data.char_limit : 0,
+      total_length: typeof data.total_length === "number" ? data.total_length : data.text.length,
+      has_more: data.has_more === true,
+      next_offset: typeof data.next_offset === "number" ? data.next_offset : 0,
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -362,6 +435,45 @@ export class DataclusterMcpClient {
       throw new DataclusterMcpError(`${tool} returned success but no data`)
     }
     return envelope.data
+  }
+
+  /**
+   * Flatten the config-scoped aggregator's per-cluster nesting
+   * (`data.results.<clusterId>.<key>[]`) into one array. Tolerates the legacy
+   * single-cluster shapes: a flat `data.<key>[]`, or `data.results[]` when key is
+   * "results".
+   */
+  private flatten<T>(data: unknown, key: string): T[] {
+    const d = (data ?? {}) as Record<string, unknown>
+    if (Array.isArray(d[key])) return d[key] as T[]
+    const r = d.results
+    if (key === "results" && Array.isArray(r)) return r as T[]
+    if (r && typeof r === "object") {
+      return Object.values(r as Record<string, unknown>).flatMap((cluster) => {
+        const arr = (cluster as Record<string, unknown>)?.[key]
+        return Array.isArray(arr) ? (arr as T[]) : []
+      })
+    }
+    return []
+  }
+
+  /** The single entry-content object, from either a flat `data` or the aggregator's
+   *  `data.results.<clusterId>` (an object, or a one-element `results` array). */
+  private contentObject(data: unknown): Record<string, unknown> {
+    const d = (data ?? {}) as Record<string, unknown>
+    if (typeof d.text === "string") return d
+    const r = d.results
+    if (r && typeof r === "object") {
+      for (const cluster of Object.values(r as Record<string, unknown>)) {
+        if (cluster && typeof cluster === "object") {
+          const c = cluster as Record<string, unknown>
+          if (typeof c.text === "string") return c
+          const inner = Array.isArray(c.results) ? c.results[0] : c.result
+          if (inner && typeof inner === "object") return inner as Record<string, unknown>
+        }
+      }
+    }
+    return d
   }
 
   /** Open (or reuse) the MCP session. Concurrent callers share one handshake. */
@@ -406,13 +518,13 @@ export class DataclusterMcpClient {
       )
     }
 
-    const sessionId = res.headers.get("mcp-session-id")
-    if (!sessionId) {
-      throw new DataclusterMcpError(
-        "data-cluster MCP initialize returned no mcp-session-id header",
-      )
-    }
-    return sessionId
+    // Drain the initialize response body so the connection can be reused.
+    await res.text().catch(() => "")
+    // A STATELESS server (e.g. an HPA-scaled, per-pod-session-free deployment)
+    // returns no Mcp-Session-Id — that's valid, not an error. Return "" and send
+    // subsequent calls session-less. A STATEFUL server returns an id we echo.
+    // (See ai-memories: BnF MCP stateless / multi-replica.)
+    return res.headers.get("mcp-session-id") ?? ""
   }
 
   /**
@@ -431,7 +543,9 @@ export class DataclusterMcpClient {
             "Content-Type": "application/json",
             Accept: "application/json, text/event-stream",
             Authorization: `Bearer ${this.token}`,
-            "Mcp-Session-Id": sessionId,
+            // Echo the session id only for a stateful server; a stateless one
+            // returned "" at initialize and must NOT receive the header.
+            ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}),
           },
           body: JSON.stringify({
             jsonrpc: "2.0",

@@ -3,338 +3,152 @@
 //
 // Each entry extends RagPassage with a `topics` string array used by the
 // scoring function to match against free-text queries without any embedding
-// model.  Topics are lowercase French/English keywords — the scorer does a
-// simple substring check.
+// model. Topics are lowercase English keywords — the scorer does a simple
+// substring check.
 //
-// ARKs are taken verbatim from prisma/seed.ts (the 30-document seed set).
-// Passages are illustrative excerpts that reflect the document type and
-// period (Exposition Universelle 1889) — they are synthetic fixtures, not
-// OCR output.
+// The fixtures model a small CRISPR-Cas9 literature corpus (the design's demo
+// scenario). openaireIds / DOIs are plausible but synthetic; passages are
+// illustrative excerpts, NOT verbatim reproductions of the cited papers. Each
+// record contributes an abstract chunk (locator "abstract") and one or more
+// body-page chunks (locator "p<N>").
 
 import type { RagPassage } from "./rag"
 
 // Fixtures carry no entryId — the FakeRagRunner derives a stable one from the
-// ARK (and uses it to reconstruct full text). Everything else mirrors RagPassage.
+// openaireId (and uses it to reconstruct full text). Everything else mirrors
+// RagPassage.
 export type RagFixture = Omit<RagPassage, "entryId"> & { topics: string[] }
 
 export const RAG_FIXTURES: RagFixture[] = [
-  // ── Le Figaro — 6 mai 1889 ──────────────────────────────────────────────
+  // ── Cong et al., Science 2013 — Multiplex genome engineering ─────────────
   {
-    ark: "ark:/12148/bpt6k2839841",
-    folio: 1,
+    openaireId: "50|doi_dedup___::a1b2c3d4e5f60718",
+    doi: "10.1126/science.1231143",
+    locator: "abstract",
     snippet:
-      "L'enthousiasme à l'inauguration de l'Exposition Universelle de Paris est sans précédent. Dès l'aube, une foule considérable se pressait aux abords du Champ de Mars.",
+      "Functional elements of the type II CRISPR system from Streptococcus pyogenes can be engineered to enable RNA-guided genome editing in mammalian cells. Cas9 nuclease, directed by a short guide RNA, introduces precise double-strand breaks at endogenous genomic loci in human and mouse cells.",
     score: 0.0,
-    charRange: [0, 156] as [number, number],
-    title: "Le Figaro, 6 mai 1889",
-    year: 1889,
-    topics: ["inauguration", "exposition", "figaro", "foule", "champ de mars", "universelle"],
+    charRange: [0, 288] as [number, number],
+    title: "Multiplex Genome Engineering Using CRISPR/Cas Systems",
+    year: 2013,
+    topics: ["crispr", "cas9", "genome editing", "guide rna", "mammalian cells", "streptococcus pyogenes", "double-strand break"],
   },
   {
-    ark: "ark:/12148/bpt6k2839841",
-    folio: 2,
+    openaireId: "50|doi_dedup___::a1b2c3d4e5f60718",
+    doi: "10.1126/science.1231143",
+    locator: "p3",
     snippet:
-      "La cérémonie d'inauguration, présidée par M. le Président de la République, a revêtu un éclat sans précédent. C'est la fête du travail et de la paix que la France offre aujourd'hui au monde entier.",
+      "By co-expressing multiple guide RNAs, we achieved simultaneous editing of several genomic sites, demonstrating the multiplexing capacity of the system. Homology-directed repair with a donor template enabled precise sequence replacement at the targeted locus.",
     score: 0.0,
-    charRange: [157, 340] as [number, number],
-    title: "Le Figaro, 6 mai 1889",
-    year: 1889,
-    topics: ["inauguration", "président", "république", "france", "exposition", "paix"],
-  },
-
-  // ── Le Temps — 5 mai 1889 ───────────────────────────────────────────────
-  {
-    ark: "ark:/12148/bpt6k227349z",
-    folio: 1,
-    snippet:
-      "L'inauguration de l'Exposition universelle aura lieu demain. On remarquera l'absence des souverains étrangers : la célébration du centenaire de 1789 a tenu à l'écart les cours monarchiques de l'Europe.",
-    score: 0.0,
-    charRange: [0, 197] as [number, number],
-    title: "Le Temps, 5 mai 1889",
-    year: 1889,
-    topics: ["inauguration", "exposition", "souverains", "centenaire", "monarchie", "europe", "diplomatie"],
-  },
-  {
-    ark: "ark:/12148/bpt6k227349z",
-    folio: 3,
-    snippet:
-      "L'enjeu, pour la jeune République, est tout entier diplomatique. Accueillir le monde entier sans la caution des têtes couronnées constitue un pari audacieux et républicain.",
-    score: 0.0,
-    charRange: [198, 367] as [number, number],
-    title: "Le Temps, 5 mai 1889",
-    year: 1889,
-    topics: ["diplomatie", "république", "politique", "exposition", "monarchie"],
+    charRange: [289, 540] as [number, number],
+    title: "Multiplex Genome Engineering Using CRISPR/Cas Systems",
+    year: 2013,
+    topics: ["multiplex", "guide rna", "homology-directed repair", "donor template", "targeting", "editing efficiency"],
   },
 
-  // ── Le Petit Journal — 7 mai 1889 ───────────────────────────────────────
+  // ── Jinek et al., Science 2012 — Programmable dual-RNA endonuclease ───────
   {
-    ark: "ark:/12148/bpt6k6151234",
-    folio: 1,
+    openaireId: "50|doi_dedup___::b2c3d4e5f6071829",
+    doi: "10.1126/science.1225829",
+    locator: "abstract",
     snippet:
-      "La Tour Eiffel domine le panorama de ses trois cents mètres d'acier. Le public afflue en masse depuis les faubourgs. On dit qu'il y aura cent mille visiteurs dès ce premier dimanche ouvert.",
+      "We show that the Cas9 endonuclease can be programmed with a single chimeric RNA to cleave specific DNA sequences. The dual-tracrRNA:crRNA duplex, fused into one guide RNA, directs sequence-specific cleavage, establishing a simple two-component system for genome editing.",
     score: 0.0,
-    charRange: [0, 185] as [number, number],
-    title: "Le Petit Journal, 7 mai 1889",
-    year: 1889,
-    topics: ["tour eiffel", "eiffel", "visiteurs", "foule", "exposition", "acier"],
+    charRange: [0, 275] as [number, number],
+    title: "A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity",
+    year: 2012,
+    topics: ["cas9", "endonuclease", "tracrrna", "crrna", "single guide rna", "dna cleavage", "bacterial immunity", "mechanism"],
+  },
+  {
+    openaireId: "50|doi_dedup___::b2c3d4e5f6071829",
+    doi: "10.1126/science.1225829",
+    locator: "p5",
+    snippet:
+      "Cleavage requires a short protospacer-adjacent motif (PAM) immediately downstream of the target sequence. The HNH and RuvC-like nuclease domains each cut one strand of the double helix, producing a blunt double-strand break three base pairs upstream of the PAM.",
+    score: 0.0,
+    charRange: [276, 530] as [number, number],
+    title: "A Programmable Dual-RNA–Guided DNA Endonuclease in Adaptive Bacterial Immunity",
+    year: 2012,
+    topics: ["pam", "protospacer", "hnh domain", "ruvc", "nuclease domain", "blunt cut", "mechanism"],
   },
 
-  // ── Le Matin — 7 mai 1889 ───────────────────────────────────────────────
+  // ── Mali et al., Science 2013 — RNA-guided human genome engineering ──────
   {
-    ark: "ark:/12148/bpt6k2910347",
-    folio: 1,
+    openaireId: "50|doi_dedup___::c3d4e5f607182930",
+    doi: "10.1126/science.1232033",
+    locator: "abstract",
     snippet:
-      "Les foules du monde entier convergent vers la capitale. Depuis la gare du Nord, les omnibus font la navette sans relâche jusqu'au Champ-de-Mars. La tour de M. Eiffel apparaît à chaque carrefour, étrange silhouette métallique qui étonne encore.",
+      "We engineered the type II bacterial CRISPR system to function in human cells. Using a codon-optimized Cas9 and custom guide RNAs, we achieved targeted cleavage and homologous recombination at endogenous loci in induced pluripotent stem cells and other human cell lines.",
     score: 0.0,
-    charRange: [0, 240] as [number, number],
-    title: "Le Matin, 7 mai 1889",
-    year: 1889,
-    topics: ["tour eiffel", "eiffel", "foule", "transport", "champ de mars", "visiteurs", "métallique"],
-  },
-  {
-    ark: "ark:/12148/bpt6k2910347",
-    folio: 2,
-    snippet:
-      "Les hôteliers de la capitale ne désemplissent plus. Toutes les chambres sont louées jusqu'au mois de novembre. On parle de délégations venues d'Amérique, d'Asie, et même d'Océanie.",
-    score: 0.0,
-    charRange: [241, 416] as [number, number],
-    title: "Le Matin, 7 mai 1889",
-    year: 1889,
-    topics: ["tourisme", "visiteurs", "exposition", "international", "délégations"],
+    charRange: [0, 278] as [number, number],
+    title: "RNA-Guided Human Genome Engineering via Cas9",
+    year: 2013,
+    topics: ["human cells", "cas9", "codon-optimized", "ips cells", "pluripotent stem cells", "homologous recombination", "genome engineering"],
   },
 
-  // ── Le Temps — 14 février 1887 (pétition contre la Tour Eiffel) ─────────
+  // ── Hsu, Lander & Zhang, Cell 2014 — Development and applications ─────────
   {
-    ark: "ark:/12148/bpt6k1238740",
-    folio: 1,
+    openaireId: "50|doi_dedup___::d4e5f60718293041",
+    doi: "10.1016/j.cell.2014.05.010",
+    locator: "abstract",
     snippet:
-      "Nous, écrivains, sculpteurs, architectes, amateurs passionnés de la beauté jusqu'ici intacte de Paris, protestons de toutes nos forces contre l'érection en plein cœur de notre capitale de l'inutile et monstrueuse Tour Eiffel.",
+      "CRISPR-Cas9 has transformed genome engineering. Here we review its development, mechanism, and applications, and discuss off-target effects, delivery strategies, and approaches to improving specificity for research and therapeutic use.",
     score: 0.0,
-    charRange: [0, 225] as [number, number],
-    title: "Le Temps, 14 février 1887",
-    year: 1887,
-    topics: ["pétition", "tour eiffel", "eiffel", "protestation", "artistes", "architectes", "critique"],
+    charRange: [0, 235] as [number, number],
+    title: "Development and Applications of CRISPR-Cas9 for Genome Engineering",
+    year: 2014,
+    topics: ["review", "off-target", "specificity", "delivery", "therapeutic", "applications", "crispr", "cas9"],
   },
   {
-    ark: "ark:/12148/bpt6k1238740",
-    folio: 2,
+    openaireId: "50|doi_dedup___::d4e5f60718293041",
+    doi: "10.1016/j.cell.2014.05.010",
+    locator: "p9",
     snippet:
-      "La pétition des Artistes réunit plus de trois cents signatures de personnalités du monde des arts et des lettres. Guy de Maupassant aurait déclaré ne plus vouloir voir cette « chandelle de ferraille ».",
+      "Off-target cleavage is influenced by guide RNA sequence, mismatch position, and the concentration and duration of Cas9 activity. Truncated guide RNAs and high-fidelity Cas9 variants substantially reduce unintended edits without sacrificing on-target efficiency.",
     score: 0.0,
-    charRange: [226, 424] as [number, number],
-    title: "Le Temps, 14 février 1887",
-    year: 1887,
-    topics: ["pétition", "maupassant", "artistes", "tour eiffel", "eiffel", "critique", "ferraille"],
-  },
-
-  // ── Le Monde illustré — 11 mai 1889 (presse illustrée) ──────────────────
-  {
-    ark: "ark:/12148/bpt6k6293847",
-    folio: 1,
-    snippet:
-      "Notre dessinateur a parcouru les allées de l'Exposition afin de croquer sur le vif les scènes les plus pittoresques. Les pavillons exotiques attirent une curiosité immense.",
-    score: 0.0,
-    charRange: [0, 172] as [number, number],
-    title: "Le Monde illustré, 11 mai 1889",
-    year: 1889,
-    topics: ["presse illustrée", "exposition", "pavillons", "dessin", "exotique", "illustration"],
-  },
-  {
-    ark: "ark:/12148/bpt6k6293847",
-    folio: 8,
-    snippet:
-      "La Galerie des machines est le véritable temple de l'industrie moderne. Les engins à vapeur, les métiers à tisser mécaniques, les dynamos électriques : tout concourt à montrer la puissance du génie industriel.",
-    score: 0.0,
-    charRange: [512, 715] as [number, number],
-    title: "Le Monde illustré, 11 mai 1889",
-    year: 1889,
-    topics: ["galerie des machines", "industrie", "machines", "vapeur", "électricité", "technique"],
+    charRange: [236, 500] as [number, number],
+    title: "Development and Applications of CRISPR-Cas9 for Genome Engineering",
+    year: 2014,
+    topics: ["off-target", "mismatch", "high-fidelity", "truncated guide", "specificity", "on-target efficiency"],
   },
 
-  // ── L'Illustration — n°2412, 11 mai 1889 ────────────────────────────────
+  // ── Doudna & Charpentier, Science 2014 — The new frontier ────────────────
   {
-    ark: "ark:/12148/bpt6k104789x",
-    folio: 3,
+    openaireId: "50|doi_dedup___::e5f6071829304152",
+    doi: "10.1126/science.1258096",
+    locator: "abstract",
     snippet:
-      "L'Illustration consacre ce numéro à l'Exposition Universelle. Nos gravures rendent compte, avec une fidélité sans égale, des merveilles que renferme le Champ de Mars.",
+      "The RNA-programmed genome editing technology derived from the bacterial CRISPR-Cas9 system opens a new frontier in the life sciences, enabling researchers to alter DNA sequences and modify gene function across a wide range of organisms.",
     score: 0.0,
-    charRange: [0, 168] as [number, number],
-    title: "L'Illustration, n°2412, 11 mai 1889",
-    year: 1889,
-    topics: ["presse illustrée", "illustration", "exposition", "gravure", "champ de mars"],
+    charRange: [0, 232] as [number, number],
+    title: "The New Frontier of Genome Engineering with CRISPR-Cas9",
+    year: 2014,
+    topics: ["review", "genome editing", "gene function", "organisms", "life sciences", "frontier", "crispr", "cas9"],
   },
 
-  // ── Vue panoramique depuis le Trocadéro (photographie) ──────────────────
+  // ── Ran et al., Nature Protocols 2013 — Genome engineering protocol ──────
   {
-    ark: "ark:/12148/btv1b8451123",
-    folio: 1,
+    openaireId: "50|doi_dedup___::f607182930415263",
+    doi: "10.1038/nprot.2013.143",
+    locator: "abstract",
     snippet:
-      "Vue prise depuis la hauteur du Trocadéro. On distingue au premier plan le pont d'Iéna et les pavillons étrangers ; la Tour Eiffel occupe le centre de la composition. Tirage albuminé.",
+      "This protocol provides step-by-step instructions for genome engineering using the CRISPR-Cas9 system, including guide RNA design, delivery, and assays for quantifying editing efficiency and off-target activity in mammalian cells.",
     score: 0.0,
-    charRange: [0, 182] as [number, number],
-    title: "Vue panoramique depuis le Trocadéro",
-    year: 1889,
-    topics: ["photographie", "trocadéro", "tour eiffel", "eiffel", "panorama", "exposition", "pavillons"],
-  },
-
-  // ── Caricature Le Charivari ──────────────────────────────────────────────
-  {
-    ark: "ark:/12148/btv1b8901234",
-    folio: 1,
-    snippet:
-      "Caricature publiée dans Le Charivari, représentant Gustave Eiffel en géant d'acier enjambant Paris. Légende : « Tremble, monsieur de la Critique ! »",
-    score: 0.0,
-    charRange: [0, 149] as [number, number],
-    title: "Caricature — « Le Citoyen Eiffel »",
-    year: 1889,
-    topics: ["caricature", "eiffel", "satire", "charivari", "presse illustrée", "humour"],
-  },
-
-  // ── Catalogue général officiel ───────────────────────────────────────────
-  {
-    ark: "ark:/12148/bpt6k9612345",
-    folio: 1,
-    snippet:
-      "Le présent catalogue recense l'ensemble des exposants admis par la Commission impériale. Les nations représentées sont au nombre de trente-cinq.",
-    score: 0.0,
-    charRange: [0, 145] as [number, number],
-    title: "Catalogue général officiel de l'Exposition",
-    year: 1889,
-    topics: ["catalogue", "exposants", "nations", "commission", "exposition", "officiel"],
+    charRange: [0, 228] as [number, number],
+    title: "Genome Engineering Using the CRISPR-Cas9 System",
+    year: 2013,
+    topics: ["protocol", "guide rna design", "delivery", "editing efficiency", "off-target assay", "mammalian cells", "methods"],
   },
   {
-    ark: "ark:/12148/bpt6k9612345",
-    folio: 42,
+    openaireId: "50|doi_dedup___::f607182930415263",
+    doi: "10.1038/nprot.2013.143",
+    locator: "p12",
     snippet:
-      "La section française occupe à elle seule la moitié du palais des Beaux-Arts. Peinture, sculpture, architecture et arts appliqués sont représentés par plus de mille artistes.",
+      "The surveyor nuclease assay and targeted deep sequencing are complementary methods for measuring indel frequency at the cut site. A paired-nickase strategy, using two guide RNAs and a Cas9 nickase, further reduces off-target mutagenesis.",
     score: 0.0,
-    charRange: [146, 320] as [number, number],
-    title: "Catalogue général officiel de l'Exposition",
-    year: 1889,
-    topics: ["beaux-arts", "peinture", "sculpture", "artistes", "exposition", "france"],
-  },
-
-  // ── Guide bleu de l'Exposition de 1889 ──────────────────────────────────
-  {
-    ark: "ark:/12148/bpt6k6529871",
-    folio: 12,
-    snippet:
-      "Pour accéder à la Tour Eiffel, le visiteur empruntera l'ascenseur Otis, installé dans les piliers est et ouest. La montée jusqu'au deuxième étage coûte un franc cinquante.",
-    score: 0.0,
-    charRange: [0, 170] as [number, number],
-    title: "Guide bleu de l'Exposition de 1889",
-    year: 1889,
-    topics: ["tour eiffel", "eiffel", "ascenseur", "visiteurs", "guide", "tarif"],
-  },
-  {
-    ark: "ark:/12148/bpt6k6529871",
-    folio: 55,
-    snippet:
-      "La Galerie des machines, longue de quatre cent vingt mètres, abrite les plus grands trésors de l'industrie contemporaine. La charpente métallique de la halle est elle-même un chef-d'œuvre d'ingénierie.",
-    score: 0.0,
-    charRange: [171, 368] as [number, number],
-    title: "Guide bleu de l'Exposition de 1889",
-    year: 1889,
-    topics: ["galerie des machines", "industrie", "machines", "ingénierie", "guide", "métallique"],
-  },
-
-  // ── Les Merveilles de l'Exposition — Sciences ────────────────────────────
-  {
-    ark: "ark:/12148/bpt6k7219034",
-    folio: 8,
-    snippet:
-      "L'électricité occupe une place de premier rang parmi les merveilles de l'Exposition. Les fontaines lumineuses, illuminées la nuit par des projecteurs de couleur, constituent un spectacle féerique inédit.",
-    score: 0.0,
-    charRange: [0, 196] as [number, number],
-    title: "Les Merveilles de l'Exposition — Sciences",
-    year: 1889,
-    topics: ["électricité", "fontaines lumineuses", "sciences", "technique", "exposition", "lumière"],
-  },
-  {
-    ark: "ark:/12148/bpt6k7219034",
-    folio: 22,
-    snippet:
-      "Le phonographe d'Edison, exposé pour la première fois en France, suscite la stupéfaction des visiteurs. Entendre une voix humaine reproduite par une machine paraît tenir du prodige.",
-    score: 0.0,
-    charRange: [197, 380] as [number, number],
-    title: "Les Merveilles de l'Exposition — Sciences",
-    year: 1889,
-    topics: ["phonographe", "edison", "sciences", "invention", "technique", "visiteurs"],
-  },
-
-  // ── The Illustrated London News ──────────────────────────────────────────
-  {
-    ark: "ark:/12148/bpt6k81244q3",
-    folio: 4,
-    snippet:
-      "The Paris Exposition of 1889 surpasses all previous international exhibitions in scale and ambition. The Eiffel Tower, still regarded with scepticism by many, has become the undeniable symbol of the event.",
-    score: 0.0,
-    charRange: [0, 200] as [number, number],
-    title: "The Illustrated London News — Paris",
-    year: 1889,
-    topics: ["eiffel", "exposition", "paris", "international", "english", "tower"],
-  },
-
-  // ── Affiche officielle ───────────────────────────────────────────────────
-  {
-    ark: "ark:/12148/btv1b9006722",
-    folio: 1,
-    snippet:
-      "Affiche officielle de l'Exposition Universelle de 1889. Composition allégorique représentant la République française couronnant le génie industriel. Impression chromolithographique.",
-    score: 0.0,
-    charRange: [0, 178] as [number, number],
-    title: "Affiche officielle — Exposition Universelle",
-    year: 1889,
-    topics: ["affiche", "estampe", "exposition", "allégorie", "république", "officiel", "art"],
-  },
-
-  // ── Tour Eiffel en construction — 1888 ──────────────────────────────────
-  {
-    ark: "ark:/12148/btv1b531284c",
-    folio: 1,
-    snippet:
-      "Photographie prise en 1888 montrant la structure métallique de la Tour Eiffel à mi-construction. Les quatre piliers convergent vers le premier étage. Les ouvriers sont visibles sur les échafaudages.",
-    score: 0.0,
-    charRange: [0, 194] as [number, number],
-    title: "Tour Eiffel en construction — 1888",
-    year: 1888,
-    topics: ["tour eiffel", "eiffel", "construction", "photographie", "acier", "ingénierie", "ouvriers"],
-  },
-
-  // ── Rapport général — Alfred Picard ─────────────────────────────────────
-  {
-    ark: "ark:/12148/bpt6k5384021",
-    folio: 18,
-    snippet:
-      "L'Exposition de 1889 a accueilli trente-deux millions de visiteurs en six mois. Ce chiffre, jamais atteint, témoigne du succès populaire d'une manifestation que beaucoup jugeaient prématurée.",
-    score: 0.0,
-    charRange: [0, 193] as [number, number],
-    title: "Rapport général — A. Picard",
-    year: 1891,
-    topics: ["visiteurs", "bilan", "exposition", "succès", "statistiques", "rapport"],
-  },
-  {
-    ark: "ark:/12148/bpt6k5384021",
-    folio: 74,
-    snippet:
-      "La recette totale des entrées s'élève à quarante et un millions de francs. Les dépenses, y compris la construction de la Tour Eiffel et de la Galerie des machines, atteignent quarante-trois millions.",
-    score: 0.0,
-    charRange: [194, 390] as [number, number],
-    title: "Rapport général — A. Picard",
-    year: 1891,
-    topics: ["budget", "finances", "exposition", "bilan", "rapport", "statistiques"],
-  },
-
-  // ── Plan général de l'Exposition ────────────────────────────────────────
-  {
-    ark: "ark:/12148/btv1b8492756",
-    folio: 1,
-    snippet:
-      "Plan général de l'Exposition Universelle de 1889, à l'échelle 1:2 000. On y distingue : le Champ de Mars, le Trocadéro, la Tour Eiffel, la Galerie des machines, les pavillons étrangers.",
-    score: 0.0,
-    charRange: [0, 185] as [number, number],
-    title: "Plan général de l'Exposition, Champ de Mars",
-    year: 1889,
-    topics: ["plan", "carte", "exposition", "champ de mars", "trocadéro", "tour eiffel", "galerie des machines"],
+    charRange: [229, 470] as [number, number],
+    title: "Genome Engineering Using the CRISPR-Cas9 System",
+    year: 2013,
+    topics: ["surveyor assay", "deep sequencing", "indel", "nickase", "paired nickase", "off-target", "methods"],
   },
 ]

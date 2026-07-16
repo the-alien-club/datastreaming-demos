@@ -1,11 +1,11 @@
 /**
- * RAG tool definitions for the BnF research agent — three tools over the
+ * RAG tool definitions for the OpenAIRE research agent — three tools over the
  * ingested corpus, all scoped server-side to the project's cluster dataset:
  *
- *   - rag_query          — semantic (vector) search → ARK + folio + char-range
- *                          passages + entryId.
+ *   - rag_query          — semantic (vector) search → openaireId + doi + locator
+ *                          + snippet passages + entryId.
  *   - rag_keyword_search — typo-tolerant keyword search → entry-level hits with
- *                          facet filters (type / lang / source).
+ *                          facet filters (type / open-access colour / source).
  *   - rag_get_text       — selective full-text retrieval by entryId and a
  *                          character range (pull context around a passage).
  *
@@ -19,12 +19,13 @@ import { z } from "zod"
 import { defineTool } from "@alien/chat-sdk/claude"
 import { prisma } from "@/lib/db"
 import { ClusterRagClient } from "@/lib/cluster/rag"
+import { listFigures } from "@/lib/cluster/figures"
 import type { TurnScopedCtx } from "./registry-factory"
 import { AGENT_TOOLS } from "./constants"
 
 const NOT_INGESTED_ERROR =
-  "Le corpus n'a pas encore été ingéré. " +
-  "Lance l'ingestion depuis l'étape « Ingérer » avant de lancer une recherche."
+  "The corpus has not been ingested yet. " +
+  "Run ingestion from the “Ingest” step before searching."
 
 /** Resolve the project's committed ingested version, or null if none. */
 async function ingestedVersionId(projectId: string): Promise<string | null> {
@@ -46,8 +47,7 @@ export const ragQueryTool = defineTool<
     filters: z.ZodOptional<
       z.ZodObject<{
         type: z.ZodOptional<z.ZodArray<z.ZodString>>
-        lang: z.ZodOptional<z.ZodArray<z.ZodString>>
-        source: z.ZodOptional<z.ZodArray<z.ZodString>>
+        openAccessColor: z.ZodOptional<z.ZodArray<z.ZodString>>
         yearFrom: z.ZodOptional<z.ZodNumber>
         yearTo: z.ZodOptional<z.ZodNumber>
       }>
@@ -58,9 +58,9 @@ export const ragQueryTool = defineTool<
   name: AGENT_TOOLS.ragQuery,
   description:
     "Search the ingested corpus by semantic similarity. " +
-    "Returns passages with ARK, folio, snippet, and relevance score. " +
+    "Returns passages with OpenAIRE id, DOI, locator (abstract or page), snippet, and relevance score. " +
     "Use focused, specific queries — one concept per call — rather than broad questions. " +
-    "Apply filters (type, lang, source, yearFrom/yearTo) when the question is scoped. " +
+    "Apply filters (type, openAccessColor, yearFrom/yearTo) when the question is scoped. " +
     "Returns an empty passages array when no ingestion has been committed — " +
     "the error field will explain the situation.",
   inputSchema: z.object({
@@ -79,9 +79,11 @@ export const ragQueryTool = defineTool<
       .describe("Number of passages to retrieve (1–50, default decided by the cluster)."),
     filters: z
       .object({
-        type: z.array(z.string()).optional().describe("Restrict to these document types."),
-        lang: z.array(z.string()).optional().describe("Restrict to these language codes."),
-        source: z.array(z.string()).optional().describe("Restrict to these source identifiers."),
+        type: z.array(z.string()).optional().describe("Restrict to these product types (e.g. \"publication\", \"dataset\")."),
+        openAccessColor: z
+          .array(z.string())
+          .optional()
+          .describe("Restrict to these open-access colours (gold, hybrid, bronze, green, closed)."),
         yearFrom: z.number().int().optional().describe("Earliest publication year (inclusive)."),
         yearTo: z.number().int().optional().describe("Latest publication year (inclusive)."),
       })
@@ -115,7 +117,7 @@ export const ragKeywordSearchTool = defineTool<
     filters: z.ZodOptional<
       z.ZodObject<{
         type: z.ZodOptional<z.ZodString>
-        lang: z.ZodOptional<z.ZodString>
+        openAccessColor: z.ZodOptional<z.ZodString>
         source: z.ZodOptional<z.ZodString>
       }>
     >
@@ -125,9 +127,9 @@ export const ragKeywordSearchTool = defineTool<
   name: AGENT_TOOLS.ragKeywordSearch,
   description:
     "Typo-tolerant keyword search over the ingested corpus. " +
-    "Returns entry-level hits with the document's ARK, title, date, score and " +
-    "matched snippets. Use this for exact terms, names, or known titles, and " +
-    "when you need to FILTER by document type, language or source — filtering " +
+    "Returns entry-level hits with the record's OpenAIRE id, DOI, title, year, score and " +
+    "matched snippets. Use this for exact terms, author names, or known titles, and " +
+    "when you need to FILTER by product type, open-access colour or source — filtering " +
     "lives here, not on rag_query. Use the returned entryId with rag_get_text " +
     "to read the surrounding full text. " +
     "Returns an empty hits array (with an error field) when nothing is ingested.",
@@ -146,9 +148,12 @@ export const ragKeywordSearchTool = defineTool<
       .describe("Maximum number of entry hits to return (1–100, default 20)."),
     filters: z
       .object({
-        type: z.string().optional().describe("Restrict to this document type (e.g. \"press\", \"book\")."),
-        lang: z.string().optional().describe("Restrict to this language code (e.g. \"fr\")."),
-        source: z.string().optional().describe("Restrict to this source (e.g. \"gallica\")."),
+        type: z.string().optional().describe("Restrict to this product type (e.g. \"publication\", \"dataset\")."),
+        openAccessColor: z
+          .string()
+          .optional()
+          .describe("Restrict to this open-access colour (gold, hybrid, bronze, green, closed)."),
+        source: z.string().optional().describe("Restrict to this source (e.g. \"openaire\")."),
       })
       .optional()
       .describe("Exact-match facet filters applied before ranking."),
@@ -223,5 +228,38 @@ export const ragGetTextTool = defineTool<
   },
 })
 
+// ---------------------------------------------------------------------------
+// rag_list_figures
+// ---------------------------------------------------------------------------
+
+export const ragListFiguresTool = defineTool<
+  z.ZodObject<{ openaireId: z.ZodString }>,
+  TurnScopedCtx
+>({
+  name: AGENT_TOOLS.ragListFigures,
+  description:
+    "List the figures extracted from a corpus document's full text (id, caption, page). " +
+    "Call this when a passage refers to a figure and you want to show it in a note: " +
+    "embed the figure with the syntax `![[<openaireId>|<caption>|<figureId>]]` using a " +
+    "figureId returned here (e.g. \"f1\"). Returns an empty array for documents with no " +
+    "ingested full text (abstract-only records have no figures).",
+  inputSchema: z.object({
+    openaireId: z
+      .string()
+      .trim()
+      .min(1)
+      .describe("The OpenAIRE id of a corpus document, taken from a search result. Never invented."),
+  }),
+  handler: async (input, ctx) => {
+    const figures = await listFigures(ctx.projectId, input.openaireId)
+    return { openaireId: input.openaireId, figures }
+  },
+})
+
 // Convenience array for the registry builder.
-export const ragTools = [ragQueryTool, ragKeywordSearchTool, ragGetTextTool] as const
+export const ragTools = [
+  ragQueryTool,
+  ragKeywordSearchTool,
+  ragGetTextTool,
+  ragListFiguresTool,
+] as const

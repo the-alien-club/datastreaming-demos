@@ -1,4 +1,4 @@
-// app/[locale]/projects/[projectId]/rechercher/carnet/page.tsx
+// app/[locale]/projects/[projectId]/research/notebook/page.tsx
 // Server component. Loads all notes with their full body for the Carnet view.
 // Passes to CarnetClient which owns citation-click interactivity.
 
@@ -18,7 +18,7 @@ export default async function CarnetPage({
   const { projectId } = await params
 
   const user = await requireSessionUser(
-    `/projects/${projectId}/rechercher/carnet`,
+    `/projects/${projectId}/research/notebook`,
   )
 
   const project = await ProjectQueries.get(projectId)

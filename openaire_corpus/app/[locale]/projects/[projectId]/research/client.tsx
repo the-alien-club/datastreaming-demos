@@ -1,7 +1,7 @@
 "use client"
 
-// app/[locale]/projects/[projectId]/rechercher/client.tsx
-// Step 3 "Espace de recherche" client. Mirrors ConstituerClient's shape: a
+// app/[locale]/projects/[projectId]/research/client.tsx
+// Step 3 "Research workspace" client. Mirrors CorpusClient's shape: a
 // fixed-width rail (sessions + artefacts picker + project memory) beside the
 // main espace (research chat + artefact reader). Owns the interactive state the
 // server can't: active session, which notes are OPEN as tabs, the active tab,
@@ -187,7 +187,7 @@ export function RechercherClient({
             </CardHeader>
             <CardContent>
               <Link
-                href={`/projects/${projectId}/ingerer`}
+                href={`/projects/${projectId}/ingest`}
                 className={buttonVariants()}
               >
                 {t("notIngested.openIngest")}

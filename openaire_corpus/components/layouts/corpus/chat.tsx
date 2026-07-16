@@ -45,7 +45,9 @@ import { ModelSelector } from "./model-selector"
 import { EventMemoryRow } from "@/components/events/agent/memory-event"
 import { EventIngestRow } from "@/components/events/agent/ingest-event"
 import { FeedbackButton } from "@/components/cards/feedback/feedback-button"
+import { CardSourcesEvidence } from "@/components/cards/research/sources-evidence"
 import type { AgentProvider } from "@/lib/constants"
+import { AGENT_TOOLS } from "@/lib/agent/tools/constants"
 
 interface LayoutCorpusChatProps {
   /** Turn-stream handle (a thin adapter over the SDK's useChat). Lifted to the
@@ -196,6 +198,12 @@ function ToolPartView({ tool }: { tool: ToolPartEntry }) {
   if (noteWrite && tool.running) {
     return <BadgeNoteProgress kind={noteWrite} startedAt={tool.startedAt} />
   }
+  // A completed rag_query renders its ranked passages as the "Sources & evidence"
+  // panel (the evidence the answer rests on). While running / on error it falls
+  // through to the uniform tool badge; the panel renders nothing when 0 passages.
+  if (tool.toolName === AGENT_TOOLS.ragQuery && !tool.running && !errored) {
+    return <CardSourcesEvidence result={tool.result} />
+  }
   return (
     <BadgeToolCall
       toolName={tool.toolName}
@@ -226,7 +234,7 @@ function DomainPartView({
       <EventIngestRow
         status={event.data.status ?? event.data.kind}
         jobId={event.data.jobId}
-        projectLocaleHref={`/${locale}/projects/${projectId}/ingerer`}
+        projectLocaleHref={`/${locale}/projects/${projectId}/ingest`}
       />
     )
   }

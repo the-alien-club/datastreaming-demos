@@ -31,6 +31,7 @@ export function CarnetClient({
       <WorkspaceHeader user={user} projectId={projectId} />
       <div className="flex-1 overflow-hidden">
         <LayoutCarnet
+          projectId={projectId}
           notes={notes}
           onCitationClick={setSelectedCitation}
         />

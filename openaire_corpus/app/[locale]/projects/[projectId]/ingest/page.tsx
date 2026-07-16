@@ -1,4 +1,4 @@
-// app/[locale]/projects/[projectId]/ingerer/page.tsx
+// app/[locale]/projects/[projectId]/ingest/page.tsx
 // Server component. Authenticates, resolves the project, fetches the head
 // corpus snapshot, the last ingested version seq, any active ingest job, and
 // recent job history. Passes everything to IngestClient as initial* props.
@@ -23,7 +23,7 @@ export default async function IngererPage({
 }) {
   const { projectId } = await params
 
-  const user = await requireSessionUser(`/projects/${projectId}/ingerer`)
+  const user = await requireSessionUser(`/projects/${projectId}/ingest`)
 
   const project = await ProjectQueries.get(projectId)
   if (!project) notFound()

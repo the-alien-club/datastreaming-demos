@@ -14,15 +14,17 @@ import "server-only"
 // ---------------------------------------------------------------------------
 
 export interface RagPassage {
-  /** BnF ARK identifier — opaque, verbatim from the cluster index. */
-  ark: string
+  /** OpenAIRE research-product id — opaque, verbatim from the cluster index. The citation key. */
+  openaireId: string
+  /** DOI when known, else null. Used to build external links (doi.org) in notes export. */
+  doi: string | null
   /**
-   * Physical folio (1-based page number within the document), or null when the
-   * source chunk has no folio (e.g. single-image documents). A citation
-   * requires a folio — the agent cites in prose, not `[[ark|label|folio]]`,
-   * when this is null (see playbook/citations.md). Never invented.
+   * Citation locator within the record: "abstract", "p<N>" (a full-text PDF
+   * page), or null when the chunk carries no precise locator. A citation
+   * `[[openaireId|label|locator]]` MAY omit the locator (see
+   * playbook/citations.md); the agent never invents one.
    */
-  folio: number | null
+  locator: string | null
   /** Plain-text extract returned by the cluster. */
   snippet: string
   /** Cosine similarity score in [0, 1]. */
@@ -30,7 +32,8 @@ export interface RagPassage {
   /**
    * Character-offset range of the snippet within the entry's processed text
    * (start inclusive, end exclusive). Feed these to `rag_get_text` to pull the
-   * surrounding context selectively.
+   * surrounding context selectively. May be [0, 0] when the cluster does not
+   * record chunk offsets (OpenAIRE chunks locate by section/page, not offset).
    */
   charRange: [number, number]
   /**
@@ -56,8 +59,7 @@ export interface RagQueryRequest {
   /** Server-side pre-filters applied before vector search. */
   filters?: {
     type?: string[]
-    lang?: string[]
-    source?: string[]
+    openAccessColor?: string[]
     yearFrom?: number
     yearTo?: number
   }
@@ -82,24 +84,27 @@ export interface RagKeywordRequest {
   limit?: number
   /** Exact-match facet filters on the corpus metadata. */
   filters?: {
+    /** OpenAIRE product type ("publication", "dataset", "software", …). */
     type?: string
-    /** Gallica typedoc subcategory ("fascicules", "titres", "plan", …). */
-    subtype?: string
-    lang?: string
+    /** Open-access colour ("gold", "hybrid", "bronze", "green", "closed"). */
+    openAccessColor?: string
+    /** Ingestion source ("openaire"). */
     source?: string
   }
 }
 
 export interface RagKeywordHit {
-  /** BnF ARK — the citation/document key. */
-  ark: string
+  /** OpenAIRE research-product id — the citation/document key. */
+  openaireId: string
+  /** DOI when known, else null. */
+  doi: string | null
   /** Cluster entry id — the handle for `rag_get_text`. */
   entryId: number
   /** Document title, when known. */
   title: string | null
-  /** Raw BnF date string (may be a range), when known. */
-  date: string | null
-  /** Relevance score (MeiliSearch ranking, not a cosine similarity). */
+  /** Publication year, when known. */
+  year: number | null
+  /** Relevance score (keyword ranking, not a cosine similarity). */
   score: number
   /** Contextual snippets around the matched terms. */
   snippets: string[]
@@ -141,7 +146,7 @@ function clusterMode(): "fake" | "real" {
 }
 
 export const ClusterRagClient = {
-  /** Semantic similarity search → ARK + folio + char-range passages. */
+  /** Semantic similarity search → openaireId + locator + snippet passages. */
   async query(req: RagQueryRequest): Promise<RagQueryResponse> {
     if (clusterMode() === "real") {
       const { RealRagRunner } = await import("./real-rag")

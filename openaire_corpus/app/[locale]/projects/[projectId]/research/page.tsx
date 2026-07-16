@@ -1,4 +1,4 @@
-// app/[locale]/projects/[projectId]/rechercher/page.tsx
+// app/[locale]/projects/[projectId]/research/page.tsx
 // Server component. Authenticates, resolves project, ensures a default
 // research session exists, pre-loads note list, and hands everything to
 // RechercherClient as initial* props. No interactivity — see client.tsx.
@@ -25,7 +25,7 @@ export default async function RechercherPage({
 }) {
   const { locale, projectId } = await params
 
-  const user = await requireSessionUser(`/projects/${projectId}/rechercher`)
+  const user = await requireSessionUser(`/projects/${projectId}/research`)
 
   const project = await ProjectQueries.get(projectId)
   if (!project) notFound()

@@ -154,6 +154,7 @@ export function LayoutResearchEspace({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {disposition === "carnet" ? (
             <ReaderCarnet
+              projectId={projectId}
               notes={notes}
               projectName={projectName}
               onCitationClick={onCitationClick}
@@ -385,6 +386,7 @@ function NoteReader({
         </div>
         <NoteBody
           body={note.body_md ?? ""}
+          projectId={projectId}
           onCitationClick={onCitationClick}
           onNoteLinkClick={onNoteLinkClick}
           knownNoteIds={knownNoteIds}
@@ -397,11 +399,13 @@ function NoteReader({
 // ── Carnet reader — every note stitched into one document ───────────────────
 
 function ReaderCarnet({
+  projectId,
   notes,
   projectName,
   onCitationClick,
   knownNoteIds,
 }: {
+  projectId: string
   notes: NoteListItem[]
   projectName: string
   onCitationClick: (c: ParsedCitation) => void
@@ -485,6 +489,7 @@ function ReaderCarnet({
             {results.map((r, i) => (
               <CarnetSection
                 key={notes[i].id}
+                projectId={projectId}
                 sectionId={carnetSectionId(notes[i].id)}
                 index={i}
                 fallbackTitle={notes[i].title}
@@ -509,6 +514,7 @@ function carnetSectionId(noteId: string): string {
 }
 
 function CarnetSection({
+  projectId,
   sectionId,
   index,
   fallbackTitle,
@@ -518,6 +524,7 @@ function CarnetSection({
   onNoteLinkClick,
   knownNoteIds,
 }: {
+  projectId: string
   sectionId: string
   index: number
   fallbackTitle: string
@@ -544,6 +551,7 @@ function CarnetSection({
       ) : (
         <NoteBody
           body={note?.body_md ?? ""}
+          projectId={projectId}
           onCitationClick={onCitationClick}
           onNoteLinkClick={onNoteLinkClick}
           knownNoteIds={knownNoteIds}

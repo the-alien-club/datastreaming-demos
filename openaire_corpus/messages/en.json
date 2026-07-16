@@ -542,6 +542,11 @@
     "espace": {
       "title": "Research workspace",
       "docs": "{count, number} docs",
+      "evidence": {
+        "title": "Sources & evidence",
+        "count": "{count, plural, one {# passage} other {# passages}}",
+        "openRecord": "open record →"
+      },
       "disposition": "Layout",
       "atelier": "Workbench",
       "carnet": "Notebook",
@@ -630,73 +635,21 @@
       "added": "{count} to add",
       "removed": "{count} to remove",
       "excluded": "{count, plural, =0 {} one {# non-ingestable document excluded} other {# non-ingestable documents excluded}}",
-      "paidOcr": "{count, plural, one {# digitized document with no OCR layer} other {# digitized documents with no OCR layer}}",
-      "paidOcrCost": "On-demand OCR · ≈ ${cost} to the platform",
-      "paidOcrBudget": "Platform budget: ${spent} / ${ceiling} used",
-      "paidOcrInclude": "Include OCR",
-      "paidOcrIncluded": "OCR included ✓",
-      "paidOcrOverBudget": "Cost exceeds the platform budget (${ceiling}): OCR unavailable. The other documents will be ingested normally.",
       "submit": "Start ingestion",
-      "submitWithOcr": "Start ingestion + OCR",
       "submitting": "Submitting…"
-    },
-    "paidOcr": {
-      "confirmTitle": "On-demand OCR",
-      "confirmBody": "{count, plural, one {# digitized document without an OCR layer will be transcribed} other {# digitized documents without an OCR layer will be transcribed}} via Mistral OCR. This has a cost for the platform (≈ ${cost}) — please use it sparingly. Start OCR?",
-      "confirm": "Confirm & start",
-      "confirming": "Starting…",
-      "dismiss": "Cancel",
-      "budgetTitle": "OCR budget exceeded",
-      "budgetBody": "This transcription (~${cost}) would exceed the project's OCR budget (already spent ${spent} of a ${ceiling} cap).",
-      "close": "Close"
-    },
-    "stages": {
-      "extract": "OCR extraction",
-      "chunk": "Semantic chunking",
-      "embed": "Embedding",
-      "index": "Indexing"
-    },
-    "stageDesc": {
-      "extract": "Text extraction (OCR)",
-      "chunk": "Semantic chunking of documents",
-      "embed": "Computing embeddings",
-      "index": "Indexing into the RAG cluster"
-    },
-    "pipeline": {
-      "title": "Ingestion in progress",
-      "target": "Target",
-      "targetValue": "OpenAIRE RAG cluster",
-      "overall": "Overall progress",
-      "pending": "Pending",
-      "skipped": "Skipped",
-      "eta": "Est. time remaining",
-      "etaComputing": "estimating…",
-      "outcomes": {
-        "ingested": "{count} ingested",
-        "retrying": "{count} retrying",
-        "skipped": "{count} skipped",
-        "failed": "{count} failed",
-        "excluded": "{count} not ingestable",
-        "removed": "{count} removed"
-      }
     },
     "queue": {
       "title": "Processing",
       "finalized": "Documents finalized",
-      "fetchTitle": "OpenAIRE fetch",
-      "foliosFetched": "{done} / {total} folios fetched",
       "etaLabel": "Time left",
       "etaComputing": "estimating…",
       "groups": {
-        "metadata": "Metadata",
-        "images": "Image descriptions",
-        "prep": "AI preparation",
-        "ocr": "Mistral OCR",
-        "index": "Indexing"
+        "dedup": "Deduplication",
+        "embedding": "Embedding",
+        "indexing": "Indexing"
       },
       "inProgress": "{count} in progress",
       "waiting": "{count} queued",
-      "ahead": "{count} ahead of you (another job)",
       "idle": "—",
       "totals": {
         "done": "{count} done",

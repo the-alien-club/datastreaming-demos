@@ -119,6 +119,36 @@ const clusterEnvSchema = z.object({
   CLUSTER_BEARER_TOKEN: z.string().min(1),
 })
 
+// Data-cluster REST env — used by the figure image proxy (server streams a stored
+// figure file from the cluster to the browser). Separate from the MCP env because
+// only the figure route needs it; throws on first use if absent (real mode).
+const clusterRestEnvSchema = z.object({
+  BACKEND_API_URL: z.string().url(),
+  CLUSTER_ID: z.string().min(1),
+  CLUSTER_BEARER_TOKEN: z.string().min(1),
+})
+
+let _clusterRestEnv: z.infer<typeof clusterRestEnvSchema> | null = null
+
+/**
+ * Validated data-cluster REST env for the figure proxy. Throws on first call if
+ * BACKEND_API_URL / CLUSTER_ID / CLUSTER_BEARER_TOKEN are absent. NO defaults.
+ */
+export function requireClusterRestEnv(): z.infer<typeof clusterRestEnvSchema> {
+  if (_clusterRestEnv !== null) return _clusterRestEnv
+  const parsed = clusterRestEnvSchema.safeParse(process.env)
+  if (!parsed.success) {
+    const missing = parsed.error.issues.map((i) => i.path.join(".")).join(", ")
+    throw new Error(
+      `Data-cluster REST env not configured: ${missing}. ` +
+        `Set BACKEND_API_URL, CLUSTER_ID and CLUSTER_BEARER_TOKEN in .env.local ` +
+        `(required to serve figure images). See .env.example.`,
+    )
+  }
+  _clusterRestEnv = parsed.data
+  return _clusterRestEnv
+}
+
 let _clusterEnv: z.infer<typeof clusterEnvSchema> | null = null
 
 /**

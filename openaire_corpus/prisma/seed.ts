@@ -91,7 +91,7 @@ const SEED_DOCS = [
     influenceClass: "C5",
   },
   {
-    openaireId: "doi_dedup___::9b1f2c3d4e5f60718293a4b5c6d7e8f9",
+    openaireId: "doi_dedup___::0aa19de8b88d1527a0c758097cbbb75f",
     doi: "10.1038/nbt.2647",
     title:
       "DNA targeting specificity of RNA-guided Cas9 nucleases",

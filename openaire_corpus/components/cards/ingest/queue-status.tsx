@@ -1,12 +1,12 @@
 "use client"
 
 // components/cards/ingest/queue-status.tsx
-// Live staged-bucket status for a running ingest — replaces the old four-stage
-// pipeline card. Driven by the worker's GET /progress/:runId read-model (proxied
-// onto job.queue), it shows what is ACTUALLY happening: the BnF fetch bucket as
-// the headline bottleneck (the binding 300/min constraint), the named stage
-// groups, and the run totals that ALWAYS reconcile (the anti-V1 rule —
-// failed/skipped are never hidden). See playbook/ui-states.md §Ingestion.
+// Live staged-bucket status for a running ingest. Driven by the worker's
+// GET /progress/:runId read-model (proxied onto job.queue), it shows what is
+// ACTUALLY happening: the "documents finalised" headline, the three OpenAIRE
+// pipeline groups (Deduplication ← resolve, Embedding ← fetchPdf+extract+
+// prepare+embed, Indexing ← register), and the run totals that ALWAYS reconcile
+// (failed/skipped are never hidden). See playbook/ui-states.md §Ingestion.
 
 import { useTranslations } from "next-intl"
 import { Loader2 } from "lucide-react"
@@ -22,14 +22,12 @@ import { INGEST_STATUS } from "@/models/ingest/schema"
 import type { IngestJobStatusView } from "@/models/ingest/types"
 import type { ClusterQueueStage } from "@/lib/cluster/contracts"
 
-// Worker stage buckets → the named groups the design surfaces. fetch is pulled
-// out as the headline bottleneck and is not in this list.
+// Worker stage buckets → the three named groups the design surfaces. Mirrors the
+// worker read-model's HEADLINE_GROUPS (observability.ts) exactly.
 const GROUPS = [
-  { key: "metadata", stages: ["metadata", "manifest"] },
-  { key: "images", stages: ["describe"] },
-  { key: "prep", stages: ["assemble", "embed"] },
-  { key: "ocr", stages: ["ocrSubmit", "ocrPoll"] },
-  { key: "index", stages: ["register"] },
+  { key: "dedup", stages: ["resolve"] },
+  { key: "embedding", stages: ["fetchPdf", "extract", "prepare", "embed"] },
+  { key: "indexing", stages: ["register"] },
 ] as const
 
 const EMPTY_STAGE: ClusterQueueStage = { done: 0, running: 0, queued: 0, failed: 0 }
@@ -113,18 +111,6 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
       ? Math.round((queue.docsFinished / queue.docsTotal) * 100)
       : 0
 
-  const fetch = queue.stages.fetch ?? EMPTY_STAGE
-  // Run-scoped folio tally (honest, not the shared pg-boss bucket). `expected`
-  // grows as metadata resolves more docs; remaining = expected − landed.
-  const folios = queue.folios
-  const foliosRemaining = Math.max(
-    0,
-    folios.expected - folios.done - folios.failed,
-  )
-  // Folios from OTHER concurrent runs ahead of this one in the shared BnF queue —
-  // the rate cap is shared, so this explains a slow start ("N devant vous").
-  const foliosAhead = queue.foliosAhead ?? 0
-
   // Run totals — always reconcile to docsTotal (done + running + queued + failed
   // + skipped). Surfaced verbatim so the view can never hide failures/skips.
   const totals: { key: string; value: number; tone: string }[] = [
@@ -147,10 +133,15 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
         <CardTitle>{t("title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Headline — documents fully registered. */}
+        {/* Headline — documents fully registered, with the run ETA alongside. */}
         <div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[13.5px] font-semibold">{t("finalized")}</span>
+            <span className="flex items-center gap-2 text-[13.5px] font-semibold">
+              {!isTerminal && (
+                <Loader2 className="size-3.5 animate-spin text-brand-teal" />
+              )}
+              {t("finalized")}
+            </span>
             <span className="font-mono text-[13px] font-semibold tabular-nums text-brand-teal">
               {queue.docsFinished} / {queue.docsTotal}
             </span>
@@ -161,46 +152,15 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
               style={{ width: `${finishedPct}%` }}
             />
           </span>
+          {etaText && (
+            <div className="mt-1.5 text-right text-xs text-muted-foreground">
+              {t("etaLabel")} :{" "}
+              <span className="font-mono text-neutral-200">{etaText}</span>
+            </div>
+          )}
         </div>
 
-        {/* Bottleneck — the BnF fetch gate, the binding constraint. */}
-        <div className="rounded-lg border bg-secondary/30 p-3">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-2 text-[13px] font-semibold">
-              {(fetch.running > 0 || fetch.queued > 0) && (
-                <Loader2 className="size-3.5 animate-spin text-brand-teal" />
-              )}
-              {t("fetchTitle")}
-            </span>
-          </div>
-          <div className="mt-1.5 flex items-center justify-between gap-2 text-xs">
-            <span className="tabular-nums text-foreground">
-              {t("foliosFetched", { done: folios.done, total: folios.expected })}
-            </span>
-            {etaText && (
-              <span className="text-muted-foreground">
-                {t("etaLabel")} :{" "}
-                <span className="font-mono text-neutral-200">{etaText}</span>
-              </span>
-            )}
-          </div>
-          {/* Same running / queued breakdown as the stage rows, folio-level. */}
-          <div className="mt-1 flex items-center gap-3 font-mono text-[11px] tabular-nums text-muted-foreground">
-            {fetch.running > 0 && (
-              <span className="text-brand-teal">
-                {t("inProgress", { count: fetch.running })}
-              </span>
-            )}
-            <span>{t("waiting", { count: foliosRemaining })}</span>
-            {foliosAhead > 0 && (
-              <span className="text-amber-500/80">
-                {t("ahead", { count: foliosAhead })}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Named stage groups — current activity per lane segment. */}
+        {/* Named stage groups — current activity per pipeline segment. */}
         <ul className="flex flex-col">
           {GROUPS.map((g) => {
             const s = sumStages(queue.stages, g.stages)
@@ -221,7 +181,7 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
                     active === 0 && "text-muted-foreground",
                   )}
                 >
-                  {t(`groups.${g.key}` as "groups.metadata")}
+                  {t(`groups.${g.key}` as "groups.dedup")}
                 </span>
                 <span className="flex items-center gap-3 font-mono text-[11px] tabular-nums">
                   {s.running > 0 && (

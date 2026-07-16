@@ -39,11 +39,17 @@
  * hand-rolled scan.
  */
 
-// The `(?<!!)` lookbehind rejects a stray markdown-image prefix `![[…]]` (the
-// BnF ancestor's image-embed form, which has no OpenAIRE analog — there is no
-// IIIF page image to embed for a research product).
+// The `(?<!!)` lookbehind rejects a leading `!` so the figure-embed form
+// `![[…|…|fN]]` (below) is parsed as an image, not a citation.
 export const CITATION_REGEX =
   /(?<!!)\[\[([A-Za-z0-9_]+::[A-Za-z0-9]+)\|((?:[^|\]]|\\\||\\\])+)(?:\|(p\d+|abstract))?\]\]/g
+
+// A figure embed: `![[<openaireId>|<caption>|<figureId>]]` — the `!` prefix (as in
+// a markdown image) + a REQUIRED `f<N>` figure id distinguish it from a citation.
+// The figure image was extracted by the ingest worker (Mistral OCR) and stored on
+// the data-cluster entry; the renderer resolves it via the figure image-proxy route.
+export const FIGURE_EMBED_REGEX =
+  /!\[\[([A-Za-z0-9_]+::[A-Za-z0-9]+)\|((?:[^|\]]|\\\||\\\])+)\|(f\d+)\]\]/g
 
 // A note-to-note link: `[[note:<uuid>|<label>]]`. The `note:` prefix and the
 // canonical UUID shape make it disjoint from CITATION_REGEX (which requires a
@@ -68,6 +74,21 @@ export type ParsedCitation = {
   /** Character offset of this match in the source string. */
   index: number
   /** Byte-length of the raw match (convenience for slicing). */
+  length: number
+}
+
+export type ParsedFigureEmbed = {
+  /** The OpenAIRE Graph id of the figure's document. */
+  openaireId: string
+  /** Caption text (pipes/brackets already unescaped). May be empty. */
+  caption: string
+  /** The figure id within the document, e.g. `f1`. */
+  figureId: string
+  /** Raw matched string as it appears in the note body. */
+  raw: string
+  /** Character offset of this match in the source string. */
+  index: number
+  /** Byte-length of the raw match. */
   length: number
 }
 
@@ -117,6 +138,37 @@ export function parseCitations(md: string): ParsedCitation[] {
     })
   }
   return out
+}
+
+/**
+ * Extract all figure embeds (`![[<openaireId>|<caption>|<figureId>]]`) from a
+ * Markdown body, in source order; caption is already unescaped.
+ */
+export function parseFigureEmbeds(md: string): ParsedFigureEmbed[] {
+  const out: ParsedFigureEmbed[] = []
+  for (const m of md.matchAll(FIGURE_EMBED_REGEX)) {
+    out.push({
+      openaireId: m[1],
+      caption: unescapeCitationText(m[2]),
+      figureId: m[3],
+      raw: m[0],
+      index: m.index ?? 0,
+      length: m[0].length,
+    })
+  }
+  return out
+}
+
+/**
+ * Serialize a figure embed back to the `![[openaireId|caption|figureId]]` wire
+ * format. Escapes pipes and closing brackets in the caption.
+ */
+export function renderFigureEmbed(f: {
+  openaireId: string
+  caption: string
+  figureId: string
+}): string {
+  return `![[${f.openaireId}|${escapeCitationText(f.caption)}|${f.figureId}]]`
 }
 
 /**
