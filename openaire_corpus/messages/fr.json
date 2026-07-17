@@ -251,8 +251,8 @@
         "nonNumeriseSub": "non ingéré"
       },
       "facetOaTitle": "Accès ouvert",
-      "citationNetwork": "Réseau de citations",
-      "citationNetworkHint": "citations principales"
+      "mostCited": "Documents les plus cités",
+      "mostCitedHint": "par nombre de citations"
     },
     "documents": {
       "empty": "Aucun document. Demandez à l'agent de constituer un corpus.",
@@ -643,10 +643,13 @@
       "finalized": "Documents finalisés",
       "etaLabel": "Temps restant",
       "etaComputing": "estimation…",
-      "groups": {
-        "dedup": "Déduplication",
-        "embedding": "Vectorisation",
-        "indexing": "Indexation"
+      "stages": {
+        "resolve": "Résolution",
+        "fetchPdf": "Téléchargement du PDF",
+        "extract": "Extraction du texte (OCR)",
+        "prepare": "Préparation",
+        "embed": "Vectorisation",
+        "register": "Indexation"
       },
       "inProgress": "{count} en cours",
       "waiting": "{count} en file",

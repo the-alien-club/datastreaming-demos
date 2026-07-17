@@ -23,7 +23,7 @@ import { CardCorpusFacetBars } from "./facet-bars"
 import { CardCorpusPeriodHistogram } from "./period-histogram"
 import { CardCorpusFullTextInput } from "./full-text-input"
 import { CardCorpusActiveFiltersBar } from "./active-filters-bar"
-import { CardCorpusCitationNetwork } from "./citation-network"
+import { CardCorpusMostCited } from "./most-cited"
 
 // One bordered facet card in the 3-column statistics grid.
 function FacetCard({
@@ -306,18 +306,19 @@ export function CardCorpusFiltersDrawer({
             sessionTitleById={sessionTitleById}
           />
 
-          {/* Citation-network hero — most-cited records as nodes. */}
+          {/* Most-cited records — ranked by citation count (honest: counts, not
+              a fabricated network). Each row links to the record. */}
           {corpus.sample.some((d) => (d.citationCount ?? 0) > 0) && (
             <div className="rounded-md border bg-background p-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-foreground">
-                  {t("citationNetwork")}
+                  {t("mostCited")}
                 </span>
                 <span className="font-mono text-[10.5px] text-muted-foreground">
-                  {t("citationNetworkHint")}
+                  {t("mostCitedHint")}
                 </span>
               </div>
-              <CardCorpusCitationNetwork sample={corpus.sample} />
+              <CardCorpusMostCited sample={corpus.sample} />
             </div>
           )}
 

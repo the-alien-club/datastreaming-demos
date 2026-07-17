@@ -251,8 +251,8 @@
         "nonNumeriseSub": "not ingested"
       },
       "facetOaTitle": "Open access",
-      "citationNetwork": "Citation network",
-      "citationNetworkHint": "top citations"
+      "mostCited": "Most-cited records",
+      "mostCitedHint": "by citation count"
     },
     "documents": {
       "empty": "No documents. Ask the agent to build a corpus.",
@@ -643,10 +643,13 @@
       "finalized": "Documents finalized",
       "etaLabel": "Time left",
       "etaComputing": "estimating…",
-      "groups": {
-        "dedup": "Deduplication",
-        "embedding": "Embedding",
-        "indexing": "Indexing"
+      "stages": {
+        "resolve": "Resolution",
+        "fetchPdf": "PDF download",
+        "extract": "Text extraction (OCR)",
+        "prepare": "Preparation",
+        "embed": "Embedding",
+        "register": "Indexing"
       },
       "inProgress": "{count} in progress",
       "waiting": "{count} queued",
