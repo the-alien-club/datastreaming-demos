@@ -448,7 +448,8 @@
       "remove": "Retrait du corpus",
       "remove_by_filter": "Retrait par filtre",
       "stats": "Statistiques",
-      "diff": "Diff de corpus"
+      "diff": "Diff de corpus",
+      "aggregate": "Agrégation (graphique)"
     },
     "memory": {
       "read": "Lecture mémoire",
@@ -621,6 +622,12 @@
       "bodyLabel": "Contenu",
       "save": "Enregistrer",
       "saving": "Enregistrement…"
+    },
+    "chart": {
+      "viewData": "Voir les données et la source",
+      "query": "requête",
+      "total": "total",
+      "parseError": "Graphique illisible"
     }
   },
   "ingest": {

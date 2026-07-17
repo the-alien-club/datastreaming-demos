@@ -24,6 +24,18 @@ import { CorpusQueries } from "@/models/corpus/queries"
 import { CorpusService } from "@/models/corpus/service"
 import { openaireRefSchema } from "@/models/corpus/types"
 import type { CorpusFilterSet } from "@/models/corpus/queries"
+import type {
+  CorpusAggregateDimension,
+  CorpusFacetDimension,
+} from "@/models/corpus/schema"
+import {
+  CHART_TYPES,
+  OA_COLORS,
+  paletteColor,
+  renderChartFence,
+  type ChartSpec,
+  type FlatChartType,
+} from "@/lib/charts/spec"
 import type { TurnScopedCtx } from "./registry-factory"
 import { AGENT_TOOLS } from "./constants"
 
@@ -506,6 +518,254 @@ export const corpusDiffTool = defineTool<
   },
 })
 
+// ---------------------------------------------------------------------------
+// corpus_aggregate — reproducible chart data for a research note
+// ---------------------------------------------------------------------------
+
+// Single-dimension groupings the tool can compute (mirrors CorpusAggregateDimension).
+const aggregateDimensionEnum = z.enum([
+  "year",
+  "decade",
+  "type",
+  "lang",
+  "oa",
+  "access_right",
+  "peer_reviewed",
+  "funder",
+  "publisher",
+  "venue",
+])
+
+// The subset of dimensions that stacked-bar can cross (reuses CorpusQueries.crossFacets).
+const crossDimensionEnum = z.enum(["decade", "type", "lang", "oa"])
+
+const chartTypeEnum = z.enum(CHART_TYPES)
+
+/** Map a cross-dimension name to the facet dimension crossFacets understands. */
+function toFacetDimension(d: z.infer<typeof crossDimensionEnum>): CorpusFacetDimension {
+  return d === "decade" ? "period" : d
+}
+
+/** Human-readable phrase naming the grouped field (for the `source` line). */
+const DIMENSION_PHRASE: Record<CorpusAggregateDimension, string> = {
+  year: "publication year",
+  decade: "publication decade",
+  type: "research-product type",
+  lang: "language",
+  oa: "open-access status",
+  access_right: "access rights",
+  peer_reviewed: "peer-review status",
+  funder: "funder",
+  publisher: "publisher",
+  venue: "venue",
+}
+
+const OA_LABELS: Record<string, string> = {
+  gold: "Gold OA",
+  green: "Green OA",
+  hybrid: "Hybrid",
+  bronze: "Bronze",
+  closed: "Closed",
+}
+const PEER_LABELS: Record<string, string> = {
+  peer_reviewed: "Évalué par les pairs",
+  not_peer_reviewed: "Non évalué",
+  unknown: "Inconnu",
+}
+
+/** Friendly display label for a raw group key on a given dimension. */
+function labelFor(dimension: string, key: string): string {
+  if (dimension === "oa") return OA_LABELS[key] ?? key
+  if (dimension === "peer_reviewed") return PEER_LABELS[key] ?? key
+  return key
+}
+
+/** Sort decade/period bucket keys ("1990s") chronologically. */
+function decadeAsc(a: string, b: string): number {
+  return parseInt(a, 10) - parseInt(b, 10)
+}
+
+export const corpusAggregateTool = defineTool<
+  z.ZodObject<{
+    chart_type: typeof chartTypeEnum
+    group_by: typeof aggregateDimensionEnum
+    stack_by: z.ZodOptional<typeof crossDimensionEnum>
+    unit: z.ZodOptional<z.ZodString>
+    top: z.ZodOptional<z.ZodNumber>
+    filters: z.ZodOptional<typeof corpusFiltersSchema>
+  }>,
+  TurnScopedCtx
+>({
+  name: AGENT_TOOLS.corpusAggregate,
+  description:
+    "Compute a chart from REAL corpus metadata and get back a ready-to-embed " +
+    "```chart fenced block. The counts are aggregated over the corpus (never " +
+    "invented), so a reader can audit them via the chart's « View data & source » " +
+    "table. Workflow: call this, then paste the returned `chart_block` VERBATIM " +
+    "into a note (note_create/note_append) under a short heading — do NOT alter " +
+    "the numbers or hand-write a chart yourself. `group_by` picks the dimension " +
+    "(year, decade, type, lang, oa, access_right, peer_reviewed, funder, " +
+    "publisher, venue). `chart_type`: bar | hbar (many/long labels) | donut " +
+    "(parts of a whole, e.g. oa) | line (a trend over year/decade) | stacked-bar. " +
+    "For stacked-bar, also pass `stack_by` (the segment dimension); both group_by " +
+    "and stack_by must be one of decade|type|lang|oa. Pass `filters` to scope the " +
+    "aggregation to a subset. Returns `empty:true` when nothing resolved matches.",
+  inputSchema: z.object({
+    chart_type: chartTypeEnum.describe(
+      "bar | hbar | donut | line | stacked-bar. Use donut for a parts-of-whole " +
+        "split (e.g. oa), line for a year/decade trend, hbar for long category lists.",
+    ),
+    group_by: aggregateDimensionEnum.describe(
+      "The dimension to group by (the chart's categories / x-axis).",
+    ),
+    stack_by: crossDimensionEnum
+      .optional()
+      .describe(
+        "Segment dimension for stacked-bar ONLY (one of decade|type|lang|oa). " +
+          "Required when chart_type is stacked-bar; ignored otherwise.",
+      ),
+    unit: z
+      .string()
+      .trim()
+      .max(40)
+      .optional()
+      .describe('Unit suffix shown in the data table, e.g. " records". Default " records".'),
+    top: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Cap on categories for long-tail dimensions (funder/publisher/venue). Default 12."),
+    filters: corpusFiltersSchema.optional(),
+  }),
+  handler: async (input, ctx) => {
+    const projectId = await projectIdFromSession(ctx.appSessionId)
+    const filters = input.filters as CorpusFilterSet | undefined
+    const unit = input.unit ?? " records"
+    const filteredSuffix = filters ? " · filtered" : ""
+
+    // --- Stacked bar: cross two dimensions via crossFacets -------------------
+    if (input.chart_type === "stacked-bar") {
+      const xEnum = crossDimensionEnum.safeParse(input.group_by)
+      if (!xEnum.success || !input.stack_by) {
+        return {
+          error:
+            "stacked-bar requires group_by AND stack_by to each be one of " +
+            "decade | type | lang | oa.",
+        }
+      }
+      const xDim = xEnum.data
+      const segDim = input.stack_by
+      const cross = await CorpusQueries.crossFacets(
+        projectId,
+        "head",
+        [toFacetDimension(xDim), toFacetDimension(segDim)],
+        filters,
+      )
+      if (cross.cells.length === 0) {
+        return { empty: true, message: "No resolved documents match — nothing to chart." }
+      }
+
+      const byX = new Map<string, Map<string, number>>()
+      const segTotals = new Map<string, number>()
+      const xTotals = new Map<string, number>()
+      for (const c of cross.cells) {
+        const inner = byX.get(c.a) ?? new Map<string, number>()
+        inner.set(c.b, c.count)
+        byX.set(c.a, inner)
+        segTotals.set(c.b, (segTotals.get(c.b) ?? 0) + c.count)
+        xTotals.set(c.a, (xTotals.get(c.a) ?? 0) + c.count)
+      }
+
+      const segKeys = [...segTotals.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([k]) => k)
+      const segColor = new Map(
+        segKeys.map((k, i) => [k, segDim === "oa" ? (OA_COLORS[k] ?? paletteColor(i)) : paletteColor(i)]),
+      )
+
+      const xKeys = [...byX.keys()].sort((a, b) =>
+        xDim === "decade"
+          ? decadeAsc(a, b)
+          : (xTotals.get(b) ?? 0) - (xTotals.get(a) ?? 0),
+      )
+
+      const data = xKeys.map((x) => ({
+        label: labelFor(xDim, x),
+        segments: segKeys
+          .filter((k) => byX.get(x)?.has(k))
+          .map((k) => ({
+            key: labelFor(segDim, k),
+            value: byX.get(x)?.get(k) as number,
+            color: segColor.get(k),
+          })),
+      }))
+
+      const spec: ChartSpec = {
+        type: "stacked-bar",
+        unit,
+        source: `count(records) group by ${DIMENSION_PHRASE[xDim]} × ${DIMENSION_PHRASE[segDim]}${filteredSuffix}`,
+        data,
+      }
+      return {
+        chart_block: renderChartFence(spec),
+        spec,
+        categories: data.length,
+        segments: segKeys.length,
+      }
+    }
+
+    // --- Flat charts: single-dimension aggregation --------------------------
+    const agg = await CorpusQueries.aggregate(projectId, "head", {
+      dimension: input.group_by,
+      filters,
+      top: input.top,
+    })
+    if (agg.groups.length === 0) {
+      return {
+        empty: true,
+        total: agg.total,
+        message:
+          agg.total === 0
+            ? "No resolved documents in the corpus yet — nothing to chart."
+            : `No documents carry a ${DIMENSION_PHRASE[input.group_by]} value — nothing to chart.`,
+      }
+    }
+
+    const chartType = input.chart_type as FlatChartType
+    // Colours: oa always gets its canonical bucket colours; a donut needs a
+    // distinct colour per slice; bar/hbar/line stay on the brand teal (omitted).
+    const data = agg.groups.map((g, i) => {
+      const color =
+        input.group_by === "oa"
+          ? (OA_COLORS[g.key] ?? paletteColor(i))
+          : chartType === "donut"
+            ? paletteColor(i)
+            : undefined
+      return {
+        label: labelFor(input.group_by, g.key),
+        value: g.value,
+        ...(color ? { color } : {}),
+      }
+    })
+
+    const spec: ChartSpec = {
+      type: chartType,
+      unit,
+      source: `count(records) group by ${DIMENSION_PHRASE[input.group_by]}${filteredSuffix}`,
+      data,
+    }
+
+    return {
+      chart_block: renderChartFence(spec),
+      spec,
+      total: agg.total,
+      categories: data.length,
+    }
+  },
+})
+
 // Convenience array for the registry builder.
 export const corpusTools = [
   corpusGetStateTool,
@@ -515,4 +775,5 @@ export const corpusTools = [
   corpusRemoveByFilterTool,
   corpusStatsTool,
   corpusDiffTool,
+  corpusAggregateTool,
 ] as const

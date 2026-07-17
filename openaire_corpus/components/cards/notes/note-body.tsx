@@ -15,6 +15,10 @@ import {
 import type { ParsedCitation } from "@/lib/citations/syntax"
 import { CitationPill } from "./citation-pill"
 import { NoteLinkPill } from "./note-link-pill"
+import { NoteChartFence } from "./note-chart"
+
+// Fenced-code language that carries an embedded chart spec (see lib/charts/spec).
+const CHART_LANG = "language-chart"
 
 // Fragment tags that carry a citation through markdown rendering. Protocol-less
 // (no colon), so react-markdown's urlTransform and rehype-sanitize pass them
@@ -86,11 +90,36 @@ const MD_COMPONENTS: Components = {
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
   em: ({ children }) => <em className="italic text-neutral-200">{children}</em>,
-  code: ({ children }) => (
-    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-brand-teal">
-      {children}
-    </code>
-  ),
+  // Inline code, EXCEPT a fenced ```chart block: that renders as an embedded
+  // chart. The `pre` override below unwraps the surrounding <pre> for charts so
+  // the chart card is a clean block, not nested inside a <pre>.
+  code: ({ className, children }) => {
+    if (typeof className === "string" && className.includes(CHART_LANG)) {
+      return <NoteChartFence raw={String(children).replace(/\n$/, "")} />
+    }
+    return (
+      <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-brand-teal">
+        {children}
+      </code>
+    )
+  },
+  pre: ({ node, children }) => {
+    // A fenced ```chart block: the `code` component already returned the chart
+    // card, so drop the <pre> wrapper (a block chart must not sit inside <pre>).
+    const codeChild = node?.children.find(
+      (c) => c.type === "element" && c.tagName === "code",
+    )
+    const cls =
+      codeChild && codeChild.type === "element" ? codeChild.properties?.className : undefined
+    if (Array.isArray(cls) && cls.includes(CHART_LANG)) {
+      return <>{children}</>
+    }
+    return (
+      <pre className="my-4 overflow-x-auto rounded-md border border-border bg-muted/40 p-3 font-mono text-xs text-neutral-200">
+        {children}
+      </pre>
+    )
+  },
   // `a` and `img` are supplied per-instance in NoteBody: `a` maps `#cite-<n>`
   // hrefs to <CitationPill> (else a normal external link), `img` maps `#img-<n>`
   // srcs to a folio <figure>.

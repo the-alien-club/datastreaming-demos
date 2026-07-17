@@ -19,6 +19,7 @@ export const AGENT_TOOLS = {
   corpusRemoveByFilter: "corpus_remove_by_filter",
   corpusStats:          "corpus_stats",
   corpusDiff:           "corpus_diff",
+  corpusAggregate:      "corpus_aggregate",
 
   // --- Memory tools -----------------------------------------------------------
   memoryRead:  "memory_read",

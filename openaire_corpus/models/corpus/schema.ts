@@ -188,6 +188,38 @@ export type CorpusCrossFacets = {
 }
 
 /**
+ * The single-dimension groupings `CorpusQueries.aggregate()` can compute over the
+ * resolved corpus — the raw material for a chart embedded in a research note.
+ * `period`/`type`/`lang`/`oa` overlap with the facets already in a snapshot;
+ * `year` (per-year, not decade-binned), `access_right`, `peer_reviewed`,
+ * `funder`, `publisher`, and `venue` extend beyond them.
+ */
+export type CorpusAggregateDimension =
+  | "year"
+  | "decade"
+  | "type"
+  | "lang"
+  | "oa"
+  | "access_right"
+  | "peer_reviewed"
+  | "funder"
+  | "publisher"
+  | "venue"
+
+/**
+ * A single-dimension aggregation over the resolved corpus — the result of
+ * `CorpusQueries.aggregate()`. `groups` are ordered as the dimension dictates
+ * (chronological for year/decade, canonical for oa, count-descending otherwise).
+ * `total` is the resolved count in scope (the denominator), which can exceed the
+ * summed group values when some rows have a null value on the grouped field.
+ */
+export type CorpusAggregation = {
+  dimension: CorpusAggregateDimension
+  total: number
+  groups: { key: string; value: number }[]
+}
+
+/**
  * Delta between two corpus versions: which ids were added and which removed.
  * Computed in CorpusQueries.diff(); never client-side (sample is sampled).
  */

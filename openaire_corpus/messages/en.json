@@ -448,7 +448,8 @@
       "remove": "Remove from corpus",
       "remove_by_filter": "Remove by filter",
       "stats": "Stats",
-      "diff": "Corpus diff"
+      "diff": "Corpus diff",
+      "aggregate": "Aggregate (chart)"
     },
     "memory": {
       "read": "Read memory",
@@ -621,6 +622,12 @@
       "bodyLabel": "Content",
       "save": "Save",
       "saving": "Saving…"
+    },
+    "chart": {
+      "viewData": "View data & source",
+      "query": "query",
+      "total": "total",
+      "parseError": "Unreadable chart"
     }
   },
   "ingest": {

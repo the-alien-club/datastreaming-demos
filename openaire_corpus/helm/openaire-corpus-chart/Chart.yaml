@@ -1,6 +1,6 @@
 apiVersion: v2
 name: openaire-corpus
-version: 0.2.0
+version: 0.3.0
 description: OpenAIRE Literature Research — Alien Intelligence × OpenAIRE demo (Next.js app + ingest worker + Postgres)
 type: application
 # 0.1.0 — initial OpenAIRE chart, forked from the BnF corpus chart:
@@ -13,4 +13,8 @@ type: application
 # 0.1.1 — app-only: fix the root `/` redirect hardcoding locale "fr" (fork
 #   leftover) → use the request's active locale so English-primary users land on
 #   /sign-in, not /fr/sign-in. Worker image stays 0.1.0.
-appVersion: "0.2.0"
+# 0.3.0 — app-only: "graphs in notes" — the research agent embeds reproducible
+#   data charts in notes via the new corpus_aggregate tool + a ```chart fence
+#   renderer (bar/hbar/donut/line/stacked-bar); plus per-stage ingest queue
+#   status. Worker image unchanged.
+appVersion: "0.3.0"

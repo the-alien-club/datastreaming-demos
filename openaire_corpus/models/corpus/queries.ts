@@ -16,6 +16,8 @@ import {
 import {
   corpusVersionWithIds,
   documentRow,
+  type CorpusAggregateDimension,
+  type CorpusAggregation,
   type CorpusCrossFacets,
   type CorpusDiff,
   type CorpusFacetDimension,
@@ -25,6 +27,18 @@ import {
   type CorpusVersionStatus,
   type CorpusVersionWithIds,
 } from "./schema"
+
+/** Canonical open-access bucket order for aggregation output (matches the UI). */
+const OA_ORDER = [
+  OPEN_ACCESS_CLASS.GOLD,
+  OPEN_ACCESS_CLASS.GREEN,
+  OPEN_ACCESS_CLASS.HYBRID,
+  OPEN_ACCESS_CLASS.BRONZE,
+  OPEN_ACCESS_CLASS.CLOSED,
+] as const
+
+/** Default cap on the number of groups returned for long-tail dimensions. */
+const AGGREGATE_TOP_DEFAULT = 12
 
 // Prisma WHERE fragment matching one open-access bucket — the SQL mirror of
 // classifyOpenAccess(). Precedence there is color → green → closed, so the SQL
@@ -680,6 +694,136 @@ export class CorpusQueries {
       .sort((x, y) => y.count - x.count)
 
     return { dims, cells }
+  }
+
+  /**
+   * Group the RESOLVED corpus by a single dimension and return real counts — the
+   * raw material for a chart embedded in a research note. Reuses the shared
+   * `buildCorpusWhere` scoping so an aggregation honours the same filters as any
+   * other corpus read. `total` is the resolved count in scope (the denominator);
+   * groups are ordered per dimension (chronological / canonical / count-desc).
+   *
+   * `opts.top` caps long-tail dimensions (funder/publisher/venue); the default is
+   * AGGREGATE_TOP_DEFAULT. It is ignored for the naturally-bounded dimensions.
+   */
+  static async aggregate(
+    projectId: string,
+    ref: "head" | "ingested" | { seq: number },
+    opts: {
+      dimension: CorpusAggregateDimension
+      filters?: CorpusFilterSet
+      top?: number
+    },
+  ): Promise<CorpusAggregation> {
+    const version = await CorpusQueries.resolveVersion(projectId, ref)
+    const { resolvedWhere } = buildCorpusWhere(version.id, opts.filters)
+    const top = opts.top ?? AGGREGATE_TOP_DEFAULT
+    const dimension = opts.dimension
+
+    const total = await prisma.document.count({ where: resolvedWhere })
+
+    let groups: { key: string; value: number }[]
+
+    switch (dimension) {
+      case "year": {
+        const rows = await prisma.document.groupBy({
+          by: ["year"],
+          where: { ...resolvedWhere, year: { not: null } },
+          _count: true,
+        })
+        groups = rows
+          .filter((r): r is typeof r & { year: number } => r.year !== null)
+          .map((r) => ({ key: String(r.year), value: r._count }))
+          .sort((a, b) => Number(a.key) - Number(b.key))
+        break
+      }
+      case "decade": {
+        const rows = await prisma.document.findMany({
+          where: { ...resolvedWhere, year: { not: null } },
+          select: { year: true },
+        })
+        const bins = new Map<number, number>()
+        for (const r of rows) {
+          if (r.year === null) continue
+          const decade = Math.floor(r.year / 10) * 10
+          bins.set(decade, (bins.get(decade) ?? 0) + 1)
+        }
+        groups = [...bins.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([decade, value]) => ({ key: `${decade}s`, value }))
+        break
+      }
+      case "type":
+      case "lang":
+      case "access_right":
+      case "funder":
+      case "publisher":
+      case "venue": {
+        const column = {
+          type: "instanceType",
+          lang: "lang",
+          access_right: "bestAccessRight",
+          funder: "funder",
+          publisher: "publisher",
+          venue: "venue",
+        }[dimension] as
+          | "instanceType"
+          | "lang"
+          | "bestAccessRight"
+          | "funder"
+          | "publisher"
+          | "venue"
+        const rows = await prisma.document.groupBy({
+          by: [column],
+          where: { ...resolvedWhere, [column]: { not: null } },
+          _count: true,
+        })
+        const sorted = rows
+          .map((r) => ({ key: String(r[column]), value: r._count }))
+          .sort((a, b) => b.value - a.value)
+        // Long-tail dimensions (funder/publisher/venue) are capped; the naturally
+        // bounded ones (type/lang/access_right) are returned whole.
+        const bounded =
+          dimension === "funder" || dimension === "publisher" || dimension === "venue"
+        groups = bounded ? sorted.slice(0, top) : sorted
+        break
+      }
+      case "oa": {
+        const rows = await prisma.document.findMany({
+          where: resolvedWhere,
+          select: { openAccessColor: true, isGreen: true, bestAccessRight: true },
+        })
+        const counts = new Map<string, number>()
+        for (const r of rows) {
+          const cls = classifyOpenAccess({
+            openAccessColor: r.openAccessColor,
+            isGreen: r.isGreen,
+            bestAccessRight: r.bestAccessRight,
+          })
+          if (cls !== null) counts.set(cls, (counts.get(cls) ?? 0) + 1)
+        }
+        groups = OA_ORDER.filter((cls) => counts.has(cls)).map((cls) => ({
+          key: cls,
+          value: counts.get(cls) as number,
+        }))
+        break
+      }
+      case "peer_reviewed": {
+        const [peer, notPeer] = await Promise.all([
+          prisma.document.count({ where: { ...resolvedWhere, peerReviewed: true } }),
+          prisma.document.count({ where: { ...resolvedWhere, peerReviewed: false } }),
+        ])
+        const unknown = total - peer - notPeer
+        groups = [
+          { key: "peer_reviewed", value: peer },
+          { key: "not_peer_reviewed", value: notPeer },
+          { key: "unknown", value: unknown },
+        ].filter((g) => g.value > 0)
+        break
+      }
+    }
+
+    return { dimension, total, groups }
   }
 
   /**
