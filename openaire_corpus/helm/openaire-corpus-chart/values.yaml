@@ -8,7 +8,7 @@ replicaCount: 1
 image:
   repository: rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus
   pullPolicy: Always
-  tag: "0.1.1"
+  tag: "0.2.0"
 
 imagePullSecrets: []
 
@@ -110,7 +110,7 @@ worker:
   image:
     repository: rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus-worker
     pullPolicy: Always
-    tag: "0.1.0"
+    tag: "0.2.0"
 
   service:
     type: ClusterIP
@@ -136,8 +136,15 @@ worker:
 
     # --- Full-text lane ---
     # true = fetch open-access PDFs and OCR them via Mistral (per-page full text +
-    # inline figure captions + figure image files). false = abstract + metadata only.
+    # inline figure captions + figure image files). Kept as the JATS lane's fallback.
     fulltextEnabled: "true"
+    # JATS structured-text lane (preferred): Europe PMC → publisher (eLife/PLOS) →
+    # Unpaywall → PDF+OCR → abstract. Clean sections, no OCR error rate.
+    jatsEnabled: "true"
+    # Unpaywall OA-PDF fallback tier (needs contactEmail; skipped without it).
+    unpaywallEnabled: "true"
+    # Contact email — required by Unpaywall's API, sent as the Europe PMC UA.
+    contactEmail: "leo@alien.club"
     mistralOcrModel: mistral-ocr-latest
     # Per-host PDF-fetch politeness rate (requests/min/host) + size/page ceilings.
     pdfHostRpm: "60"

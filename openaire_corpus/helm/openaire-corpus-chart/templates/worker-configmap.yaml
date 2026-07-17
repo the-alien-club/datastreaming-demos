@@ -31,12 +31,21 @@ data:
   SCHOLEX_RPM: {{ .Values.worker.config.scholexRpm | quote }}
 
   # --- Full-text lane ---
-  # true = fetch open-access PDFs and OCR them via Mistral (per-page full text +
-  # inline figure captions + figure image files). false = abstract + metadata only.
+  # PDF+OCR lane: fetch open-access PDFs and OCR them via Mistral. Kept as the
+  # fallback under the JATS lane; also the primary when jatsEnabled is off.
   FULLTEXT_ENABLED: {{ .Values.worker.config.fulltextEnabled | quote }}
-  {{- if .Values.worker.config.fulltextEnabled }}
-  # Mistral OCR — the full-text extractor for OA PDFs. Key is a secret
-  # (worker-creds: MISTRAL_API_KEY).
+  # JATS structured-text lane (preferred): Europe PMC → publisher (eLife/PLOS) →
+  # Unpaywall → PDF+OCR fallback → abstract. Clean sections, no OCR error rate.
+  JATS_ENABLED: {{ .Values.worker.config.jatsEnabled | quote }}
+  # Unpaywall OA-PDF fallback tier (needs contactEmail; skipped without it).
+  UNPAYWALL_ENABLED: {{ .Values.worker.config.unpaywallEnabled | quote }}
+  {{- with .Values.worker.config.contactEmail }}
+  # Contact email — required by Unpaywall's API + sent as the Europe PMC UA.
+  CONTACT_EMAIL: {{ . | quote }}
+  {{- end }}
+  {{- if or .Values.worker.config.fulltextEnabled .Values.worker.config.jatsEnabled }}
+  # Mistral OCR — the PDF full-text extractor (JATS lane's fallback). Key is a
+  # secret (worker-creds: MISTRAL_API_KEY).
   MISTRAL_OCR_MODEL: {{ .Values.worker.config.mistralOcrModel | quote }}
   # Per-host PDF-fetch politeness rate + size/page ceilings.
   PDF_HOST_RPM: {{ .Values.worker.config.pdfHostRpm | quote }}
