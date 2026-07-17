@@ -26,12 +26,16 @@ function escapeLinkText(label: string): string {
   return label.replace(/[[\]]/g, "\\$&")
 }
 
-/** Human suffix for a passage locator ("p12" → " (p. 12)", "abstract" → " (abstract)"). */
+/** Human suffix for a passage locator ("p12" → " (p. 12)", "abstract" →
+ *  " (abstract)", "s:results" → " (§ results)"). */
 function locatorSuffix(locator: string | undefined): string {
   if (!locator) return ""
   if (locator === "abstract") return " (abstract)"
-  const m = /^p(\d+)$/.exec(locator)
-  return m ? ` (p. ${m[1]})` : ""
+  const p = /^p(\d+)$/.exec(locator)
+  if (p) return ` (p. ${p[1]})`
+  const s = /^s:([A-Za-z0-9_-]+)$/.exec(locator)
+  if (s) return ` (§ ${s[1].replace(/[-_]/g, " ")})`
+  return ""
 }
 
 /**

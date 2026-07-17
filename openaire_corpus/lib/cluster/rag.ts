@@ -20,8 +20,8 @@ export interface RagPassage {
   doi: string | null
   /**
    * Citation locator within the record: "abstract", "p<N>" (a full-text PDF
-   * page), or null when the chunk carries no precise locator. A citation
-   * `[[openaireId|label|locator]]` MAY omit the locator (see
+   * page), "s:<id>" (a JATS section), or null when the chunk carries no precise
+   * locator. A citation `[[openaireId|label|locator]]` MAY omit the locator (see
    * playbook/citations.md); the agent never invents one.
    */
   locator: string | null
@@ -45,6 +45,9 @@ export interface RagPassage {
   title?: string
   /** Publication year (optional, denormalised for filtering). */
   year?: number
+  /** Section title for a JATS-section passage (e.g. "Results") — lets the agent
+   *  write a meaningful citation label. Absent for page/abstract passages. */
+  sectionTitle?: string
 }
 
 export interface RagQueryRequest {

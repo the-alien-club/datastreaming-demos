@@ -49,9 +49,11 @@ export function SheetCitationSource({
   const locatorText =
     parsedLocator?.kind === "page"
       ? t("pageLabel", { page: parsedLocator.page })
-      : parsedLocator?.kind === "abstract"
-        ? t("abstractLabel")
-        : null
+      : parsedLocator?.kind === "section"
+        ? t("sectionLabel", { section: parsedLocator.id.replace(/[-_]/g, " ") })
+        : parsedLocator?.kind === "abstract"
+          ? t("abstractLabel")
+          : null
 
   // Dedupe by note — a note citing the same record several times returns one
   // usage row per citation, which would otherwise render as N identical lines.

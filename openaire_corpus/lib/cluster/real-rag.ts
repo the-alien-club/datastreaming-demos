@@ -75,12 +75,14 @@ async function resolveDatasetComposite(
 }
 
 /**
- * Derive a citation locator from a chunk's section + page. "abstract" for the
- * abstract chunk, "p<N>" for a full-text PDF page, null otherwise (metadata
- * chunks, or a full-text chunk with no page). Never invented.
+ * Derive a citation locator from a chunk's section/page/section_id. "abstract" for
+ * the abstract chunk, "s:<id>" for a JATS section, "p<N>" for a full-text PDF page,
+ * null otherwise (metadata chunks, or a full-text chunk with no locator). Never
+ * invented.
  */
-function deriveLocator(section: unknown, page: unknown): string | null {
+function deriveLocator(section: unknown, page: unknown, sectionId: unknown): string | null {
   if (section === "abstract") return "abstract"
+  if (typeof sectionId === "string" && /^[A-Za-z0-9_-]+$/.test(sectionId)) return `s:${sectionId}`
   if (typeof page === "number" && Number.isFinite(page)) return `p${page}`
   return null
 }
@@ -94,12 +96,14 @@ function deriveLocator(section: unknown, page: unknown): string | null {
 function chunkToPassage(chunk: DataclusterChunk): RagPassage | null {
   const { openaire_id, doi, section, page, char_start, char_end, entry_id, year } =
     chunk.metadata
+  const sectionId = chunk.metadata.section_id
+  const sectionTitle = chunk.metadata.section_title
   if (typeof openaire_id !== "string" || openaire_id.length === 0) return null
 
   return {
     openaireId: openaire_id,
     doi: typeof doi === "string" && doi.length > 0 ? doi : null,
-    locator: deriveLocator(section, page),
+    locator: deriveLocator(section, page, sectionId),
     snippet: chunk.chunk_text,
     score: chunk.score,
     charRange: [
@@ -108,6 +112,9 @@ function chunkToPassage(chunk: DataclusterChunk): RagPassage | null {
     ],
     entryId: typeof entry_id === "number" ? entry_id : null,
     ...(typeof year === "number" ? { year } : {}),
+    ...(typeof sectionTitle === "string" && sectionTitle.length > 0
+      ? { sectionTitle }
+      : {}),
   }
 }
 

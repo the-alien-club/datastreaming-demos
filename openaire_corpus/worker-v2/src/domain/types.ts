@@ -28,6 +28,10 @@ export interface OaMeta {
   publisher: string | null;
   type: string;
   doi: string | null;
+  /** PubMed Central id ("PMC…") from pids[] — the Europe PMC JATS key. Null = none. */
+  pmcid?: string | null;
+  /** PubMed id from pids[] — the fallback id-resolution key. Null = none. */
+  pmid?: string | null;
   bestAccessRight: string | null;
   openAccessColor: string | null;
   license?: string | null;
@@ -60,24 +64,42 @@ export interface FigureRef {
   ext: string;
 }
 
+/** A logical section of a JATS full-text document (the structured-text lane). Text
+ *  rides the queue here (not in S3) because it's already clean UTF-8, small per doc,
+ *  and — unlike OCR page arrays — has no natural page index to key an S3 blob on. */
+export interface DocSection {
+  /** Stable per-doc section id ("s1", "results", …) — the section half of the
+   *  `s:<id>` citation locator. Slug-safe: matches `[A-Za-z0-9_-]+`. */
+  id: string;
+  /** Human-readable section title ("Results", "Materials and methods", …). */
+  title: string;
+  /** The section's plain/markdown text (figure refs already rewritten). */
+  text: string;
+}
+
 /** Resolve → prepare (abstract/metadata) or resolve → fetchPdf (fulltext). */
 export interface ResolvedDoc extends DocRef {
   lane: Lane;
   meta: OaMeta;
   /** Ranked candidate PDFs for the fulltext lane (empty/undefined otherwise). */
   pdfCandidates?: PdfCandidate[];
-  /** Extracted per-page text (fulltext lane, set by the extract stage — B-M2).
+  /** Extracted per-page text (PDF/OCR fulltext lane, set by the extract stage — B-M2).
    *  When present, prepare builds page chunks from these instead of the abstract. */
   pageTexts?: string[];
+  /** Structured sections (JATS fulltext lane, set by the fetch-fulltext stage). When
+   *  present, prepare builds section chunks. Takes precedence over pageTexts. */
+  sections?: DocSection[];
   /** Figures extracted from the PDF (fulltext lane). Bytes in S3; register uploads. */
   figures?: FigureRef[];
 }
 
-/** Where a chunk came from — the citation locator. */
+/** Where a chunk came from — the citation locator. `page` = OCR/PDF page; `section`
+ *  = a JATS logical section (the two structured-text sources never mix per doc). */
 export type ChunkLocator =
   | { kind: "abstract" }
   | { kind: "metadata" }
-  | { kind: "page"; page: number; part?: number };
+  | { kind: "page"; page: number; part?: number }
+  | { kind: "section"; id: string; title: string; part?: number };
 
 export interface PreparedChunk {
   index: number;

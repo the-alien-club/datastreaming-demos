@@ -78,6 +78,11 @@ export function buildIndexChunks(
       doi: meta.doi,
       page,
       section: sectionOf(c.locator),
+      // Section locator (JATS lane): the app derives the `s:<id>` citation locator
+      // from section_id and shows section_title in the source panel. Null for
+      // page/abstract/metadata chunks.
+      section_id: c.locator.kind === "section" ? c.locator.id : null,
+      section_title: c.locator.kind === "section" ? c.locator.title : null,
       year: meta.year,
       doc_type: meta.type,
     };

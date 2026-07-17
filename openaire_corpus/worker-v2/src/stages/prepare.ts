@@ -17,7 +17,7 @@ import type { StageContext, StageOutcome } from "../core/types.js";
 import type { DocStateStore } from "../domain/doc-state.js";
 import { keys } from "../domain/keys.js";
 import { Q } from "../domain/queues.js";
-import type { OaMeta, PreparedChunk, PreparedDoc, ResolvedDoc } from "../domain/types.js";
+import type { DocSection, OaMeta, PreparedChunk, PreparedDoc, ResolvedDoc } from "../domain/types.js";
 import { failDoc } from "./doc-fail.js";
 import { renderMarkdown } from "../live/render.js";
 
@@ -93,6 +93,40 @@ export function buildPageChunks(meta: OaMeta, pageTexts: string[]): PreparedChun
   return chunks;
 }
 
+/**
+ * Build chunks for a JATS full-text doc: a lead chunk (title + abstract, or title
+ * alone), then one chunk per section. Sections > MAX_CHUNK_CHARS split into parts
+ * carrying the section id/title; empty sections are skipped. Section text is already
+ * clean (no OCR), so there is no tiny-section forward-merge — a short "Acknowledgements"
+ * is a legitimate standalone citable section. Pure — exported for tests.
+ */
+export function buildSectionChunks(meta: OaMeta, sections: DocSection[]): PreparedChunk[] {
+  const chunks: PreparedChunk[] = [];
+  let index = 0;
+
+  const abstract = meta.abstract?.trim();
+  const lead = abstract && abstract.length > 0 ? `${meta.title}\n\n${abstract}`.trim() : meta.title;
+  chunks.push({ index: index++, text: lead, locator: { kind: "abstract" } });
+
+  for (const sec of sections) {
+    const text = sec.text.trim();
+    if (text.length === 0) continue;
+    if (text.length <= MAX_CHUNK_CHARS) {
+      chunks.push({ index: index++, text, locator: { kind: "section", id: sec.id, title: sec.title } });
+      continue;
+    }
+    const parts = splitText(text, MAX_CHUNK_CHARS);
+    for (let p = 0; p < parts.length; p++) {
+      chunks.push({
+        index: index++,
+        text: parts[p]!,
+        locator: { kind: "section", id: sec.id, title: sec.title, part: p },
+      });
+    }
+  }
+  return chunks;
+}
+
 /** Split on paragraph/sentence boundaries under `max`, hard-splitting only if a
  *  single segment exceeds it. */
 function splitText(text: string, max: number): string[] {
@@ -151,12 +185,15 @@ export class PrepareStage extends PipelineStage<ResolvedDoc, PreparedDoc> {
   }
 
   async process(doc: ResolvedDoc, ctx: StageContext): Promise<StageOutcome<PreparedDoc>> {
-    // Fulltext lane carries extracted page texts → page chunks (title+abstract lead
-    // chunk + one chunk per page). Abstract/metadata lanes build from meta.
+    // Fulltext lane carries either structured sections (JATS → section chunks) or
+    // extracted page texts (PDF/OCR → page chunks); both lead with title+abstract.
+    // Abstract/metadata lanes build from meta. Sections take precedence.
     const chunks =
-      doc.pageTexts && doc.pageTexts.length > 0
-        ? buildPageChunks(doc.meta, doc.pageTexts)
-        : buildMetaChunks(doc.meta);
+      doc.sections && doc.sections.length > 0
+        ? buildSectionChunks(doc.meta, doc.sections)
+        : doc.pageTexts && doc.pageTexts.length > 0
+          ? buildPageChunks(doc.meta, doc.pageTexts)
+          : buildMetaChunks(doc.meta);
     if (chunks.length === 0) {
       return failDoc(this.docState, doc.docJobId, "prepare_no_chunks");
     }

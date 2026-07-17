@@ -58,7 +58,7 @@ export const ragQueryTool = defineTool<
   name: AGENT_TOOLS.ragQuery,
   description:
     "Search the ingested corpus by semantic similarity. " +
-    "Returns passages with OpenAIRE id, DOI, locator (abstract or page), snippet, and relevance score. " +
+    "Returns passages with OpenAIRE id, DOI, locator (abstract, p<N> page, or s:<id> section), snippet, and relevance score. " +
     "Use focused, specific queries — one concept per call — rather than broad questions. " +
     "Apply filters (type, openAccessColor, yearFrom/yearTo) when the question is scoped. " +
     "Returns an empty passages array when no ingestion has been committed — " +

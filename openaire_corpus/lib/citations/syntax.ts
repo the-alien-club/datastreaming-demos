@@ -15,6 +15,8 @@
  * <locator> is OPTIONAL and pins the citation to a passage of the ingested
  * document:
  *   - `p<N>`     — page N of the fetched full-text PDF (N ≥ 1)
+ *   - `s:<id>`   — a logical section of a JATS full-text document (id is a slug,
+ *                  e.g. `s:results`, `s:materials-and-methods`)
  *   - `abstract` — the title+abstract chunk
  * Absent locator = the document as a whole (metadata-only records, or a claim
  * spanning the work). External links are DERIVED at render time from the
@@ -31,8 +33,8 @@
  *   - <openaireId> must match `[A-Za-z0-9_]+::[A-Za-z0-9]+`
  *   - <label> is free text; `|` and `]]` are escaped with `\` on write and
  *             unescaped on read. The regex captures the escaped form.
- *   - <locator> is `p<N>` or `abstract`; anything else fails the match (the
- *             raw text then renders as-is, which is the honest failure mode).
+ *   - <locator> is `p<N>`, `abstract`, or `s:<slug>`; anything else fails the
+ *             match (the raw text then renders as-is, the honest failure mode).
  *
  * CITATION_REGEX is the single definition of valid citation syntax. All code
  * that inspects note bodies must use parseCitations() or this regex — never a
@@ -42,7 +44,7 @@
 // The `(?<!!)` lookbehind rejects a leading `!` so the figure-embed form
 // `![[…|…|fN]]` (below) is parsed as an image, not a citation.
 export const CITATION_REGEX =
-  /(?<!!)\[\[([A-Za-z0-9_]+::[A-Za-z0-9]+)\|((?:[^|\]]|\\\||\\\])+)(?:\|(p\d+|abstract))?\]\]/g
+  /(?<!!)\[\[([A-Za-z0-9_]+::[A-Za-z0-9]+)\|((?:[^|\]]|\\\||\\\])+)(?:\|(p\d+|abstract|s:[A-Za-z0-9_-]+))?\]\]/g
 
 // A figure embed: `![[<openaireId>|<caption>|<figureId>]]` — the `!` prefix (as in
 // a markdown image) + a REQUIRED `f<N>` figure id distinguish it from a citation.
@@ -60,6 +62,7 @@ export const NOTELINK_REGEX =
 
 export type CitationLocator =
   | { kind: "page"; page: number }
+  | { kind: "section"; id: string }
   | { kind: "abstract" }
 
 export type ParsedCitation = {
@@ -67,7 +70,7 @@ export type ParsedCitation = {
   openaireId: string
   /** Human-readable source label (pipes/brackets already unescaped). */
   label: string
-  /** Raw locator token (`p12` | `abstract`) or null for a document-level cite. */
+  /** Raw locator token (`p12` | `abstract` | `s:results`) or null for a document-level cite. */
   locator: string | null
   /** Raw matched string as it appears in the note body. */
   raw: string
@@ -178,11 +181,13 @@ export function renderFigureEmbed(f: {
 export function parseLocator(locator: string | null): CitationLocator | null {
   if (locator == null) return null
   if (locator === "abstract") return { kind: "abstract" }
-  const m = /^p(\d+)$/.exec(locator)
-  if (m) {
-    const page = Number(m[1])
+  const p = /^p(\d+)$/.exec(locator)
+  if (p) {
+    const page = Number(p[1])
     if (page >= 1) return { kind: "page", page }
   }
+  const s = /^s:([A-Za-z0-9_-]+)$/.exec(locator)
+  if (s) return { kind: "section", id: s[1] }
   return null
 }
 

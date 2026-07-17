@@ -606,6 +606,7 @@
       "gallicaViewerSub": "The document in the OpenAIRE viewer",
       "usages": "Used in other notes",
       "pageLabel": "Page {page}",
+      "sectionLabel": "Section: {section}",
       "abstractLabel": "Abstract",
       "doiLabel": "DOI",
       "openDoi": "Open via DOI",

@@ -19,6 +19,10 @@ export function renderMarkdown(meta: OaMeta, chunks: PreparedChunk[]): string {
       const part = c.locator.part !== undefined ? ` (part ${c.locator.part + 1})` : "";
       return `## Page ${c.locator.page}${part}\n\n${c.text.trim()}`;
     }
+    if (c.locator.kind === "section") {
+      const part = c.locator.part !== undefined ? ` (part ${c.locator.part + 1})` : "";
+      return `## ${c.locator.title}${part}\n\n${c.text.trim()}`;
+    }
     if (c.locator.kind === "abstract") return `## Abstract\n\n${c.text.trim()}`;
     return c.text.trim();
   });

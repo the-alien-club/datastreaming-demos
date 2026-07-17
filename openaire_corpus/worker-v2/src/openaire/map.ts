@@ -28,6 +28,28 @@ function normalizeDoi(raw: string): string {
     .toLowerCase();
 }
 
+/** Extract the PMC id from `pids[]` (scheme==="pmc"), normalised to the "PMC…" form.
+ *  OpenAIRE emits it bare as "PMC7250577"; tolerate a stray "pmc" prefix casing. */
+export function extractPmcid(product: OaProduct): string | null {
+  for (const pid of product.pids ?? []) {
+    if (pid?.scheme?.toLowerCase() === "pmc" && typeof pid.value === "string" && pid.value.trim()) {
+      const v = pid.value.trim();
+      return /^pmc/i.test(v) ? `PMC${v.replace(/^pmc/i, "")}` : `PMC${v}`;
+    }
+  }
+  return null;
+}
+
+/** Extract the PubMed id from `pids[]` (scheme==="pmid"), digits only. */
+export function extractPmid(product: OaProduct): string | null {
+  for (const pid of product.pids ?? []) {
+    if (pid?.scheme?.toLowerCase() === "pmid" && typeof pid.value === "string" && pid.value.trim()) {
+      return pid.value.trim();
+    }
+  }
+  return null;
+}
+
 /** Parse the leading year out of a "YYYY-MM-DD"/"YYYY" publicationDate. */
 export function parseYear(publicationDate: string | null | undefined): number | null {
   if (!publicationDate) return null;
@@ -77,6 +99,8 @@ export function toMeta(product: OaProduct, fallbackDoi: string | null): OaMeta {
     publisher: product.publisher?.trim() || null,
     type: (product.type ?? "other").trim() || "other",
     doi,
+    pmcid: extractPmcid(product),
+    pmid: extractPmid(product),
     bestAccessRight: product.bestAccessRight?.label?.trim() || null,
     openAccessColor: product.openAccessColor?.trim() || null,
     subjects: subjectValues(product),
