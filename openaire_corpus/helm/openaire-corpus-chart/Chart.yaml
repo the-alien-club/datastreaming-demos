@@ -1,6 +1,6 @@
 apiVersion: v2
 name: openaire-corpus
-version: 0.1.0
+version: 0.1.1
 description: OpenAIRE Literature Research — Alien Intelligence × OpenAIRE demo (Next.js app + ingest worker + Postgres)
 type: application
 # 0.1.0 — initial OpenAIRE chart, forked from the BnF corpus chart:
@@ -10,4 +10,7 @@ type: application
 #   • worker env swapped to the worker-v2 OpenAIRE surface (OpenAIRE Graph API,
 #     ScholeXplorer, Mistral OCR full-text lane, RunPod embedder, data cluster)
 #   • dropped the BnF vision/Gallica/broker knobs the OpenAIRE worker never reads
-appVersion: "0.1.0"
+# 0.1.1 — app-only: fix the root `/` redirect hardcoding locale "fr" (fork
+#   leftover) → use the request's active locale so English-primary users land on
+#   /sign-in, not /fr/sign-in. Worker image stays 0.1.0.
+appVersion: "0.1.1"

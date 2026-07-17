@@ -18,7 +18,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: openaire
+    namespace: openaire-corpus
 
   # ArgoCD's `helm template` runs without cluster access, so the chart's
   # lookup-based password/secret preservation does not work — every sync would

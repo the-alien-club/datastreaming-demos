@@ -1,4 +1,4 @@
-namespace: openaire
+namespace: openaire-corpus
 
 # ===========================================================================
 # App (Next.js) — the Corpus / Ingest / Research workspace.
@@ -8,7 +8,7 @@ replicaCount: 1
 image:
   repository: rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus
   pullPolicy: Always
-  tag: "0.1.0"
+  tag: "0.1.1"
 
 imagePullSecrets: []
 
@@ -59,7 +59,7 @@ config:
   # OpenAIRE MCP — corpus building (Corpus step). URL is public; token is a
   # secret (openaireMcpTokenProperty). Hosted mcp-openaire (openaire_kg_* /
   # openaire_sx_* tools).
-  openaireMcpUrl: https://mcp.alien.club/mcp
+  openaireMcpUrl: https://openaire.mcp.alien.club/mcp
 
   # Data-cluster MCP — research RAG (Research step), required when clusterMode=real.
   # The research agent's rag_query tool queries this over dataset `openaire-<projectId>`.
@@ -122,8 +122,8 @@ worker:
     s3Endpoint: https://s3.fr-par.scw.cloud
     s3Region: fr-par
     # OpenAIRE artifacts sit under a dedicated prefix so they never collide with
-    # other tenants in the shared bucket.
-    s3Prefix: "openaire/"
+    # other tenants in the shared bucket (matches the verified local run).
+    s3Prefix: "openaire-fig/"
 
     # --- OpenAIRE Graph API + ScholeXplorer (public; token optional) ---
     # openaireApiBase left unset → the client's default (api.openaire.eu/graph/v1).

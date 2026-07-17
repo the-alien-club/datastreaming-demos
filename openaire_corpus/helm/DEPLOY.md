@@ -14,7 +14,7 @@ Internet
 Istio Ingress Gateway       (openaire.demo.alien.club:443 — OWN gateway + cert)
    │
    ▼
-VirtualService              (namespace: openaire, host openaire.demo.alien.club, path /)
+VirtualService              (namespace: openaire-corpus, host openaire.demo.alien.club, path /)
    │
    ▼
 Service  ClusterIP:80
@@ -79,7 +79,7 @@ gateway only if a Gateway already serves the host — see "Shared-Gateway Mode".
 |---|---|
 | ArgoCD Application | `openaire-corpus-prod` |
 | Helm release name | `openaire-corpus-prod` |
-| Kubernetes namespace | `openaire` |
+| Kubernetes namespace | `openaire-corpus` |
 | All resources | prefixed `openaire-corpus-prod-…` |
 | App image repo | `rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus` |
 | Worker image repo | `rg.fr-par.scw.cloud/ns-data-streaming/openaire-corpus-worker` |
@@ -222,13 +222,13 @@ kubectl --context platform-prod \
 ### 6. Verify startup
 
 ```bash
-kubectl --context platform-prod logs -n openaire deploy/openaire-corpus-prod --tail=30
+kubectl --context platform-prod logs -n openaire-corpus deploy/openaire-corpus-prod --tail=30
 ```
 
 Expected: Postgres wait → `prisma migrate deploy` → `▲ Next.js … ✓ Ready`.
 
 ```bash
-kubectl --context platform-prod logs -n openaire deploy/openaire-corpus-prod-worker --tail=30
+kubectl --context platform-prod logs -n openaire-corpus deploy/openaire-corpus-prod-worker --tail=30
 ```
 
 Expected: `worker_v2_up` with `httpPort: 7777` and pg-boss starting.
@@ -275,7 +275,7 @@ Same as steps 1–3 of the Release Loop above.
 ```bash
 helm upgrade --install openaire-corpus-prod helm/openaire-corpus-chart \
   --kube-context platform-prod \
-  --namespace openaire --create-namespace \
+  --namespace openaire-corpus --create-namespace \
   --timeout 4m
 ```
 
@@ -286,7 +286,7 @@ them) — unlike ArgoCD, which needs the `ignoreDifferences` workaround.
 ### 4. Verify (live values)
 
 ```bash
-kubectl --context platform-prod -n openaire get pods
+kubectl --context platform-prod -n openaire-corpus get pods
 curl -sS -o /dev/null -w "%{http_code}\n" https://openaire.demo.alien.club/   # 307 → /sign-in
 curl -sS -o /dev/null -w "%{http_code}\n" https://openaire.demo.alien.club/api/auth/get-session  # 200
 ```
@@ -347,7 +347,7 @@ on the two generated Secrets so syncs don't rotate the kept passwords/secrets.
 
 ### App pod `CrashLoopBackOff`
 ```bash
-kubectl --context platform-prod logs -n openaire deploy/openaire-corpus-prod
+kubectl --context platform-prod logs -n openaire-corpus deploy/openaire-corpus-prod
 ```
 Entrypoint waits ~2 min for Postgres, then runs `prisma migrate deploy`. Most
 startup failures are a missing env var (lib/env.ts throws by name) or a migration
@@ -361,7 +361,7 @@ resolves the SDK to a `file:` path. See "chat-sdk must be on npm" above.
 ### Ingestion never progresses
 Check the worker:
 ```bash
-kubectl --context platform-prod logs -n openaire deploy/openaire-corpus-prod-worker --tail=80 \
+kubectl --context platform-prod logs -n openaire-corpus deploy/openaire-corpus-prod-worker --tail=80 \
   | grep -iE "error|callback|register|embed|throttle"
 ```
 Common causes: a missing worker credential (S3 / RunPod / Mistral / cluster
