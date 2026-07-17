@@ -69,6 +69,14 @@ async function main(): Promise<void> {
   // JATS structured-text lane clients (Europe PMC + publisher + Unpaywall + PMC
   // figure images). Built only when jatsEnabled; the Unpaywall tier additionally
   // needs a contact email (its API mandates one).
+  // NB: figure IMAGES are intentionally NOT wired for v1. The PMC `/bin/{href}`
+  // pattern 404s on modern PMC (images live on an unpredictable CDN / in the OA
+  // package tar.gz), so wiring PmcFigureFetcher would only make one wasted 404 per
+  // figure per doc. Figure CAPTIONS are already ingested inline in the section text
+  // (searchable) and this stays graceful (0 figure files). Proper figure-image
+  // fetching via the PMC OA package is a tracked follow-up. PmcFigureFetcher is kept
+  // (tested) for that work.
+  void PmcFigureFetcher;
   const jats = cfg.jatsEnabled && hostGate
     ? {
         europePmc: new EuropePmcClient({
@@ -76,7 +84,6 @@ async function main(): Promise<void> {
           ...(cfg.contactEmail ? { email: cfg.contactEmail } : {}),
         }),
         publisherJats: new PublisherJatsClient({ hostGate }),
-        figureImages: new PmcFigureFetcher({ hostGate }),
         ...(cfg.unpaywallEnabled && cfg.contactEmail
           ? { unpaywall: new UnpaywallClient({ hostGate, email: cfg.contactEmail }) }
           : {}),

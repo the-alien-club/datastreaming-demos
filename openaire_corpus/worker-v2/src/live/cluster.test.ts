@@ -55,4 +55,29 @@ test("buildIndexChunks aligns embeddings by position and carries id + section/pa
   assert.deepEqual(indexed[1]!.embedding, [0.3, 0.4]);
   assert.equal(indexed[1]!.metadata.section, "fulltext");
   assert.equal(indexed[1]!.metadata.page, 3);
+  // Page chunks carry no section_id/section_title.
+  assert.equal(indexed[1]!.metadata.section_id, null);
+  assert.equal(indexed[1]!.metadata.section_title, null);
+});
+
+test("buildIndexChunks: a section-locator chunk carries section_id + section_title", () => {
+  const secChunks = [
+    { index: 0, text: "lead", locator: { kind: "abstract" as const } },
+    {
+      index: 1,
+      text: "We found HGT signatures.",
+      locator: { kind: "section" as const, id: "results", title: "Results" },
+    },
+  ];
+  const indexed = buildIndexChunks("doi_dedup::abc", meta, secChunks, [
+    [0.1],
+    [0.2],
+  ]);
+  // section chunk → section tag "fulltext" + section_id/title for the s:<id> locator.
+  assert.equal(indexed[1]!.metadata.section, "fulltext");
+  assert.equal(indexed[1]!.metadata.page, null);
+  assert.equal(indexed[1]!.metadata.section_id, "results");
+  assert.equal(indexed[1]!.metadata.section_title, "Results");
+  // abstract chunk stays clean.
+  assert.equal(indexed[0]!.metadata.section_id, null);
 });
