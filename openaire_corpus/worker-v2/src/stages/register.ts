@@ -58,7 +58,7 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
     const markdown = markdownBytes.toString("utf8");
     const hasFulltext = doc.lane === "fulltext";
     const original = hasFulltext
-      ? await this.pdfOriginal(doc.openaireId, markdown)
+      ? await this.fulltextOriginal(doc.openaireId, markdown)
       : mdOriginal(markdown);
     const figures = await this.loadFigures(doc);
 
@@ -125,11 +125,14 @@ export class RegisterStage extends PipelineStage<EmbeddedDoc, never> {
     return out;
   }
 
-  /** The fulltext original is the PDF when present; fall back to the markdown. */
-  private async pdfOriginal(
+  /** The fulltext original: the JATS XML (structured-text lane) when present, else
+   *  the PDF (PDF/OCR lane), else the rendered markdown. */
+  private async fulltextOriginal(
     openaireId: string,
     markdown: string,
   ): Promise<{ filename: string; bytes: Buffer; contentType: string }> {
+    const xml = await this.blob.getBytes(keys.xml(openaireId));
+    if (xml) return { filename: "document.xml", bytes: xml, contentType: "application/xml" };
     const pdf = await this.blob.getBytes(keys.pdf(openaireId));
     if (pdf) return { filename: "document.pdf", bytes: pdf, contentType: "application/pdf" };
     return mdOriginal(markdown);

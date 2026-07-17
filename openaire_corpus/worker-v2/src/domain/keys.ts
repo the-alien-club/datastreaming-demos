@@ -15,8 +15,10 @@ export function oaSlug(openaireId: string): string {
 export const keys = {
   /** Resolved product metadata JSON. */
   meta: (id: string) => `meta/${oaSlug(id)}.json`,
-  /** The downloaded full-text PDF bytes (fulltext lane only). */
+  /** The downloaded full-text PDF bytes (PDF/OCR fulltext lane only). */
   pdf: (id: string) => `pdf/${oaSlug(id)}.pdf`,
+  /** The fetched JATS full-text XML (structured-text lane; register's original). */
+  xml: (id: string) => `xml/${oaSlug(id)}.xml`,
   /** Extracted per-page text (content-hashed on the pdf bytes). */
   pages: (id: string, sha8: string) => `pages/${oaSlug(id)}.${sha8}.json`,
   /** Prepared index chunks (read back by register). */

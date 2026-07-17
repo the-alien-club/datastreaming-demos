@@ -39,8 +39,16 @@ export interface WorkerConfig {
   scholexEnabled: boolean;
   /** ScholeXplorer call rate (requests/min) — politeness cap for the /v3/Links API. */
   scholexRpm: number;
-  /** Route OPEN docs with a candidate PDF through the fulltext lane (B-M2). */
+  /** Route OPEN docs with a candidate PDF through the PDF+OCR fulltext lane (B-M2). */
   fulltextEnabled: boolean;
+  /** Prefer clean JATS full text (Europe PMC → publisher → Unpaywall) over PDF+OCR. */
+  jatsEnabled: boolean;
+  /** Enable the Unpaywall OA-PDF fallback tier (needs unpaywallEmail). */
+  unpaywallEnabled: boolean;
+  /** Contact email for Unpaywall (required by their API) + Europe PMC UA. */
+  contactEmail: string | undefined;
+  /** FetchFulltext stage concurrency. */
+  fetchFulltextConcurrency: number;
   /** Per-host PDF-fetch politeness rate (requests/min/host). */
   pdfHostRpm: number;
   /** Max PDF bytes to download before rejecting `too_large`. */
@@ -81,6 +89,10 @@ export function loadConfig(): WorkerConfig {
     scholexEnabled: optionalBool("SCHOLEX_ENABLED", true),
     scholexRpm: optionalInt("SCHOLEX_RPM", 60),
     fulltextEnabled: optionalBool("FULLTEXT_ENABLED", false),
+    jatsEnabled: optionalBool("JATS_ENABLED", false),
+    unpaywallEnabled: optionalBool("UNPAYWALL_ENABLED", false),
+    contactEmail: process.env.CONTACT_EMAIL?.trim() || undefined,
+    fetchFulltextConcurrency: optionalInt("FETCH_FULLTEXT_CONCURRENCY", 6),
     pdfHostRpm: optionalInt("PDF_HOST_RPM", 60),
     pdfMaxBytes: optionalInt("PDF_MAX_BYTES", 50 * 1024 * 1024),
     pdfMaxPages: optionalInt("PDF_MAX_PAGES", 500),

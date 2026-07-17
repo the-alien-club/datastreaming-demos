@@ -17,7 +17,7 @@ export function openaireDatasetSchema(projectId: string): Record<string, unknown
     description: `Schema for OpenAIRE project ${projectId} research products`,
     original: {
       required_files: [],
-      optional_files: ["doc.md", "document.pdf"],
+      optional_files: ["doc.md", "document.pdf", "document.xml"],
       metadata_schema: {
         type: "object",
         properties: {

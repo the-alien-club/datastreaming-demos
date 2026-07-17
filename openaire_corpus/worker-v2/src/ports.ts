@@ -59,6 +59,32 @@ export interface PdfTextExtractor {
   ): Promise<{ pages: string[]; figures: ExtractedFigure[] }>;
 }
 
+/** Fetches clean JATS full-text XML for a document (the structured-text lane).
+ *  Returns the raw XML string, or null when this source has no full text for the
+ *  doc (→ the fetch-fulltext stage falls through to the next tier). Never throws for
+ *  a plain "not available"; may throw on a transient network error (→ retry). */
+export interface JatsSource {
+  /** Europe PMC: by PMC id ("PMC7250577"). */
+  fetchByPmcid?(pmcid: string): Promise<string | null>;
+  /** Publisher JATS (eLife/PLOS…): by DOI. */
+  fetchByDoi?(doi: string): Promise<string | null>;
+}
+
+/** Resolves a direct OA PDF url for a DOI (Unpaywall). Null when none is known.
+ *  The fetch-fulltext stage hands the url to the existing PDF+OCR lane. */
+export interface OaPdfLocator {
+  findPdfUrl(doi: string): Promise<string | null>;
+}
+
+/** Fetches a figure's image bytes for a PMC article (the OA `/bin/` path). Returns
+ *  null when the image isn't openly available (→ that figure is skipped). */
+export interface FigureImageFetcher {
+  fetch(input: {
+    pmcid: string;
+    href: string;
+  }): Promise<{ bytes: Buffer; contentType: string } | null>;
+}
+
 /** RunPod (or any) embedder — vectors for a doc's chunk texts. */
 export interface Embedder {
   /** Embed N texts → N vectors (same order). */

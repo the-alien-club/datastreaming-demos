@@ -5,9 +5,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildMetaChunks, buildPageChunks, renderMetadataText } from "./prepare.js";
+import { buildMetaChunks, buildPageChunks, buildSectionChunks, renderMetadataText } from "./prepare.js";
 import { decideLane } from "./resolve.js";
-import type { OaMeta } from "../domain/types.js";
+import type { DocSection, OaMeta } from "../domain/types.js";
 
 const baseMeta: OaMeta = {
   title: "Title",
@@ -74,11 +74,65 @@ test("buildPageChunks: a huge page splits into parts", () => {
   }
 });
 
-test("decideLane: fulltext only when enabled + candidates; else abstract/metadata", () => {
+test("buildSectionChunks: abstract lead chunk + one chunk per section, section locators", () => {
+  const sections: DocSection[] = [
+    { id: "results", title: "Results", text: "We found HGT signatures." },
+    { id: "methods", title: "Methods", text: "Bayesian inference." },
+  ];
+  const chunks = buildSectionChunks({ ...baseMeta, abstract: "An abstract." }, sections);
+  assert.equal(chunks.length, 3);
+  assert.equal(chunks[0]!.locator.kind, "abstract");
+  assert.equal(chunks[0]!.text, "Title\n\nAn abstract.");
+  assert.equal(chunks[1]!.locator.kind, "section");
+  assert.deepEqual(
+    chunks.slice(1).map((c) => (c.locator.kind === "section" ? c.locator.id : null)),
+    ["results", "methods"],
+  );
+});
+
+test("buildSectionChunks: a >4000-char section splits into parts carrying id/title", () => {
+  const big = "word ".repeat(1200); // ~6000 chars
+  const chunks = buildSectionChunks(baseMeta, [{ id: "results", title: "Results", text: big }]);
+  const parts = chunks.filter((c) => c.locator.kind === "section");
+  assert.ok(parts.length >= 2, "large section split into >=2 parts");
+  for (const c of parts) {
+    assert.ok(c.text.length <= 4000);
+    assert.equal(c.locator.kind === "section" && c.locator.id === "results", true);
+    assert.equal(c.locator.kind === "section" && c.locator.part !== undefined, true);
+  }
+});
+
+test("buildSectionChunks: empty sections are skipped (no wasted chunk)", () => {
+  const chunks = buildSectionChunks(baseMeta, [
+    { id: "results", title: "Results", text: "   " },
+    { id: "methods", title: "Methods", text: "Real text." },
+  ]);
+  // lead (title only, no abstract) + one real section
+  assert.equal(chunks.length, 2);
+  assert.equal(chunks[1]!.locator.kind === "section" && chunks[1]!.locator.id, "methods");
+});
+
+test("decideLane: PDF fulltext only when enabled + candidates; else abstract/metadata", () => {
   const withAbs: OaMeta = { ...baseMeta, abstract: "x" };
+  const noDoi: OaMeta = { ...baseMeta, doi: null };
+  const noDoiAbs: OaMeta = { ...noDoi, abstract: "x" };
   const cand = [{ url: "https://x/a.pdf", host: "x", license: null }];
-  assert.equal(decideLane(withAbs, cand, true), "fulltext");
-  assert.equal(decideLane(withAbs, cand, false), "abstract");
-  assert.equal(decideLane(withAbs, [], true), "abstract");
-  assert.equal(decideLane(baseMeta, [], true), "metadata");
+  const pdfOnly = { fulltextEnabled: true, jatsEnabled: false };
+  const off = { fulltextEnabled: false, jatsEnabled: false };
+  assert.equal(decideLane(withAbs, cand, pdfOnly), "fulltext");
+  assert.equal(decideLane(withAbs, cand, off), "abstract");
+  // No DOI ⇒ not JATS-eligible; no candidates ⇒ not PDF-eligible → abstract/metadata.
+  assert.equal(decideLane(noDoiAbs, [], pdfOnly), "abstract");
+  assert.equal(decideLane(noDoi, [], pdfOnly), "metadata");
+});
+
+test("decideLane: JATS-eligible on a pmc id or DOI even with no PDF candidates", () => {
+  const jatsOn = { fulltextEnabled: false, jatsEnabled: true };
+  // DOI present → JATS lane.
+  assert.equal(decideLane(baseMeta, [], jatsOn), "fulltext");
+  // pmc id present, no DOI → still JATS lane.
+  assert.equal(decideLane({ ...baseMeta, doi: null, pmcid: "PMC1" }, [], jatsOn), "fulltext");
+  // Neither pmc nor DOI, no candidates → abstract/metadata even with JATS on.
+  const bare: OaMeta = { ...baseMeta, doi: null, abstract: "x" };
+  assert.equal(decideLane(bare, [], jatsOn), "abstract");
 });

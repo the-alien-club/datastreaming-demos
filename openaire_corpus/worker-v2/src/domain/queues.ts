@@ -11,6 +11,8 @@
  */
 export const Q = {
   resolve: "v2.resolve",
+  /** JATS structured-text lane (Europe PMC / publisher / Unpaywall cascade). */
+  fetchFulltext: "v2.fetchfulltext",
   fetchPdf: "v2.fetchpdf",
   extract: "v2.extract",
   prepare: "v2.prepare",

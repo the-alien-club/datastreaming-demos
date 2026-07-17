@@ -29,20 +29,27 @@ import { Q, type Lane } from "../domain/queues.js";
 import type { DocRef, OaMeta, PdfCandidate, ResolvedDoc } from "../domain/types.js";
 
 export interface ResolveOpts {
-  /** Route OPEN docs with a candidate PDF through the fulltext lane (B-M2). When
-   *  false (B-M1), every doc goes to prepare via abstract/metadata. Default false. */
+  /** Route OPEN docs with a candidate PDF through the PDF+OCR fulltext lane (B-M2).
+   *  When false (B-M1), every doc goes to prepare via abstract/metadata. Default false. */
   fulltextEnabled?: boolean;
+  /** Route docs with a pmc id / DOI through the JATS structured-text lane (preferred
+   *  over PDF+OCR). Default false. */
+  jatsEnabled?: boolean;
   /** Doc-resolution concurrency (bounded downstream by the rate gate). Default 6. */
   concurrency?: number;
 }
 
-/** Pure lane decision from the resolved meta + ranked PDF candidates. Exported for tests. */
+/** Pure lane decision from the resolved meta + ranked PDF candidates. "fulltext"
+ *  means "attempt full text" (JATS or PDF+OCR); the resolve stage then picks the
+ *  concrete lane queue. Exported for tests. */
 export function decideLane(
   meta: OaMeta,
   candidates: PdfCandidate[],
-  fulltextEnabled: boolean,
+  opts: { fulltextEnabled: boolean; jatsEnabled: boolean },
 ): Lane {
-  if (fulltextEnabled && candidates.length > 0) return "fulltext";
+  const jatsEligible = opts.jatsEnabled && (!!meta.pmcid || !!meta.doi);
+  const pdfEligible = opts.fulltextEnabled && candidates.length > 0;
+  if (jatsEligible || pdfEligible) return "fulltext";
   if (meta.abstract && meta.abstract.trim().length > 0) return "abstract";
   return "metadata";
 }
@@ -55,6 +62,7 @@ export class ResolveStage extends PipelineStage<DocRef, ResolvedDoc> {
   override readonly rate?: RateGate;
 
   private readonly fulltextEnabled: boolean;
+  private readonly jatsEnabled: boolean;
 
   private readonly scholex: ScholexClient;
 
@@ -69,6 +77,7 @@ export class ResolveStage extends PipelineStage<DocRef, ResolvedDoc> {
     super(deps);
     this.rate = rate;
     this.fulltextEnabled = opts.fulltextEnabled ?? false;
+    this.jatsEnabled = opts.jatsEnabled ?? false;
     this.concurrency = opts.concurrency ?? 6;
     // Citation-link enrichment is optional; a null client yields null counts.
     this.scholex = scholex ?? new NullScholexClient();
@@ -109,7 +118,10 @@ export class ResolveStage extends PipelineStage<DocRef, ResolvedDoc> {
     }
 
     const candidates = selectPdfCandidates(product);
-    const lane = decideLane(meta, candidates, this.fulltextEnabled);
+    const lane = decideLane(meta, candidates, {
+      fulltextEnabled: this.fulltextEnabled,
+      jatsEnabled: this.jatsEnabled,
+    });
 
     // pagesExpected is finalised at register (chunk count); seed a plan so the doc
     // leaves 'queued' and the read-model reconciles. 1 is the abstract/metadata
@@ -128,8 +140,19 @@ export class ResolveStage extends PipelineStage<DocRef, ResolvedDoc> {
     };
 
     if (lane === "fulltext") {
+      // Prefer the JATS structured-text lane when the doc has a pmc id / DOI; else
+      // the PDF+OCR lane. The JATS lane falls back to PDF+OCR internally on a miss.
+      if (this.jatsEnabled && (meta.pmcid || meta.doi)) {
+        await this.queue.send(Q.fetchFulltext, resolved);
+        ctx.log.info("resolve_fulltext", {
+          id: doc.openaireId,
+          lane: "jats",
+          pmcid: meta.pmcid ?? null,
+        });
+        return { kind: "done" };
+      }
       await this.queue.send(Q.fetchPdf, resolved);
-      ctx.log.info("resolve_fulltext", { id: doc.openaireId, candidates: candidates.length });
+      ctx.log.info("resolve_fulltext", { id: doc.openaireId, lane: "pdf", candidates: candidates.length });
       return { kind: "done" };
     }
 

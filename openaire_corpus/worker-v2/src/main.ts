@@ -25,6 +25,10 @@ import { LiveEmbedder } from "./live/embedder.js";
 import { LiveClusterSink } from "./live/cluster.js";
 import { LivePdfFetcher } from "./live/pdf-fetcher.js";
 import { MistralOcrExtractor } from "./live/mistral-ocr.js";
+import { EuropePmcClient } from "./live/europepmc.js";
+import { PublisherJatsClient } from "./live/publisher-jats.js";
+import { UnpaywallClient } from "./live/unpaywall.js";
+import { PmcFigureFetcher } from "./live/pmc-figures.js";
 import { TerminalEmitter } from "./live/progress-callback.js";
 import { CompletionMonitor } from "./live/completion-monitor.js";
 import { startServer } from "./server.js";
@@ -51,14 +55,38 @@ async function main(): Promise<void> {
     ? new LiveScholexClient({ rate: new RateLimiter({ ratePerMin: cfg.scholexRpm }) })
     : new NullScholexClient();
 
-  // Full-text lane clients — only built when enabled (they own their own net I/O).
-  const hostGate = cfg.fulltextEnabled ? new HostGate({ ratePerMin: cfg.pdfHostRpm }) : null;
+  // Full-text lane clients — built when fulltext OR JATS is enabled (JATS falls back
+  // to PDF+OCR, so it needs the PDF lane too). They own their own net I/O.
+  const anyFulltext = cfg.fulltextEnabled || cfg.jatsEnabled;
+  const hostGate = anyFulltext ? new HostGate({ ratePerMin: cfg.pdfHostRpm }) : null;
   const pdfFetcher = hostGate
     ? new LivePdfFetcher({ hostGate, maxBytes: cfg.pdfMaxBytes })
     : undefined;
-  // Full-text extraction via Mistral OCR (built only when fulltext is on — it
+  // Full-text extraction via Mistral OCR (built when a full-text lane is on — it
   // reads MISTRAL_API_KEY lazily, so abstract-only runs never need the key).
-  const pdfExtractor = cfg.fulltextEnabled ? new MistralOcrExtractor() : undefined;
+  const pdfExtractor = anyFulltext ? new MistralOcrExtractor() : undefined;
+
+  // JATS structured-text lane clients (Europe PMC + publisher + Unpaywall + PMC
+  // figure images). Built only when jatsEnabled; the Unpaywall tier additionally
+  // needs a contact email (its API mandates one).
+  const jats = cfg.jatsEnabled && hostGate
+    ? {
+        europePmc: new EuropePmcClient({
+          hostGate,
+          ...(cfg.contactEmail ? { email: cfg.contactEmail } : {}),
+        }),
+        publisherJats: new PublisherJatsClient({ hostGate }),
+        figureImages: new PmcFigureFetcher({ hostGate }),
+        ...(cfg.unpaywallEnabled && cfg.contactEmail
+          ? { unpaywall: new UnpaywallClient({ hostGate, email: cfg.contactEmail }) }
+          : {}),
+      }
+    : undefined;
+  if (cfg.jatsEnabled && cfg.unpaywallEnabled && !cfg.contactEmail) {
+    log.warn("unpaywall_disabled_no_email", {
+      msg: "UNPAYWALL_ENABLED=true but CONTACT_EMAIL is unset; Unpaywall tier is off",
+    });
+  }
 
   // The terminal commit callback + the run-completion detector. The detector is
   // wired to the pipeline's onOutcome seam (below), so a doc reaching a terminal
@@ -80,11 +108,14 @@ async function main(): Promise<void> {
     cluster: new LiveClusterSink(),
     ...(pdfFetcher ? { pdfFetcher } : {}),
     ...(pdfExtractor ? { pdfExtractor } : {}),
+    ...(jats ? { jats } : {}),
     onOutcome: (e) => completion.noteOutcome({ kind: e.kind, payload: e.payload }),
     rates: { resolve: resolveRate },
     config: {
       fulltextEnabled: cfg.fulltextEnabled,
+      jatsEnabled: cfg.jatsEnabled,
       resolveConcurrency: cfg.resolveConcurrency,
+      fetchFulltextConcurrency: cfg.fetchFulltextConcurrency,
       fetchPdfConcurrency: cfg.fetchPdfConcurrency,
       extractConcurrency: cfg.extractConcurrency,
       extractMaxPages: cfg.pdfMaxPages,
@@ -114,6 +145,8 @@ async function main(): Promise<void> {
     httpPort: cfg.httpPort,
     openaireRpm: cfg.openaireRpm,
     fulltextEnabled: cfg.fulltextEnabled,
+    jatsEnabled: cfg.jatsEnabled,
+    unpaywallEnabled: cfg.unpaywallEnabled && !!cfg.contactEmail,
   });
 
   let shuttingDown = false;
