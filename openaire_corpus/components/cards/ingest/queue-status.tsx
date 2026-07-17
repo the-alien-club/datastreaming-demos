@@ -3,9 +3,9 @@
 // components/cards/ingest/queue-status.tsx
 // Live staged-bucket status for a running ingest. Driven by the worker's
 // GET /progress/:runId read-model (proxied onto job.queue), it shows what is
-// ACTUALLY happening: the "documents finalised" headline, the three OpenAIRE
-// pipeline groups (Deduplication ← resolve, Embedding ← fetchPdf+extract+
-// prepare+embed, Indexing ← register), and the run totals that ALWAYS reconcile
+// ACTUALLY happening: the "documents finalised" headline, each of the six
+// OpenAIRE pipeline stages (resolve → fetchPdf → extract/OCR → prepare → embed
+// → register) surfaced individually, and the run totals that ALWAYS reconcile
 // (failed/skipped are never hidden). See playbook/ui-states.md §Ingestion.
 
 import { useTranslations } from "next-intl"
@@ -22,34 +22,20 @@ import { INGEST_STATUS } from "@/models/ingest/schema"
 import type { IngestJobStatusView } from "@/models/ingest/types"
 import type { ClusterQueueStage } from "@/lib/cluster/contracts"
 
-// Worker stage buckets → the three named groups the design surfaces. Mirrors the
-// worker read-model's HEADLINE_GROUPS (observability.ts) exactly.
-const GROUPS = [
-  { key: "dedup", stages: ["resolve"] },
-  { key: "embedding", stages: ["fetchPdf", "extract", "prepare", "embed"] },
-  { key: "indexing", stages: ["register"] },
+// The six worker queues, in pipeline order. Each is surfaced on its own row so
+// operators can see exactly where docs sit — including the OCR/extract stage
+// that the old three-group rollup hid inside "Embedding". Keys mirror the worker
+// read-model's per-stage buckets (observability.ts STAGE_LABELS) exactly.
+const STAGE_KEYS = [
+  "resolve",
+  "fetchPdf",
+  "extract",
+  "prepare",
+  "embed",
+  "register",
 ] as const
 
 const EMPTY_STAGE: ClusterQueueStage = { done: 0, running: 0, queued: 0, failed: 0 }
-
-function sumStages(
-  stages: Record<string, ClusterQueueStage>,
-  keys: readonly string[],
-): ClusterQueueStage {
-  return keys.reduce<ClusterQueueStage>(
-    (acc, k) => {
-      const s = stages[k]
-      if (!s) return acc
-      return {
-        done: acc.done + s.done,
-        running: acc.running + s.running,
-        queued: acc.queued + s.queued,
-        failed: acc.failed + s.failed,
-      }
-    },
-    { ...EMPTY_STAGE },
-  )
-}
 
 /** Compact, locale-neutral ETA from seconds ("< 1 min", "~7 min", "~1 h 12 min"). */
 function formatEta(seconds: number | null, computing: string): string {
@@ -160,10 +146,10 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
           )}
         </div>
 
-        {/* Named stage groups — current activity per pipeline segment. */}
+        {/* Per-stage activity — one row per worker queue, in pipeline order. */}
         <ul className="flex flex-col">
-          {GROUPS.map((g) => {
-            const s = sumStages(queue.stages, g.stages)
+          {STAGE_KEYS.map((key) => {
+            const s = queue.stages[key] ?? EMPTY_STAGE
             // ONLY running/queued — these are current pg-boss state. done/failed
             // accumulate across ALL runs (the buckets are shared, not run-scoped),
             // so showing them would inherit stale counts from earlier runs and
@@ -172,7 +158,7 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
             const active = s.running + s.queued
             return (
               <li
-                key={g.key}
+                key={key}
                 className="flex items-center justify-between gap-2 border-b py-2.5 text-[13px] last:border-b-0"
               >
                 <span
@@ -181,7 +167,7 @@ export function CardIngestQueueStatus({ job, onCancel }: Props) {
                     active === 0 && "text-muted-foreground",
                   )}
                 >
-                  {t(`groups.${g.key}` as "groups.dedup")}
+                  {t(`stages.${key}` as "stages.resolve")}
                 </span>
                 <span className="flex items-center gap-3 font-mono text-[11px] tabular-nums">
                   {s.running > 0 && (
