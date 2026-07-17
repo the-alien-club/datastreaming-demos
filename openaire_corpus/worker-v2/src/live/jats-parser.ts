@@ -71,6 +71,52 @@ function attr(node: OrderedNode, name: string): string | null {
   return typeof v === "string" ? v : null;
 }
 
+/** Back-matter section titles/types that carry no research content — excluded so the
+ *  index and the citable-section list stay to the actual paper. eLife puts these
+ *  (and References) inside `<body>`, not `<back>`. */
+const BACKMATTER_TITLES = new Set([
+  "references",
+  "acknowledgements",
+  "acknowledgments",
+  "funding statement",
+  "funding information",
+  "contributor information",
+  "additional information",
+  "additional files",
+  "data availability",
+  "author contributions",
+  "competing interests",
+  "conflict of interest",
+  "conflicts of interest",
+  "ethics",
+  "supplementary material",
+  "supplementary materials",
+  "abbreviations",
+  "decision letter",
+  "author response",
+]);
+/** JATS `sec-type` values marking back-matter (eLife/PMC use these). */
+const BACKMATTER_SEC_TYPES = new Set([
+  "data-availability",
+  "additional-information",
+  "supplementary-material",
+  "funding-information",
+  "author-contributions",
+  "coi-statement",
+  "ethics",
+]);
+
+function isBackMatter(secKids: OrderedNode[], secTitle: string, secType: string | null): boolean {
+  if (secType && BACKMATTER_SEC_TYPES.has(secType.toLowerCase())) return true;
+  if (BACKMATTER_TITLES.has(secTitle.trim().toLowerCase())) return true;
+  // A section whose only substantive child is a <ref-list> (bibliography wrapper).
+  const meaningful = secKids.filter((k) => {
+    const t = tagOf(k);
+    return t != null && t !== "title" && t !== ":@";
+  });
+  return meaningful.length > 0 && meaningful.every((k) => tagOf(k) === "ref-list");
+}
+
 /** Slugify a section title/id to `[a-z0-9-]+`; empty → "". */
 function slugify(raw: string): string {
   return raw
@@ -99,8 +145,10 @@ function textOf(nodes: OrderedNode[]): string {
       if (caption) parts.push(`\n\n${caption}\n\n`);
       continue;
     }
-    // Skip other structural/no-text elements that would inject noise.
-    if (tag === "table-wrap" || tag === "disp-formula" || tag === "graphic") {
+    // Skip other structural/no-text elements that would inject noise. `<ref-list>`
+    // is the bibliography (eLife nests it in <body>); dumping every reference into
+    // the section text is pure noise for retrieval.
+    if (tag === "table-wrap" || tag === "disp-formula" || tag === "graphic" || tag === "ref-list") {
       continue;
     }
     const kids = childrenOf(node, tag);
@@ -204,6 +252,8 @@ export function parseJats(xml: string): ParsedJats {
       n++;
       const kids = childrenOf(sec, "sec");
       const title = titleOf(kids) || `Section ${n}`;
+      // Drop bibliography + boilerplate back-matter (eLife nests it in <body>).
+      if (isBackMatter(kids, title, attr(sec, "sec-type"))) continue;
       const text = tidy(textOf(kids));
       if (text.length === 0) continue;
       let id = attr(sec, "id") ? slugify(attr(sec, "id")!) : slugify(title);

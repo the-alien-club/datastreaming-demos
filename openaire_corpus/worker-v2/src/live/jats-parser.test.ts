@@ -58,6 +58,18 @@ test("parseJats: non-JATS / body-less input → empty (caller degrades)", () => 
   assert.deepEqual(parseJats("<article><front/></article>").sections, []);
 });
 
+test("parseJats: back-matter (references, acknowledgements, data availability) excluded", () => {
+  const xml = `<article><body>
+    <sec id="s1"><title>Results</title><p>Real finding.</p></sec>
+    <sec id="ack"><title>Acknowledgements</title><p>We thank everyone.</p></sec>
+    <sec id="da" sec-type="data-availability"><title>Data availability</title><p>On Dryad.</p></sec>
+    <sec id="refs"><title>References</title><ref-list><ref><p>Smith 2020</p></ref></ref-list></sec>
+  </body></article>`;
+  const { sections } = parseJats(xml);
+  assert.deepEqual(sections.map((s) => s.title), ["Results"]);
+  assert.ok(!sections.some((s) => s.text.includes("Smith 2020")), "references text not leaked");
+});
+
 test("parseJats: loose <p> with no <sec> → single 'Full text' section", () => {
   const xml = `<article><body><p>Just prose, no sections.</p></body></article>`;
   const { sections } = parseJats(xml);
